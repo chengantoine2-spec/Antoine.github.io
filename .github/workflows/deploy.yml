@@ -1,0 +1,67 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # 只有仓库名恰好等于 <owner>.github.io 时才是用户站（根路径），其余都是项目站（/<repo>/）
+      - name: Resolve base path
+        id: base
+        run: |
+          name="$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')"
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$name" == "$owner.github.io" ]]; then
+            echo "value=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        env:
+          VITE_BASE: ${{ steps.base.outputs.value }}
+          VITE_GH_USER: ${{ vars.VITE_GH_USER }}
+          VITE_GH_REPO: ${{ vars.VITE_GH_REPO }}
+          VITE_GH_OWNER: ${{ vars.VITE_GH_OWNER }}
+          VITE_GISCUS_REPO: ${{ vars.VITE_GISCUS_REPO }}
+          VITE_GISCUS_REPO_ID: ${{ vars.VITE_GISCUS_REPO_ID }}
+          VITE_GISCUS_CATEGORY: ${{ vars.VITE_GISCUS_CATEGORY }}
+          VITE_GISCUS_CATEGORY_ID: ${{ vars.VITE_GISCUS_CATEGORY_ID }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

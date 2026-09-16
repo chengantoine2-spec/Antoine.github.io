@@ -1,0 +1,304 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   全局基调：默认亮色（caramel-50 底 / caramel-900 字）
+   暗色：caramel-900 底 / caramel-100 字
+   所有颜色均来自 caramel 色板，无第二套色值。
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* 锚点跳转时给固定的顶部导航留出空间 */
+  scroll-padding-top: 5rem;
+}
+
+body {
+  @apply bg-caramel-50 text-caramel-900 antialiased;
+}
+
+html.dark body {
+  @apply bg-caramel-900 text-caramel-100;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-caramel-100;
+}
+html.dark ::-webkit-scrollbar-track {
+  @apply bg-caramel-900;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-caramel-300;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  @apply bg-caramel-700;
+}
+
+/* 选中文本 */
+::selection {
+  @apply bg-caramel-300 text-caramel-900;
+}
+
+/* ============================================================
+   正文排版（Markdown 渲染区）
+   不用 typography 插件，手写一套，颜色仍受色板约束
+   ============================================================ */
+.prose-caramel {
+  @apply text-[1.0625rem] leading-[1.9] text-caramel-800;
+}
+html.dark .prose-caramel {
+  @apply text-caramel-100;
+}
+
+.prose-caramel > * + * {
+  @apply mt-5;
+}
+
+.prose-caramel h1,
+.prose-caramel h2,
+.prose-caramel h3,
+.prose-caramel h4 {
+  @apply scroll-mt-24 font-bold text-caramel-700;
+}
+html.dark .prose-caramel h1,
+html.dark .prose-caramel h2,
+html.dark .prose-caramel h3,
+html.dark .prose-caramel h4 {
+  @apply text-caramel-200;
+}
+
+.prose-caramel h1 {
+  @apply mt-10 text-3xl;
+}
+.prose-caramel h2 {
+  @apply mt-10 border-b border-caramel-200 pb-2 text-2xl;
+}
+html.dark .prose-caramel h2 {
+  @apply border-caramel-700;
+}
+.prose-caramel h3 {
+  @apply mt-8 text-xl;
+}
+.prose-caramel h4 {
+  @apply mt-6 text-lg;
+}
+
+.prose-caramel p {
+  @apply break-words;
+}
+
+.prose-caramel a {
+  @apply font-medium text-caramel-600 underline decoration-caramel-300 decoration-2 underline-offset-2 hover:decoration-caramel-600;
+}
+html.dark .prose-caramel a {
+  @apply text-caramel-300 decoration-caramel-700 hover:decoration-caramel-300;
+}
+
+.prose-caramel strong {
+  @apply font-semibold text-caramel-700;
+}
+html.dark .prose-caramel strong {
+  @apply text-caramel-200;
+}
+
+.prose-caramel ul {
+  @apply list-disc space-y-2 pl-6 marker:text-caramel-400;
+}
+.prose-caramel ol {
+  @apply list-decimal space-y-2 pl-6 marker:text-caramel-500;
+}
+
+.prose-caramel blockquote {
+  @apply rounded-r-lg border-l-4 border-caramel-400 bg-caramel-100 py-2 pl-4 pr-3 italic text-caramel-700;
+}
+html.dark .prose-caramel blockquote {
+  @apply border-caramel-600 bg-caramel-800 text-caramel-200;
+}
+
+.prose-caramel hr {
+  @apply border-caramel-200;
+}
+html.dark .prose-caramel hr {
+  @apply border-caramel-700;
+}
+
+/* 图文混排：正文任意位置的图片自适应宽度 */
+.prose-caramel img {
+  @apply mx-auto block h-auto max-w-full rounded-xl border border-caramel-200 bg-caramel-100;
+}
+html.dark .prose-caramel img {
+  @apply border-caramel-700 bg-caramel-800;
+}
+
+/* 行内代码 */
+.prose-caramel :not(pre) > code {
+  @apply rounded bg-caramel-100 px-1.5 py-0.5 font-mono text-[0.9em] text-caramel-700;
+}
+html.dark .prose-caramel :not(pre) > code {
+  @apply bg-caramel-800 text-caramel-200;
+}
+
+/* 代码块（高亮 + 复制按钮容器在 CodeBlock 组件里） */
+.prose-caramel pre {
+  @apply overflow-x-auto rounded-xl border border-caramel-200 bg-caramel-100 p-4 font-mono text-sm leading-relaxed;
+}
+html.dark .prose-caramel pre {
+  @apply border-caramel-700 bg-caramel-800;
+}
+.prose-caramel pre code {
+  @apply bg-transparent p-0 text-caramel-800;
+}
+html.dark .prose-caramel pre code {
+  @apply text-caramel-100;
+}
+
+/* 表格 */
+.prose-caramel table {
+  @apply w-full border-collapse overflow-hidden rounded-xl text-sm;
+}
+.prose-caramel thead {
+  @apply bg-caramel-200 text-caramel-800;
+}
+html.dark .prose-caramel thead {
+  @apply bg-caramel-800 text-caramel-100;
+}
+.prose-caramel th,
+.prose-caramel td {
+  @apply border border-caramel-200 px-3 py-2 text-left align-top;
+}
+html.dark .prose-caramel th,
+html.dark .prose-caramel td {
+  @apply border-caramel-700;
+}
+.prose-caramel tbody tr:nth-child(even) {
+  @apply bg-caramel-100/60;
+}
+html.dark .prose-caramel tbody tr:nth-child(even) {
+  @apply bg-caramel-800/40;
+}
+
+/* ============================================================
+   highlight.js 语法配色（全部取自 caramel 色阶）
+   rehype-highlight 会输出 hljs-* 类名，这里手工上色，
+   避免额外引入 highlight.js 主题 CSS（含大量非色板颜色）。
+   ============================================================ */
+.hljs {
+  @apply text-caramel-800;
+}
+html.dark .hljs {
+  @apply text-caramel-100;
+}
+
+.hljs-comment,
+.hljs-quote {
+  @apply italic text-caramel-500;
+}
+html.dark .hljs-comment,
+html.dark .hljs-quote {
+  @apply text-caramel-400;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag,
+.hljs-name {
+  @apply font-semibold text-caramel-700;
+}
+html.dark .hljs-keyword,
+html.dark .hljs-selector-tag,
+html.dark .hljs-literal,
+html.dark .hljs-section,
+html.dark .hljs-doctag,
+html.dark .hljs-name {
+  @apply text-caramel-200;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  @apply text-caramel-600;
+}
+html.dark .hljs-string,
+html.dark .hljs-regexp,
+html.dark .hljs-addition,
+html.dark .hljs-attribute,
+html.dark .hljs-meta .hljs-string {
+  @apply text-caramel-300;
+}
+
+.hljs-number,
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-link {
+  @apply text-caramel-500;
+}
+html.dark .hljs-number,
+html.dark .hljs-built_in,
+html.dark .hljs-symbol,
+html.dark .hljs-bullet,
+html.dark .hljs-variable,
+html.dark .hljs-template-variable,
+html.dark .hljs-link {
+  @apply text-caramel-400;
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-type,
+.hljs-class .hljs-title {
+  @apply font-semibold text-caramel-800;
+}
+html.dark .hljs-title,
+html.dark .hljs-title.class_,
+html.dark .hljs-title.function_,
+html.dark .hljs-type,
+html.dark .hljs-class .hljs-title {
+  @apply text-caramel-100;
+}
+
+.hljs-meta,
+.hljs-deletion {
+  @apply text-caramel-600 opacity-90;
+}
+.hljs-emphasis {
+  @apply italic;
+}
+.hljs-strong {
+  @apply font-bold;
+}
+
+/* 焦点可见性 */
+:focus-visible {
+  @apply outline-none ring-2 ring-caramel-500 ring-offset-2 ring-offset-caramel-50;
+}
+html.dark :focus-visible {
+  @apply ring-caramel-400 ring-offset-caramel-900;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

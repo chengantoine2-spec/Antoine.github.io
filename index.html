@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>焦糖布丁</title>
+    <meta name="description" content="焦糖布丁的个人博客：日常与项目经历" />
+    <script>
+      // GitHub Pages 深链回退（配合 public/404.html）：把 ?/blog/1 还原成 /blog/1
+      ;(function () {
+        var l = window.location
+        if (l.search[1] === '/') {
+          var decoded = l.search
+            .slice(1)
+            .split('&')
+            .map(function (s) {
+              return s.replace(/~and~/g, '&')
+            })
+            .join('?')
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash)
+        }
+      })()
+    </script>
+    <script>
+      // 首屏前套用主题，避免亮/暗闪烁；默认亮色
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('caramel.theme')
+          var dark = saved === 'dark'
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.classList.toggle('light', !dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {
+          document.documentElement.classList.add('light')
+        }
+      })()
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

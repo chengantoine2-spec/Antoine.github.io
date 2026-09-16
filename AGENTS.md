@@ -1,11 +1,10 @@
 # 项目：焦糖布丁博客站
 
-
 ## 定位
+
 以博客为核心的公开个人站，展示日常与项目经历。
 访客可读、可评论、可点赞；仅站长（本人 GitHub 账号）可管理内容与外观。
 个人资产、音乐等为 P1 占位，暂不实现。
-
 
 ## 技术栈
 
@@ -19,8 +18,8 @@
 
 
 
-
 ## 主色调：焦糖布丁
+
 在 tailwind.config 扩展：
 
 - caramel-50  #FFF8F0  页面背景
@@ -38,14 +37,13 @@
 
 
 
-
 ## 信息架构
+
 /            首页 —— 日常博客列表（卡片，带封面）
 /blog/:id    博客详情 —— 正文 + TOC + 阅读进度 + 点赞 + 评论
 /projects    项目经历 —— 独立页面集合
 /me          个人中心（P1 占位）
 /write       写博客（仅站长）
-
 
 ## 权限模型
 
@@ -55,8 +53,8 @@
 
 
 
-
 ## 数据模型
+
 Blog（对应一个 GitHub Issue）
 
 - id: number（Issue number）
@@ -81,8 +79,8 @@ Comment / Like
 
 
 
-
 ## 文件边界
+
 src/main.tsx
 src/App.tsx
 src/router.tsx
@@ -117,7 +115,6 @@ src/pages/ProjectDetail.tsx
 src/pages/Me.tsx                  // P1 占位
 src/pages/Write.tsx               // 仅站长
 
-
 ## 展示八项（全量实现）
 
 1. Markdown 渲染：标题、代码块、引用、表格
@@ -131,14 +128,12 @@ src/pages/Write.tsx               // 仅站长
 
 
 
-
 ## 图片方案
 
 - 上传到仓库 img/ 分支，按 yyyy/mm/{hash}.{ext} 存放
 - 前端引用 https://cdn.jsdelivr.net/gh/{user}/{repo}@img/{path}
 - 编辑器插图：ImageUploader 上传后插入 ![](cdnUrl)
 - 禁止 base64 进正文
-
 
 
 
@@ -150,13 +145,11 @@ src/pages/Write.tsx               // 仅站长
 
 
 
-
 ## Projects 页面
 
 - 每个项目一个独立路由 /projects/:id
 - 展示：封面、角色、周期、技术栈卡片、亮点时间线、成果指标
 - 数据全部来自 src/data/projects.ts，改代码即改内容
-
 
 
 
@@ -172,7 +165,6 @@ src/pages/Write.tsx               // 仅站长
 
 
 
-
 ## 暂不做（防范围膨胀）
 
 - 资产 CRUD、音乐播放、换背景、像素图（P1 占位）
@@ -180,7 +172,6 @@ src/pages/Write.tsx               // 仅站长
 - 富文本编辑器（用 Markdown）
 - 第三方统计、SEO 高级优化
 - 评论审核后台
-
 
 
 
@@ -194,3 +185,4 @@ src/pages/Write.tsx               // 仅站长
 6. /write 仅站长可见，能上传图片并发布 Issue
 7. 访客用 GitHub 登录后可评论点赞
 8. 部署在 GitHub Pages，同仓库
+9. 反馈存在的不足以及需要补充的信息。
