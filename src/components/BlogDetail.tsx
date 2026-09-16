@@ -9,10 +9,10 @@ import { Giscus } from './Giscus'
 import { ReadingProgress } from './ReadingProgress'
 import { Toc } from './Toc'
 import { CATEGORY_DAILY, SITE, deleteIssue, type Blog } from '../lib/github'
-import { extractHeadings, formatDate, readingMinutes } from '../lib/text'
+import { extractHeadings, formatDateTime, formatFull, formatRelative, readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
 import { useAuth } from '../hooks/useAuth'
-import { invalidateBlogs } from '../hooks/useBlogs'
+import { invalidateBlogs, useNow } from '../hooks/useBlogs'
 
 export interface BlogDetailProps {
   blog: Blog
@@ -27,6 +27,7 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
   const [closeError, setCloseError] = useState('')
 
   const minutes = useMemo(() => readingMinutes(blog.body), [blog.body])
+  const now = useNow()
 
   const openTag = (tag: string) => navigate(`/?tag=${encodeURIComponent(tag)}`)
 
@@ -63,15 +64,22 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
         <Cover src={blog.cover} alt={blog.title} label={blog.title} variant="hero" className="mb-6 rounded-2xl" />
 
         <header className="mb-8 space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-caramel-600 dark:text-caramel-300">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-caramel-600 dark:text-caramel-300">
             <span className="rounded-full bg-caramel-500 px-2 py-0.5 font-medium text-caramel-50">
               {blog.category === CATEGORY_DAILY ? '日常' : '项目'}
             </span>
-            <time dateTime={blog.createdAt}>发布于 {formatDate(blog.createdAt)}</time>
+            <time dateTime={blog.createdAt} title={`精确时间：${formatFull(blog.createdAt)}`}>
+              发布于 {formatDateTime(blog.createdAt)}
+            </time>
+            <span className="rounded bg-caramel-200 px-1.5 py-0.5 font-medium text-caramel-700 dark:bg-caramel-700 dark:text-caramel-100">
+              {formatRelative(blog.createdAt, now)}
+            </span>
             {blog.updatedAt && blog.updatedAt !== blog.createdAt && (
-              <span>· 更新于 {formatDate(blog.updatedAt)}</span>
+              <span title={`精确时间：${formatFull(blog.updatedAt)}`}>
+                · 更新于 {formatDateTime(blog.updatedAt)}（{formatRelative(blog.updatedAt, now)}）
+              </span>
             )}
-            <span>· 约 {minutes} 分钟</span>
+            <span>· 阅读约 {minutes} 分钟</span>
             {blog.comments > 0 && <span>· {blog.comments} 条评论</span>}
           </div>
 

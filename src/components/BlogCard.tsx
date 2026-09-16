@@ -3,8 +3,9 @@
  */
 import { Link } from 'react-router-dom'
 import { Cover } from './Cover'
-import { formatDate, readingMinutes } from '../lib/text'
+import { formatDateTime, formatFull, formatRelative, readingMinutes } from '../lib/text'
 import { CATEGORY_DAILY, type Blog } from '../lib/github'
+import { useNow } from '../hooks/useBlogs'
 
 export interface BlogCardProps {
   blog: Blog
@@ -14,6 +15,9 @@ export interface BlogCardProps {
 }
 
 export function BlogCard({ blog, onTagClick, activeTags = [] }: BlogCardProps) {
+  const now = useNow()
+  const updated = blog.updatedAt && blog.updatedAt !== blog.createdAt ? blog.updatedAt : ''
+
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-caramel-200 bg-caramel-100 shadow-sm transition hover:-translate-y-0.5 hover:border-caramel-400 hover:shadow-md dark:border-caramel-700 dark:bg-caramel-800">
       <Link to={`/blog/${blog.id}`} className="block" aria-label={blog.title}>
@@ -21,19 +25,21 @@ export function BlogCard({ blog, onTagClick, activeTags = [] }: BlogCardProps) {
       </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-center gap-2 text-xs text-caramel-600 dark:text-caramel-300">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-caramel-600 dark:text-caramel-300">
           <span className="rounded-full bg-caramel-500 px-2 py-0.5 font-medium text-caramel-50">
             {blog.category === CATEGORY_DAILY ? '日常' : '项目'}
           </span>
-          <time dateTime={blog.createdAt}>{formatDate(blog.createdAt)}</time>
-          <span aria-hidden="true">·</span>
-          <span>{readingMinutes(blog.body)} 分钟</span>
-          {blog.comments > 0 && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{blog.comments} 评论</span>
-            </>
+          <time dateTime={blog.createdAt} title={`发布于 ${formatFull(blog.createdAt)}`}>
+            {formatDateTime(blog.createdAt)}
+          </time>
+          <span className="rounded bg-caramel-200 px-1.5 py-0.5 font-medium text-caramel-700 dark:bg-caramel-700 dark:text-caramel-100">
+            {formatRelative(blog.createdAt, now)}
+          </span>
+          {updated && (
+            <span title={`更新于 ${formatFull(updated)}`}>· 更新于 {formatRelative(updated, now)}</span>
           )}
+          <span>· 阅读约 {readingMinutes(blog.body)} 分钟</span>
+          {blog.comments > 0 && <span>· {blog.comments} 评论</span>}
         </div>
 
         <h2 className="text-lg font-bold leading-snug text-caramel-800 dark:text-caramel-100">

@@ -64,27 +64,42 @@ export function extractHeadings(markdown: string): TocItem[] {
   return items
 }
 
-/** 展示格式化：2025-01-05 */
-export function formatDate(iso: string): string {
+/** 展示格式化：2025-01-05 15:20（本地时区） */
+export function formatDateTime(iso: string): string {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mm}-${dd}`
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** 展示格式化：3 天前 */
-export function formatRelative(iso: string): string {
+/** 精确到秒，用于 title 提示 */
+export function formatFull(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+/**
+ * 展示格式化：刚刚 / 12 分钟前 / 3 小时前 / 5 天前 / 2 个月前
+ * now 可传入以便随页面停留时间刷新（见 useNow）
+ */
+export function formatRelative(iso: string, now: number = Date.now()): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
-  const diff = Date.now() - then
-  const day = 86400000
-  if (diff < 3600000) return '刚刚'
-  if (diff < day) return `${Math.floor(diff / 3600000)} 小时前`
-  if (diff < 30 * day) return `${Math.floor(diff / day)} 天前`
-  return formatDate(iso)
+  const diff = now - then
+  if (diff < 0) return '刚刚'
+  const MIN = 60_000
+  const HOUR = 3_600_000
+  const DAY = 86_400_000
+  if (diff < MIN) return '刚刚'
+  if (diff < HOUR) return `${Math.floor(diff / MIN)} 分钟前`
+  if (diff < DAY) return `${Math.floor(diff / HOUR)} 小时前`
+  if (diff < 30 * DAY) return `${Math.floor(diff / DAY)} 天前`
+  if (diff < 365 * DAY) return `${Math.floor(diff / (30 * DAY))} 个月前`
+  return `${Math.floor(diff / (365 * DAY))} 年前`
 }
 
 /** 阅读时长（按中文 ~350 字/分钟估算） */

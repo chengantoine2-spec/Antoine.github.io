@@ -146,3 +146,16 @@ export function collectTags(blogs: Blog[]): Array<{ name: string; count: number 
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }
+
+/**
+ * 定时重渲染：让「3 小时前」这类相对时间随时间自己走，
+ * 不用刷新页面（默认 30 秒一次）。
+ */
+export function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs)
+    return () => window.clearInterval(timer)
+  }, [intervalMs])
+  return now
+}
