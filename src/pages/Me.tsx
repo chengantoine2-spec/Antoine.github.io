@@ -150,9 +150,11 @@ export default function Me() {
                   {report.ok ? '✓' : '✗'} {report.message}
                 </li>
                 <li>· 登录账号：{report.login}</li>
+                <li>· Issues 读权限：{report.readIssuesOk ? '有' : '无（细粒度 PAT 勾 Issues: Read）'}</li>
                 <li>· 仓库写权限 push：{report.canPush ? '有' : '无'}</li>
                 <li>· 仓库 Issues 功能：{report.hasIssues ? '已开启' : '已关闭'}</li>
-                <li>· 当前已发布文章：{report.openIssues} 篇</li>
+                <li>· img 分支（传图用）：{report.imgBranch ? '已存在' : '不存在，需新建'}</li>
+                <li>· 当前已发布文章：{report.openIssues < 0 ? '读不到' : `${report.openIssues} 篇`}</li>
               </ul>
             )}
 

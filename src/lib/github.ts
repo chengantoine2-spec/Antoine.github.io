@@ -219,9 +219,10 @@ export function toBlog(issue: RawIssue): Blog {
 // ============================================================
 // 读取：博客列表 / 单篇
 // ============================================================
-/** 拉取全部已发布 Issue（过滤 PR 与 closed 的 deleted 标记） */
-export async function fetchIssues(): Promise<Blog[]> {
-  const withToken = hasToken()
+/** 带 PAT 读取失败（权限不足/未授权该仓库）时自动退回匿名读取：公开仓库照样能看 */
+const READ_FALLBACK_STATUS = [401, 403, 404]
+
+async function collectIssues(withToken: boolean): Promise<RawIssue[]> {
   const perPage = 100
   const all: RawIssue[] = []
   for (let page = 1; page <= 5; page++) {
@@ -234,13 +235,37 @@ export async function fetchIssues(): Promise<Blog[]> {
     if (chunk.length < perPage) break
   }
   return all
-    .filter((i) => !i.pull_request)
-    .map(toBlog)
+}
+
+/** 拉取全部已发布 Issue（过滤 PR） */
+export async function fetchIssues(): Promise<Blog[]> {
+  let raw: RawIssue[]
+  if (hasToken()) {
+    try {
+      raw = await collectIssues(true)
+    } catch (err) {
+      if (err instanceof GitHubError && READ_FALLBACK_STATUS.includes(err.status)) {
+        raw = await collectIssues(false) // PAT 权限不足时退回匿名读
+      } else {
+        throw err
+      }
+    }
+  } else {
+    raw = await collectIssues(false)
+  }
+  return raw.filter((i) => !i.pull_request).map(toBlog)
 }
 
 export async function fetchIssue(id: number): Promise<Blog> {
-  const issue = await gh<RawIssue>(`/repos/${SITE.user}/${SITE.repo}/issues/${id}`, {}, hasToken())
-  return toBlog(issue)
+  const path = `/repos/${SITE.user}/${SITE.repo}/issues/${id}`
+  if (hasToken()) {
+    try {
+      return toBlog(await gh<RawIssue>(path, {}, true))
+    } catch (err) {
+      if (!(err instanceof GitHubError) || !READ_FALLBACK_STATUS.includes(err.status)) throw err
+    }
+  }
+  return toBlog(await gh<RawIssue>(path, {}, false))
 }
 
 export async function fetchUser(token: string): Promise<GitHubUser> {
@@ -270,8 +295,8 @@ export function explainGitHubError(err: unknown, action: 'read' | 'write' = 'rea
       return `PAT 无效或已过期（${detail}）—— 退出后重新登录`
     case 403:
       return action === 'write'
-        ? `没有写入权限（${detail}）—— 经典 PAT 需勾选 repo；细粒度 PAT 需在 Repository access 里选中 ${SITE.repo}，并给 Issues: Read and write。也可能只是触发了速率限制，稍后再试。`
-        : `读取被拒（${detail}）—— 可能是匿名请求速率超限（每小时 60 次），登录站长 PAT 后为 5000 次/小时`
+        ? `权限不足（${detail}）。细粒度 PAT 请去 Settings → Developer settings → Personal access tokens → Fine-grained tokens 编辑该 token：Repository access 选中 ${SITE.repo}，Permissions 里把 Issues 设为 Read and write（传图还要 Contents: Read and write）；或者干脆换一个勾了 repo 的经典 PAT。`
+        : `读取被拒（${detail}）—— 若用的是细粒度 PAT，需要 Issues: Read 权限；也可能是匿名速率超限（60 次/小时）`
     case 404:
       return `找不到目标（${detail}）—— 当前目标是 ${target}。常见原因：细粒度 PAT 未授权该仓库；或 PAT 属于别的账号而该账号看不到此仓库。`
     case 410:
@@ -287,12 +312,16 @@ export interface AccessReport {
   login: string
   canPush: boolean
   hasIssues: boolean
+  /** 带 PAT 能读到 Issue 列表（细粒度 PAT 需要 Issues: Read） */
+  readIssuesOk: boolean
   openIssues: number
+  /** img 分支是否已存在（上传图片要用） */
+  imgBranch: boolean
   ok: boolean
   message: string
 }
 
-/** 发布前自检：PAT 是否有效、对目标仓库是否有写权限、Issues 是否开启、能读到几篇 */
+/** 发布前自检：PAT 是否有效、读写权限、Issues 开关、img 分支、当前篇数 */
 export async function diagnoseAccess(): Promise<AccessReport> {
   const user = await fetchUser(getToken())
   const repo = await gh<{ permissions?: { push?: boolean }; has_issues?: boolean }>(
@@ -300,21 +329,42 @@ export async function diagnoseAccess(): Promise<AccessReport> {
     {},
     true,
   )
-  const issues = await gh<Array<{ pull_request?: unknown }>>(
-    `/repos/${SITE.user}/${SITE.repo}/issues?state=open&per_page=100`,
-    {},
-    true,
-  )
-  const posts = issues.filter((i) => !i.pull_request).length
   const canPush = !!repo.permissions?.push
   const hasIssues = repo.has_issues !== false
-  const ok = canPush && hasIssues
-  const message = !hasIssues
-    ? `仓库 ${SITE.user}/${SITE.repo} 关闭了 Issues 功能，无法发布`
-    : !canPush
-      ? `账号 ${user.login} 对 ${SITE.user}/${SITE.repo} 没有写权限（细粒度 PAT 需选中该仓库 + Issues 读写）`
-      : `权限正常 · 账号 ${user.login} · 当前已发布 ${posts} 篇`
-  return { login: user.login, canPush, hasIssues, openIssues: posts, ok, message }
+
+  let readIssuesOk = true
+  let openIssues = 0
+  try {
+    const issues = await gh<Array<{ pull_request?: unknown }>>(
+      `/repos/${SITE.user}/${SITE.repo}/issues?state=open&per_page=100`,
+      {},
+      true,
+    )
+    openIssues = issues.filter((i) => !i.pull_request).length
+  } catch {
+    readIssuesOk = false
+    openIssues = -1
+  }
+
+  let imgBranch = true
+  try {
+    await gh(`/repos/${SITE.user}/${SITE.repo}/contents/?ref=${SITE.imgBranch}`, {}, true)
+  } catch (err) {
+    imgBranch = !(err instanceof GitHubError && err.status === 404)
+  }
+
+  const problems: string[] = []
+  if (!hasIssues) problems.push(`仓库关闭了 Issues 功能（Settings → Features）`)
+  if (!readIssuesOk) problems.push(`PAT 缺少 Issues 读权限（细粒度 PAT 需勾 Issues: Read）`)
+  if (!canPush) problems.push(`PAT 缺少写入权限（细粒度 PAT 需勾 Issues: Read and write）`)
+  if (!imgBranch) problems.push(`img 分支还不存在，上传图片会失败（建一个同名分支即可）`)
+
+  const ok = hasIssues && readIssuesOk && canPush
+  const message = ok
+    ? `权限正常 · 账号 ${user.login} · 已发布 ${openIssues} 篇${imgBranch ? '' : ' · ⚠ img 分支缺失（暂不能传图）'}`
+    : `自检发现问题：${problems.join('；')}`
+
+  return { login: user.login, canPush, hasIssues, readIssuesOk, openIssues, imgBranch, ok, message }
 }
 
 // ============================================================
