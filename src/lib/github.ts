@@ -254,6 +254,66 @@ export async function fetchUser(token: string): Promise<GitHubUser> {
 }
 
 // ============================================================
+// 诊断：把 GitHub 的状态码翻译成人能看懂的原因
+// ============================================================
+export function explainGitHubError(err: unknown, action: 'read' | 'write' = 'read'): string {
+  if (!(err instanceof GitHubError)) {
+    return '网络异常或请求被浏览器扩展拦截（GitHub API 不可达）'
+  }
+  const detail = err.message.replace(/^GitHub API \d+:\s*/, '')
+  const target = `${SITE.user}/${SITE.repo}`
+  switch (err.status) {
+    case 401:
+      return `PAT 无效或已过期（${detail}）—— 退出后重新登录`
+    case 403:
+      return action === 'write'
+        ? `没有写入权限（${detail}）—— 经典 PAT 需勾选 repo；细粒度 PAT 需在 Repository access 里选中 ${SITE.repo}，并给 Issues: Read and write。也可能只是触发了速率限制，稍后再试。`
+        : `读取被拒（${detail}）—— 可能是匿名请求速率超限（每小时 60 次），登录站长 PAT 后为 5000 次/小时`
+    case 404:
+      return `找不到目标（${detail}）—— 当前目标是 ${target}。常见原因：细粒度 PAT 未授权该仓库；或 PAT 属于别的账号而该账号看不到此仓库。`
+    case 410:
+      return `仓库关闭了 Issues 功能（${detail}）—— 去 Settings → Features 勾上 Issues`
+    case 422:
+      return `参数被拒（${detail}）—— 上传图片时常见：img 分支不存在，或文件名重复`
+    default:
+      return `GitHub API ${err.status}：${detail}`
+  }
+}
+
+export interface AccessReport {
+  login: string
+  canPush: boolean
+  hasIssues: boolean
+  openIssues: number
+  ok: boolean
+  message: string
+}
+
+/** 发布前自检：PAT 是否有效、对目标仓库是否有写权限、Issues 是否开启、能读到几篇 */
+export async function diagnoseAccess(): Promise<AccessReport> {
+  const user = await fetchUser(getToken())
+  const repo = await gh<{ permissions?: { push?: boolean }; has_issues?: boolean }>(
+    `/repos/${SITE.user}/${SITE.repo}`,
+    {},
+    true,
+  )
+  const issues = await gh<unknown[]>(
+    `/repos/${SITE.user}/${SITE.repo}/issues?state=open&per_page=100`,
+    {},
+    true,
+  )
+  const canPush = !!repo.permissions?.push
+  const hasIssues = repo.has_issues !== false
+  const ok = canPush && hasIssues
+  const message = !hasIssues
+    ? `仓库 ${SITE.user}/${SITE.repo} 关闭了 Issues 功能，无法发布`
+    : !canPush
+      ? `账号 ${user.login} 对 ${SITE.user}/${SITE.repo} 没有写权限（细粒度 PAT 需选中该仓库 + Issues 读写）`
+      : `权限正常 · 账号 ${user.login} · 当前已发布 ${issues.length} 篇`
+  return { login: user.login, canPush, hasIssues, openIssues: issues.length, ok, message }
+}
+
+// ============================================================
 // 写入：创建 / 编辑 / 关闭（删除）/ 草稿
 // ============================================================
 export interface WriteInput {

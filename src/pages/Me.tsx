@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ThemeToggle } from '../components/ThemeToggle'
-import { SITE, hasToken } from '../lib/github'
+import { SITE, diagnoseAccess, explainGitHubError, hasToken, type AccessReport } from '../lib/github'
 import { useAuth } from '../hooks/useAuth'
 
 const P1_ITEMS = ['个人资产清单', '音乐播放器', '站点换背景', '像素图头像']
@@ -14,6 +14,22 @@ const P1_ITEMS = ['个人资产清单', '音乐播放器', '站点换背景', '�
 export default function Me() {
   const { user, pat, error, checking, busy, isOwner, login, logout } = useAuth()
   const [input, setInput] = useState('')
+  const [report, setReport] = useState<AccessReport | null>(null)
+  const [diagError, setDiagError] = useState('')
+  const [diagBusy, setDiagBusy] = useState(false)
+
+  const runDiagnose = async () => {
+    setDiagBusy(true)
+    setDiagError('')
+    setReport(null)
+    try {
+      setReport(await diagnoseAccess())
+    } catch (err) {
+      setDiagError(explainGitHubError(err, 'write'))
+    } finally {
+      setDiagBusy(false)
+    }
+  }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -111,6 +127,47 @@ export default function Me() {
           当前数据源：<code>{SITE.user}/{SITE.repo}</code>，图片分支 <code>{SITE.imgBranch}</code>
           {pat ? '（已带 PAT 请求，速率上限 5000/h）' : '（匿名请求，速率上限 60/h）'}
         </p>
+
+        {user && (
+          <div className="space-y-3 rounded-xl border border-caramel-200 bg-caramel-50 p-4 dark:border-caramel-700 dark:bg-caramel-900">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-caramel-700 dark:text-caramel-200">
+                发布权限自检
+              </span>
+              <button
+                type="button"
+                onClick={runDiagnose}
+                disabled={diagBusy}
+                className="rounded-lg border border-caramel-400 px-3 py-1 text-sm transition hover:bg-caramel-200 disabled:opacity-60 dark:hover:bg-caramel-700"
+              >
+                {diagBusy ? '检查中…' : '运行自检'}
+              </button>
+            </div>
+
+            {report && (
+              <ul className="space-y-1 text-sm text-caramel-700 dark:text-caramel-200">
+                <li>
+                  {report.ok ? '✓' : '✗'} {report.message}
+                </li>
+                <li>· 登录账号：{report.login}</li>
+                <li>· 仓库写权限 push：{report.canPush ? '有' : '无'}</li>
+                <li>· 仓库 Issues 功能：{report.hasIssues ? '已开启' : '已关闭'}</li>
+                <li>· 当前已发布文章：{report.openIssues} 篇</li>
+              </ul>
+            )}
+
+            {diagError && (
+              <p className="text-sm text-caramel-700 dark:text-caramel-200">✗ {diagError}</p>
+            )}
+
+            <p className="text-xs text-caramel-600 dark:text-caramel-300">
+              发不出文章通常是 PAT 类型问题：<strong>经典 PAT</strong> 勾选 <code>repo</code>；
+              <strong>细粒度 PAT</strong> 要在 Repository access 里选中{' '}
+              <code>{SITE.repo}</code>，并把 <strong>Issues 设为 Read and write</strong>。
+              自检里 push 为「无」就属于这种情况。
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 dark:border-caramel-700 dark:bg-caramel-800">

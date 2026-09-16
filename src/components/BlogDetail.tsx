@@ -12,6 +12,7 @@ import { CATEGORY_DAILY, SITE, deleteIssue, type Blog } from '../lib/github'
 import { extractHeadings, formatDate, readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
 import { useAuth } from '../hooks/useAuth'
+import { invalidateBlogs } from '../hooks/useBlogs'
 
 export interface BlogDetailProps {
   blog: Blog
@@ -35,6 +36,7 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
     setCloseError('')
     try {
       await deleteIssue(blog.id)
+      invalidateBlogs()
       onClosed?.()
     } catch (err) {
       setCloseError(err instanceof Error ? err.message : '操作失败')

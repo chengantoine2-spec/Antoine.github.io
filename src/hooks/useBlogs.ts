@@ -5,8 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   DEMO_BLOGS,
-  GitHubError,
-  SITE,
+  explainGitHubError,
   fetchIssue,
   fetchIssues,
   isConfigured,
@@ -23,13 +22,25 @@ export interface BlogState {
 
 let cache: Blog[] | null = null
 let inflight: Promise<Blog[]> | null = null
+let cachedAt = 0
+
+/** 缓存有效期：超过就重新拉取，保证发布后首页能立刻看到新文章 */
+const CACHE_TTL_MS = 20_000
+
+/** 发布 / 改稿 / 删除后调用，让列表下次进入时重新拉取 */
+export function invalidateBlogs(): void {
+  cache = null
+  cachedAt = 0
+}
 
 function load(force = false): Promise<Blog[]> {
-  if (!force && cache) return Promise.resolve(cache)
-  if (!force && inflight) return inflight
+  const fresh = cache && Date.now() - cachedAt < CACHE_TTL_MS
+  if (!force && fresh) return Promise.resolve(cache as Blog[])
+  if (inflight) return inflight
   inflight = fetchIssues()
     .then((blogs) => {
       cache = blogs
+      cachedAt = Date.now()
       return blogs
     })
     .finally(() => {
@@ -52,16 +63,12 @@ export function useBlogs(): BlogState & { reload: () => void } {
       setState({ blogs: DEMO_BLOGS, loading: false, error: '', fallback: true })
       return
     }
-    setState((s) => ({ ...s, loading: true, error: '' }))
+    // 已有数据时后台静默刷新，避免列表闪一下骨架屏
+    setState((s) => ({ ...s, loading: s.blogs.length === 0, error: '' }))
     load(force)
       .then((blogs) => setState({ blogs, loading: false, error: '', fallback: false }))
       .catch((err: unknown) => {
-        const msg =
-          err instanceof GitHubError
-            ? err.status === 404
-              ? `仓库 ${SITE.user}/${SITE.repo} 不存在或未公开`
-              : err.message
-            : '网络异常，无法读取 GitHub Issues'
+        const msg = explainGitHubError(err)
         // 首次加载失败时给出兜底内容，避免整站空白
         setState((s) => ({
           blogs: s.blogs.length ? s.blogs : DEMO_BLOGS,

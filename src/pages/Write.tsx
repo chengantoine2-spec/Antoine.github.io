@@ -9,11 +9,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { ImageUploader } from '../components/ImageUploader'
-import { CATEGORY_DAILY, CATEGORY_PROJECT, createIssue, updateIssue, type Category } from '../lib/github'
+import {
+  CATEGORY_DAILY,
+  CATEGORY_PROJECT,
+  SITE,
+  createIssue,
+  diagnoseAccess,
+  explainGitHubError,
+  updateIssue,
+  type Category,
+} from '../lib/github'
 import { readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
 import { useAuth } from '../hooks/useAuth'
-import { useBlog } from '../hooks/useBlogs'
+import { invalidateBlogs, useBlog } from '../hooks/useBlogs'
 
 const SNIPPETS: Array<{ label: string; text: string }> = [
   { label: '小标题', text: '\n## 小标题\n' },
@@ -42,10 +51,33 @@ export default function Write() {
   const [showPreview, setShowPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [preflight, setPreflight] = useState<{
+    state: 'idle' | 'checking' | 'ok' | 'bad'
+    message: string
+  }>({ state: 'idle', message: '' })
   const [loadedEdit, setLoadedEdit] = useState(false)
   const [patInput, setPatInput] = useState('')
 
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+
+  /** 进页面先自检：PAT 是否有效、有没有写权限、Issues 是否开着 */
+  useEffect(() => {
+    if (!isOwner || !pat) return
+    let alive = true
+    setPreflight({ state: 'checking', message: '正在检查发布权限…' })
+    diagnoseAccess()
+      .then((report) => {
+        if (!alive) return
+        setPreflight({ state: report.ok ? 'ok' : 'bad', message: report.message })
+      })
+      .catch((err: unknown) => {
+        if (!alive) return
+        setPreflight({ state: 'bad', message: explainGitHubError(err, 'write') })
+      })
+    return () => {
+      alive = false
+    }
+  }, [isOwner, pat])
 
   // 改稿模式：把 Issue 内容灌进表单（只灌一次，避免覆盖用户输入）
   useEffect(() => {
@@ -99,9 +131,10 @@ export default function Write() {
         summary: summary.trim() || undefined,
       }
       const saved = isEditing ? await updateIssue(editId, payload) : await createIssue(payload)
+      invalidateBlogs() // 让首页/列表下次进入时重新拉取，立刻出现新文章
       navigate(`/blog/${saved.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(explainGitHubError(err, 'write'))
     } finally {
       setSaving(false)
     }
@@ -178,11 +211,28 @@ export default function Write() {
         </div>
       </header>
 
-      {error && (
-        <p className="rounded-lg border border-caramel-400 bg-caramel-100 px-3 py-2 text-sm text-caramel-700 dark:bg-caramel-800 dark:text-caramel-200">
-          {error}
+      {/* 发布前自检 + 失败原因：吸顶显示，滚到哪都看得见 */}
+      <div className="sticky top-16 z-30 space-y-2">
+        <p
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            preflight.state === 'bad'
+              ? 'border-caramel-500 bg-caramel-200 font-medium text-caramel-900 dark:bg-caramel-700 dark:text-caramel-100'
+              : 'border-caramel-200 bg-caramel-100 text-caramel-600 dark:border-caramel-700 dark:bg-caramel-800 dark:text-caramel-300'
+          }`}
+        >
+          {preflight.state === 'checking' && '⏳ '}
+          {preflight.state === 'ok' && '✓ '}
+          {preflight.state === 'bad' && '✗ '}
+          目标仓库 <code>{SITE.user}/{SITE.repo}</code>
+          {preflight.message ? ` · ${preflight.message}` : ''}
         </p>
-      )}
+
+        {error && (
+          <p className="rounded-lg border border-caramel-500 bg-caramel-200 px-3 py-2 text-sm font-medium text-caramel-900 dark:bg-caramel-700 dark:text-caramel-100">
+            ⚠ 发布失败：{error}
+          </p>
+        )}
+      </div>
 
       <section className="grid gap-4 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 sm:grid-cols-2 dark:border-caramel-700 dark:bg-caramel-800">
         <label className="space-y-1 sm:col-span-2">
@@ -284,13 +334,18 @@ export default function Write() {
         <span className="text-caramel-600 dark:text-caramel-300">
           {tagList.length > 0 ? `将写入标签：${tagList.map((t) => `#${t}`).join(' ')}` : '未设置标签'}
         </span>
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="rounded-lg bg-caramel-500 px-5 py-2 font-medium text-caramel-50 transition hover:bg-caramel-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {saving ? '提交中…' : isEditing ? '保存修改' : '发布'}
-        </button>
+        <div className="flex items-center gap-3">
+          {error && (
+            <span className="max-w-md text-caramel-700 dark:text-caramel-200">⚠ {error}</span>
+          )}
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="rounded-lg bg-caramel-500 px-5 py-2 font-medium text-caramel-50 transition hover:bg-caramel-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? '提交中…' : isEditing ? '保存修改' : '发布'}
+          </button>
+        </div>
       </footer>
     </form>
   )

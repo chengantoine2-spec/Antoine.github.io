@@ -85,6 +85,9 @@ export default function Home() {
 
       <p className="text-sm text-caramel-600 dark:text-caramel-300" aria-live="polite">
         {loading || pending ? '加载中…' : `共 ${visible.length} 篇`}
+        <span className="ml-2 text-xs">
+          · 数据源 <code>{SITE.user}/{SITE.repo}</code> 的 Issues
+        </span>
       </p>
 
       <BlogList
