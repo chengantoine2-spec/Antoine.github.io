@@ -1,6 +1,7 @@
 /**
  * 博客列表：卡片网格 + 加载 / 空 / 错误状态。
  */
+import { Link } from 'react-router-dom'
 import { BlogCard } from './BlogCard'
 import type { Blog } from '../lib/github'
 
@@ -73,9 +74,16 @@ export function BlogList({
 
       {blogs.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-caramel-300 px-6 py-16 text-center dark:border-caramel-600">
-          <p className="text-caramel-700 dark:text-caramel-200">没有匹配的博客</p>
+          <p className="text-caramel-700 dark:text-caramel-200">还没有匹配的博客</p>
           <p className="mt-2 text-sm text-caramel-600 dark:text-caramel-300">
             试试清除标签筛选，或换一个分类。
+          </p>
+          <p className="mt-4 text-sm text-caramel-600 dark:text-caramel-300">
+            如果你是站长，登录后到{' '}
+            <Link to="/write" className="font-medium text-caramel-600 underline dark:text-caramel-300">
+              写博客
+            </Link>{' '}
+            发布第一个 Issue 即可出现在这里。
           </p>
         </div>
       ) : (

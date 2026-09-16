@@ -81,8 +81,8 @@ export const projects: Project[] = [
       },
     ],
     links: [
-      { label: '源码仓库', url: 'https://github.com/YOUR_GITHUB_USER/caramel-blog' },
-      { label: '线上站点', url: 'https://YOUR_GITHUB_USER.github.io/caramel-blog/' },
+      { label: '源码仓库', url: 'https://github.com/chengantoine2-spec/Antoine.github.io' },
+      { label: '线上站点', url: 'https://chengantoine2-spec.github.io/Antoine.github.io/' },
     ],
   },
   {
@@ -117,7 +117,9 @@ export const projects: Project[] = [
         detail: '同一表单既可新建 Issue 也可编辑已有 Issue；下架用关闭 + deleted 标签（GitHub 不提供删除 Issue 的 API）。',
       },
     ],
-    links: [{ label: '使用说明', url: 'https://github.com/YOUR_GITHUB_USER/caramel-blog#readme' }],
+    links: [
+      { label: '使用说明', url: 'https://github.com/chengantoine2-spec/Antoine.github.io#readme' },
+    ],
   },
 ]
 

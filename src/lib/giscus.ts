@@ -7,7 +7,7 @@
  */
 
 export const GISCUS = {
-  repo: (import.meta.env.VITE_GISCUS_REPO as string) || 'YOUR_GITHUB_USER/caramel-blog',
+  repo: (import.meta.env.VITE_GISCUS_REPO as string) || 'chengantoine2-spec/Antoine.github.io',
   repoId: (import.meta.env.VITE_GISCUS_REPO_ID as string) || 'TODO_REPO_ID',
   category: (import.meta.env.VITE_GISCUS_CATEGORY as string) || 'Announcements',
   categoryId: (import.meta.env.VITE_GISCUS_CATEGORY_ID as string) || 'TODO_CATEGORY_ID',

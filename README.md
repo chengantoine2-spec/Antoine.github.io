@@ -3,6 +3,9 @@
 以博客为核心的公开个人站：访客可读、可评论、可点赞，仅站长可写作与管理。
 **零后端**：正文存在 GitHub Issues，图片存在仓库 `img` 分支（jsDelivr 加速），评论与点赞由 Giscus 托管。
 
+- 线上地址：<https://chengantoine2-spec.github.io/Antoine.github.io/>
+- 源码仓库：<https://github.com/chengantoine2-spec/Antoine.github.io>
+
 技术栈：Vite + React 18 + TypeScript + Tailwind CSS v3 + react-router-dom v6 +
 react-markdown + remark-gfm + rehype-highlight。
 
@@ -23,21 +26,26 @@ npm run preview
 
 ## 上线前必须补的配置
 
-复制 `.env.example` 为 `.env`（本地）或填到仓库 **Settings → Secrets and variables → Actions → Variables**（部署时同名变量会自动注入）。
+站点/仓库的默认值已经写在 `src/lib/github.ts` 里（指向 `chengantoine2-spec/Antoine.github.io`），
+**开箱即可显示该仓库的 Issues**。只有换仓库或想覆盖时才需要 `.env`（本地）或
+仓库 **Settings → Secrets and variables → Actions → Variables**（部署时同名变量自动注入）。
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `VITE_GH_USER` | ✅ | GitHub 用户名 |
-| `VITE_GH_REPO` | ✅ | 仓库名（Issues 与图片都在这里） |
-| `VITE_GH_OWNER` | ✅ | 站长登录名，用于判定 `/write` 可见性 |
-| `VITE_IMG_BRANCH` | ⬜ | 图片分支，默认 `img`（**需先在仓库里建好该分支**，否则上传报 422） |
-| `VITE_SITE_TITLE` | ⬜ | 站点标题，默认「焦糖布丁」 |
-| `VITE_GISCUS_REPO` / `VITE_GISCUS_REPO_ID` | ✅ | 在 [giscus.app](https://giscus.app) 生成 |
-| `VITE_GISCUS_CATEGORY` / `VITE_GISCUS_CATEGORY_ID` | ✅ | 同上；仓库需先开启 Discussions |
+| `VITE_GISCUS_REPO_ID` | ✅ | 评论区必需，在 [giscus.app](https://giscus.app) 生成（仓库需先开启 Discussions） |
+| `VITE_GISCUS_CATEGORY_ID` | ✅ | 同上 |
+| `VITE_GISCUS_REPO` | ⬜ | 默认已是当前仓库 |
+| `VITE_GISCUS_CATEGORY` | ⬜ | 默认 `Announcements` |
 | `VITE_GISCUS_MAPPING` | ⬜ | 默认 `pathname`；也可用 `number`（按 Issue 号）或 `specific`（按标题） |
+| `VITE_GH_USER` / `VITE_GH_REPO` / `VITE_GH_OWNER` | ⬜ | 默认已是当前仓库 |
+| `VITE_IMG_BRANCH` | ⬜ | 默认 `img`（**需先在仓库里建好该分支**，否则上传报 422） |
+| `VITE_SITE_TITLE` | ⬜ | 默认「焦糖布丁」 |
 
 站长登录：站内 `/me` 或 `/write` 填写 Personal Access Token（需 `repo` 权限）。
 **PAT 只存在浏览器 localStorage，不入库、不提交仓库。**
+
+> 还没写第一篇文章时首页是空列表（会有提示引导去 `/write`）；
+> 只有在仓库未配置或 API 请求失败时才会回落到内置示例数据。
 
 ---
 

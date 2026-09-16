@@ -6,19 +6,19 @@
  */
 
 // ============================================================
-// 站点配置（TODO：换成你的真实值）
+// 站点配置（默认值已填成当前线上仓库；可用 VITE_* 环境变量覆盖）
 // ============================================================
 export const SITE = {
-  /** TODO: GitHub 用户名 */
-  user: import.meta.env.VITE_GH_USER || 'YOUR_GITHUB_USER',
-  /** TODO: 仓库名（博客 Issue 与图片都存这里） */
-  repo: import.meta.env.VITE_GH_REPO || 'caramel-blog',
+  /** GitHub 用户名 */
+  user: import.meta.env.VITE_GH_USER || 'chengantoine2-spec',
+  /** 仓库名（博客 Issue 与图片都存这里） */
+  repo: import.meta.env.VITE_GH_REPO || 'Antoine.github.io',
   /** 图片所在分支 */
   imgBranch: import.meta.env.VITE_IMG_BRANCH || 'img',
   /** 站点标题 */
   title: import.meta.env.VITE_SITE_TITLE || '焦糖布丁',
-  /** 站长 GitHub 登录名（用于判定是否显示 /write；留空则任何有效 PAT 都算站长） */
-  owner: import.meta.env.VITE_GH_OWNER || import.meta.env.VITE_GH_USER || 'YOUR_GITHUB_USER',
+  /** 站长 GitHub 登录名（用于判定是否显示 /write） */
+  owner: import.meta.env.VITE_GH_OWNER || 'chengantoine2-spec',
 } as const
 
 /** 分类 label（写进 Issue labels，其余 label 一律视为标签） */
@@ -36,6 +36,9 @@ export const JSDELIVR_BASE = 'https://cdn.jsdelivr.net/gh'
 
 export const isConfigured = (): boolean =>
   SITE.user !== 'YOUR_GITHUB_USER' && SITE.user.trim() !== '' && SITE.repo.trim() !== ''
+
+/** jsDelivr 图片地址：https://cdn.jsdelivr.net/gh/{user}/{repo}@{branch}/{path} */
+export const IMG_CDN_BASE = `${JSDELIVR_BASE}/${SITE.user}/${SITE.repo}@${SITE.imgBranch}`
 
 // ============================================================
 // 类型
@@ -342,7 +345,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export function jsdelivrUrl(path: string): string {
-  return `${JSDELIVR_BASE}/${SITE.user}/${SITE.repo}@${SITE.imgBranch}/${path.replace(/^\//, '')}`
+  return `${IMG_CDN_BASE}/${path.replace(/^\//, '')}`
 }
 
 /** yyyy/mm/{hash}.{ext} */
