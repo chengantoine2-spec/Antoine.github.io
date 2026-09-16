@@ -106,7 +106,9 @@ async function gh<T>(path: string, init: RequestInit = {}, withToken = false): P
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  // GitHub API 响应带 Cache-Control: private, max-age=60，
+  // 浏览器会在 60 秒内直接复用旧结果（刚发布的文章就会"看不见"），所以显式禁用缓存。
+  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...init, headers })
   if (!res.ok) {
     let detail = res.statusText
     try {
@@ -243,6 +245,7 @@ export async function fetchIssue(id: number): Promise<Blog> {
 
 export async function fetchUser(token: string): Promise<GitHubUser> {
   const res = await fetch(`${API_BASE}/user`, {
+    cache: 'no-store',
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
@@ -297,11 +300,12 @@ export async function diagnoseAccess(): Promise<AccessReport> {
     {},
     true,
   )
-  const issues = await gh<unknown[]>(
+  const issues = await gh<Array<{ pull_request?: unknown }>>(
     `/repos/${SITE.user}/${SITE.repo}/issues?state=open&per_page=100`,
     {},
     true,
   )
+  const posts = issues.filter((i) => !i.pull_request).length
   const canPush = !!repo.permissions?.push
   const hasIssues = repo.has_issues !== false
   const ok = canPush && hasIssues
@@ -309,8 +313,8 @@ export async function diagnoseAccess(): Promise<AccessReport> {
     ? `仓库 ${SITE.user}/${SITE.repo} 关闭了 Issues 功能，无法发布`
     : !canPush
       ? `账号 ${user.login} 对 ${SITE.user}/${SITE.repo} 没有写权限（细粒度 PAT 需选中该仓库 + Issues 读写）`
-      : `权限正常 · 账号 ${user.login} · 当前已发布 ${issues.length} 篇`
-  return { login: user.login, canPush, hasIssues, openIssues: issues.length, ok, message }
+      : `权限正常 · 账号 ${user.login} · 当前已发布 ${posts} 篇`
+  return { login: user.login, canPush, hasIssues, openIssues: posts, ok, message }
 }
 
 // ============================================================

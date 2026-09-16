@@ -9,7 +9,7 @@ import { CATEGORIES, SITE, type Category } from '../lib/github'
 import { collectTags, filterBlogs, useBlogs } from '../hooks/useBlogs'
 
 export default function Home() {
-  const { blogs, loading, error, fallback, reload } = useBlogs()
+  const { blogs, loading, error, fallback, reload, updatedAt } = useBlogs()
   const [params, setParams] = useSearchParams()
 
   const categoryParam = params.get('category')
@@ -83,12 +83,23 @@ export default function Home() {
         onClear={() => update({ tags: [] })}
       />
 
-      <p className="text-sm text-caramel-600 dark:text-caramel-300" aria-live="polite">
-        {loading || pending ? '加载中…' : `共 ${visible.length} 篇`}
-        <span className="ml-2 text-xs">
-          · 数据源 <code>{SITE.user}/{SITE.repo}</code> 的 Issues
-        </span>
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-caramel-600 dark:text-caramel-300" aria-live="polite">
+          {loading || pending ? '加载中…' : `共 ${visible.length} 篇`}
+          <span className="ml-2 text-xs">
+            · 数据源 <code>{SITE.user}/{SITE.repo}</code> 的 Issues
+            {updatedAt > 0 && ` · 更新于 ${new Date(updatedAt).toLocaleTimeString('zh-CN')}`}
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={reload}
+          disabled={loading}
+          className="rounded-full border border-caramel-300 px-3 py-1 text-xs text-caramel-700 transition hover:bg-caramel-200 disabled:opacity-60 dark:border-caramel-600 dark:text-caramel-200 dark:hover:bg-caramel-700"
+        >
+          {loading ? '刷新中…' : '刷新'}
+        </button>
+      </div>
 
       <BlogList
         blogs={visible}

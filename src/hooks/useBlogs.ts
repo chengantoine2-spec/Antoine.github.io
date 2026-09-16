@@ -18,6 +18,8 @@ export interface BlogState {
   error: string
   /** 当前展示的是本地兜底数据（未配置仓库或请求失败） */
   fallback: boolean
+  /** 最近一次成功拉取的时间戳，用于在页面上显示数据新鲜度 */
+  updatedAt: number
 }
 
 let cache: Blog[] | null = null
@@ -56,17 +58,20 @@ export function useBlogs(): BlogState & { reload: () => void } {
     loading: !cache,
     error: '',
     fallback: false,
+    updatedAt: cachedAt,
   }))
 
   const run = useCallback((force: boolean) => {
     if (!isConfigured()) {
-      setState({ blogs: DEMO_BLOGS, loading: false, error: '', fallback: true })
+      setState({ blogs: DEMO_BLOGS, loading: false, error: '', fallback: true, updatedAt: 0 })
       return
     }
     // 已有数据时后台静默刷新，避免列表闪一下骨架屏
     setState((s) => ({ ...s, loading: s.blogs.length === 0, error: '' }))
     load(force)
-      .then((blogs) => setState({ blogs, loading: false, error: '', fallback: false }))
+      .then((blogs) =>
+        setState({ blogs, loading: false, error: '', fallback: false, updatedAt: Date.now() }),
+      )
       .catch((err: unknown) => {
         const msg = explainGitHubError(err)
         // 首次加载失败时给出兜底内容，避免整站空白
@@ -75,6 +80,7 @@ export function useBlogs(): BlogState & { reload: () => void } {
           loading: false,
           error: msg,
           fallback: s.blogs.length === 0,
+          updatedAt: s.updatedAt,
         }))
       })
   }, [])
