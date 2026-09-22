@@ -11,7 +11,6 @@ import { SITE, clearToken, fetchUser, hasToken, setToken } from '../lib/github'
 import {
   type Profile,
   USERNAME_RE,
-  emailToUsername,
   isSupabaseConfigured,
   supabase,
   translateAuthError,
@@ -68,7 +67,7 @@ async function loadProfile(userId: string, email: string | null | undefined) {
     ready: true,
     userId,
     email: email ?? null,
-    username: (data as Profile | null)?.username || emailToUsername(email),
+    username: (data as Profile | null)?.username || '未初始化资料',
     profile: (data as Profile | null) ?? null,
     error: error ? `读取账号资料失败：${error.message}` : '',
   })

@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { SITE, hasToken, isConfigured as repoConfigured } from '../lib/github'
+import { diagnoseSupabase, type SupabaseReport } from '../lib/supabase'
 import { formatFull } from '../lib/text'
 import { useAuth, usePat } from '../hooks/useAuth'
 
@@ -20,6 +21,8 @@ export default function Me() {
   const [patInput, setPatInput] = useState('')
   const [patMessage, setPatMessage] = useState('')
   const [patOk, setPatOk] = useState(false)
+  const [report, setReport] = useState<SupabaseReport | null>(null)
+  const [reportBusy, setReportBusy] = useState(false)
 
   const onSavePat = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -131,6 +134,41 @@ export default function Me() {
             </p>
           </div>
         )}
+      </section>
+
+      {/* ---------- 账号服务自检 ---------- */}
+      <section className="space-y-3 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 dark:border-caramel-700 dark:bg-caramel-800">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold text-caramel-700 dark:text-caramel-100">账号服务自检</h2>
+          <button
+            type="button"
+            disabled={reportBusy}
+            onClick={async () => {
+              setReportBusy(true)
+              setReport(await diagnoseSupabase())
+              setReportBusy(false)
+            }}
+            className="rounded-lg border border-caramel-400 px-3 py-1 text-sm transition hover:bg-caramel-200 disabled:opacity-60 dark:hover:bg-caramel-700"
+          >
+            {reportBusy ? '检查中…' : '运行自检'}
+          </button>
+        </div>
+
+        {report && (
+          <ul className="space-y-1 text-sm text-caramel-700 dark:text-caramel-200">
+            <li>
+              {report.ok ? '✓' : '✗'} {report.message}
+            </li>
+            <li>· Supabase 可达：{report.reachable ? '是' : '否'}</li>
+            <li>· 建表脚本 supabase/schema.sql：{report.schemaReady ? '已执行' : '未执行'}</li>
+            <li>· 评论计数函数 comment_counts()：{report.countsReady ? '可用' : '缺失'}</li>
+          </ul>
+        )}
+
+        <p className="text-xs text-caramel-600 dark:text-caramel-300">
+          还没配 Supabase？见 README「配置 → 2. 账号体系」：新建免费项目 → SQL Editor 执行{' '}
+          <code>supabase/schema.sql</code> → 关闭 Confirm email → 把 Project URL 与 anon key 填进环境变量。
+        </p>
       </section>
 
       {/* ---------- 发布凭据（PAT） ---------- */}

@@ -101,6 +101,37 @@ html.dark .prose-caramel h2 {
   @apply break-words;
 }
 
+/* 行宽：正文限制在 ~76 字符，长行阅读更省力 */
+.prose-caramel {
+  max-width: 76ch;
+}
+
+/* 标题锚点：默认隐形，hover / 键盘聚焦时出现，点一下就能分享该小节 */
+.prose-caramel .heading-anchor {
+  @apply ml-2 align-middle text-sm font-normal text-caramel-300 no-underline opacity-0 transition-opacity;
+}
+.prose-caramel h1:hover .heading-anchor,
+.prose-caramel h2:hover .heading-anchor,
+.prose-caramel h3:hover .heading-anchor,
+.prose-caramel h4:hover .heading-anchor,
+.prose-caramel .heading-anchor:focus-visible {
+  @apply opacity-100;
+}
+html.dark .prose-caramel .heading-anchor {
+  @apply text-caramel-600;
+}
+
+/* GFM 任务列表：去掉圆点、勾选框对齐 */
+.prose-caramel ul.contains-task-list {
+  @apply list-none pl-1;
+}
+.prose-caramel li.task-list-item {
+  @apply flex items-start gap-2;
+}
+.prose-caramel li.task-list-item > input[type='checkbox'] {
+  @apply mt-1.5 h-4 w-4 shrink-0 accent-caramel-500;
+}
+
 .prose-caramel a {
   @apply font-medium text-caramel-600 underline decoration-caramel-300 decoration-2 underline-offset-2 hover:decoration-caramel-600;
 }

@@ -129,6 +129,7 @@ src/components/ThemeToggle.tsx
 src/components/Cover.tsx
 src/components/TagFilter.tsx
 src/components/CommentSection.tsx // 自建评论（替代 Giscus）
+src/components/ZoomImage.tsx      // 正文图片点击放大（灯箱）
 src/components/ImageUploader.tsx  // 编辑时插图
 
 src/pages/Home.tsx
@@ -231,8 +232,16 @@ src/pages/Write.tsx               // 管理员 + PAT
 ## 修订记录
 
 - 2026-09-16 初版：静态站 + GitHub Issues + Giscus + PAT 站长写作。
-- 2026-09-16 第二版（本次）：引入 Supabase 账号体系取代「仅 GitHub 身份」——
+- 2026-09-16 第二版：引入 Supabase 账号体系取代「仅 GitHub 身份」——
   开放注册（用户名 + 密码）、管理员/普通用户角色、管理后台、注册用户评论（Giscus 下线）、
   普通用户物品台账资产库；相应废止旧「暂不做」中的「后端/云数据库/账号系统」与「资产 CRUD」两条，
   并新增依赖 @supabase/supabase-js 与文件 src/lib/supabase.ts、src/components/CommentSection.tsx、
   src/pages/{Login,Register,Assets,Admin}.tsx、supabase/schema.sql。
+- 2026-09-16 第三版：
+  - 文章阅读体验加强：正文行宽 76ch、标题锚点链接、图片点击放大（新增 src/components/ZoomImage.tsx）、
+    GFM 任务列表样式、正文底部上一篇/下一篇、回到顶部按钮。
+  - 新增 .github/workflows/keepalive.yml：每日用 anon key 打一次 REST，规避 Supabase 免费项目 7 天暂停。
+  - 修复两处会导致上线即失败的问题：① guard_profile_update 在 auth.uid() 为 null
+    （SQL Editor / service_role / 引导提权 SQL）时误抛异常，已改为该情形直接放行；
+    ② 中文等非 ASCII 用户名拼出的合成邮箱可能被 Supabase Auth 判为非法，改为
+    UTF-8 字节哈希的纯 ASCII 别名邮箱（supabase.ts#usernameAlias），真实用户名仍存 profiles.username。

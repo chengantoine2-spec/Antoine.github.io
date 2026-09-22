@@ -1,0 +1,32 @@
+name: Keep Supabase awake
+
+# Supabase 免费项目连续 7 天低活动会被自动暂停（评论/资产库会不可用）。
+# 这个任务每天用 anon key 打一次 REST 接口，制造最小活动量以维持项目在线。
+# 未配置 Variables 时自动跳过，不会失败刷红。
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 每天 03:17 UTC（约北京时间 11:17）
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "未配置 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY，跳过保活。"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "$SUPABASE_URL/rest/v1/profiles?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "REST 接口返回 HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning::Supabase 未返回 200（$code）。项目可能已被暂停，请到 Dashboard 点 Resume。"
+          fi

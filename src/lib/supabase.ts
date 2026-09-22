@@ -38,14 +38,24 @@ export function supabase(): SupabaseClient {
 /** 用户名规则：2–24 位，中英文 / 数字 / 下划线 / 连字符 */
 export const USERNAME_RE = /^[A-Za-z0-9_\u4e00-\u9fa5-]{2,24}$/
 
-export const usernameToEmail = (username: string): string =>
-  `${username.trim().toLowerCase()}@${AUTH_EMAIL_DOMAIN}`
-
-export const emailToUsername = (email?: string | null): string => {
-  if (!email) return ''
-  const suffix = `@${AUTH_EMAIL_DOMAIN}`
-  return email.toLowerCase().endsWith(suffix) ? email.slice(0, -suffix.length) : email
+/**
+ * 用户名 → 合成邮箱的本地部分。
+ *
+ * 为什么不用用户名直接拼：中文（或任何非 ASCII）用户名会得到
+ * `布丁@caramel.local` 这种非 ASCII 本地部分，Supabase Auth 可能直接判为
+ * 非法邮箱而拒绝注册。这里用 UTF-8 字节的 djb2 哈希 + 字节长度拼成纯 ASCII
+ * 别名（`u` + 8 位十六进制 + 长度），确定性可复算，登录时无需查表。
+ * 真实用户名始终存在 profiles.username 里。
+ */
+export function usernameAlias(username: string): string {
+  const bytes = new TextEncoder().encode(username.trim().toLowerCase())
+  let h = 5381
+  for (const b of bytes) h = ((h << 5) + h + b) >>> 0
+  return `u${h.toString(16).padStart(8, '0')}${bytes.length.toString(16)}`
 }
+
+export const usernameToEmail = (username: string): string =>
+  `${usernameAlias(username)}@${AUTH_EMAIL_DOMAIN}`
 
 export type Role = 'admin' | 'user'
 
@@ -100,4 +110,68 @@ export function translateAuthError(message: string): string {
   if (m.includes('profiles_username_key') || m.includes('duplicate key'))
     return '这个用户名已经被占用了'
   return message || '操作失败'
+}
+
+export interface SupabaseReport {
+  reachable: boolean
+  /** profiles 表存在（说明 schema.sql 跑过了） */
+  schemaReady: boolean
+  /** comment_counts() 函数存在（列表页评论数用） */
+  countsReady: boolean
+  /** 已注册用户数（读不到时为 null） */
+  users: number | null
+  ok: boolean
+  message: string
+}
+
+/** 账号服务自检：URL 通不通、建表脚本跑了没、函数在不在 */
+export async function diagnoseSupabase(): Promise<SupabaseReport> {
+  if (!isSupabaseConfigured()) {
+    return {
+      reachable: false,
+      schemaReady: false,
+      countsReady: false,
+      users: null,
+      ok: false,
+      message: '未配置 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY',
+    }
+  }
+
+  let reachable = false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      cache: 'no-store',
+    })
+    reachable = res.status > 0 && res.status < 500
+  } catch {
+    reachable = false
+  }
+
+  let schemaReady = false
+  let countsReady = false
+  let users: number | null = null
+  let detail = ''
+
+  if (reachable) {
+    const p = await supabase().from('profiles').select('id', { count: 'exact', head: true })
+    if (p.error) detail = p.error.message
+    else {
+      schemaReady = true
+      users = p.count ?? null
+    }
+    if (schemaReady) {
+      const r = await supabase().rpc('comment_counts')
+      countsReady = !r.error
+    }
+  }
+
+  const ok = reachable && schemaReady
+  const message = !reachable
+    ? 'Supabase 不可达：检查 VITE_SUPABASE_URL，或免费项目已被暂停（Dashboard → Resume project）'
+    : !schemaReady
+      ? `还没执行 supabase/schema.sql（${detail || 'profiles 表不存在'}）`
+      : `账号服务正常 · 已注册 ${users ?? '?'} 人 · 评论计数函数${countsReady ? '可用' : '缺失（重新执行 schema.sql）'}`
+
+  return { reachable, schemaReady, countsReady, users, ok, message }
 }

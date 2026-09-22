@@ -59,6 +59,12 @@ npm run preview
 | `VITE_SUPABASE_ANON_KEY` | ✅ | anon public key。**它是设计上公开的**，权限靠 RLS；`service_role` key 绝不能进前端或仓库 |
 | `VITE_AUTH_EMAIL_DOMAIN` | ⬜ | 合成邮箱域名，默认 `caramel.local`，不需要真实可收信 |
 
+> **用户名支持中文**：内部会把用户名哈希成纯 ASCII 别名邮箱（`u2b59b1426@caramel.local`），
+> 真实用户名存在 `profiles.username`。这样非 ASCII 用户名不会被 Supabase 判为非法邮箱。
+>
+> **保活**：`.github/workflows/keepalive.yml` 每天用 anon key 打一次 REST 接口，
+> 避免免费项目因 7 天低活动被暂停（未配置 Variables 时自动跳过）。
+
 > 发布文章/上传图片仍需要一个有 `repo` 权限的 **GitHub Token（PAT）**，在 `/me` 保存，
 > 只存浏览器 localStorage，不入库、不进仓库。
 
@@ -78,6 +84,18 @@ npm run preview
 
 权限的强制点在数据库：`profiles` 有防提权触发器（非管理员改不动 `role`/`banned`），
 `comments`/`assets` 的 RLS 策略按 `auth.uid()` 与 `is_admin()` 判定 —— 改前端代码拿不到别人的数据。
+
+---
+
+## 文章阅读体验（本轮加强）
+
+- **正文行宽限制 76ch**：长文不再横跨整个屏幕。
+- **标题锚点**：hover 标题右侧出现 `#`，点一下地址栏就带上该小节链接，可直接分享。
+- **图片点击放大**：正文图片点击进入灯箱看原图，`Esc` 或点背景关闭。
+- **GFM 任务列表**：`- [x]` 渲染成对齐的勾选框。
+- **上一篇 / 下一篇**：正文底部按发布时间给出相邻文章（走列表缓存，不额外请求）。
+- **回到顶部**：滚过一屏后右下角出现。
+- 已有能力保持不变：TOC 滚动高亮、阅读进度条、代码高亮 + 复制、精确发布时间 + 相对时间（30 秒自刷新）。
 
 ---
 
@@ -112,9 +130,11 @@ src/lib/text.ts                 纯文本工具（日期 / 时长 / TOC 抽取�
 src/hooks/useBlogs.ts           Issue 列表 + 评论数合并 + 缓存
 src/hooks/useAuth.ts            useAuth()（Supabase 会话）+ usePat()（发布凭据）
 src/components/                 BlogCard BlogList BlogDetail Toc ReadingProgress CodeBlock
-                                ThemeToggle Cover TagFilter CommentSection ImageUploader
+                                ThemeToggle Cover TagFilter CommentSection ImageUploader ZoomImage
 src/pages/                      Home Blog Projects ProjectDetail Login Register Assets Admin Me Write
 supabase/schema.sql             建表 + RLS + 触发器 + 统计函数（在 Supabase SQL Editor 执行）
+.github/workflows/deploy.yml    Pages 构建发布
+.github/workflows/keepalive.yml Supabase 免费项目每日保活
 ```
 
 ---
@@ -164,7 +184,7 @@ TOC 锚点一致性、项目页、个人中心、写博客页拦截、时间格�
 - **删除账号**需要 `service_role`，客户端做不了：请到 Supabase Dashboard → Authentication → Users 删，
   profile / 评论 / 资产会因外键级联清理。
 - **Supabase 免费项目 7 天低活动会被自动暂停**（[官方文档](https://supabase.com/docs/guides/platform/free-project-pausing)），
-  期间评论/资产不可用（文章仍能读）；可手动 Resume，或加个每日定时任务保活。
+  期间评论/资产不可用（文章仍能读）；已加每日保活任务，真被暂停时到 Dashboard 点 Resume 即可。
 - 账号是本站自建，与 GitHub 账号无关；访客评论不需要 GitHub，但写作仍需要 PAT。
 - 无草稿箱；列表排序仅按创建时间倒序；阅读时长按中文 350 字/分钟估算。
 - 大图原样上传未压缩；未做 SEO / RSS / 站内搜索。

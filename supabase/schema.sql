@@ -58,6 +58,9 @@ create policy profiles_admin_all on public.profiles
   for all using (public.is_admin(auth.uid())) with check (public.is_admin(auth.uid()));
 
 -- 防提权：非管理员不能改自己的 role / banned / id
+-- 注意：直接 SQL / service_role（Dashboard、迁移脚本、下面的提权 SQL）不带 JWT，
+-- auth.uid() 为 null，此时放行 —— 这类请求不经过 anon/authenticated 角色，
+-- 而 RLS 策略对 uid 为 null 的请求本来就匹配不到任何行，因此不会成为提权入口。
 create or replace function public.guard_profile_update()
 returns trigger
 language plpgsql
@@ -65,6 +68,9 @@ security definer
 set search_path = public
 as $$
 begin
+  if auth.uid() is null then
+    return new;
+  end if;
   if public.is_admin(auth.uid()) then
     return new;
   end if;

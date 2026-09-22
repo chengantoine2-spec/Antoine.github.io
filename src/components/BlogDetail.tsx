@@ -1,7 +1,7 @@
 /**
  * 博客详情：正文渲染 + TOC + 阅读进度 + 注册用户评论 + 管理员操作。
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { CommentSection } from './CommentSection'
@@ -12,7 +12,7 @@ import { CATEGORY_DAILY, SITE, deleteIssue, type Blog } from '../lib/github'
 import { extractHeadings, formatDateTime, formatFull, formatRelative, readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
 import { useAuth, usePat } from '../hooks/useAuth'
-import { invalidateBlogs, useNow } from '../hooks/useBlogs'
+import { invalidateBlogs, useBlogs, useNow } from '../hooks/useBlogs'
 
 export interface BlogDetailProps {
   blog: Blog
@@ -29,6 +29,21 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
 
   const minutes = useMemo(() => readingMinutes(blog.body), [blog.body])
   const now = useNow()
+
+  // 上一篇 / 下一篇：用列表缓存里的顺序（发布时间倒序）
+  const { blogs } = useBlogs()
+  const index = blogs.findIndex((b) => b.id === blog.id)
+  const prevPost = index > 0 ? blogs[index - 1] : null
+  const nextPost = index >= 0 && index < blogs.length - 1 ? blogs[index + 1] : null
+
+  // 回到顶部按钮：滚过一屏才出现
+  const [showTop, setShowTop] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > window.innerHeight * 0.8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const openTag = (tag: string) => navigate(`/?tag=${encodeURIComponent(tag)}`)
 
@@ -173,8 +188,50 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
           {/* 点赞（本期不做）：schema.sql 末尾已留 likes 表结构，启用时在此加回 */}
 
           <CommentSection blogId={blog.id} />
+
+          {/* 上一篇 / 下一篇：按发布时间倒序，列表页同源数据（走缓存，不额外请求） */}
+          {(prevPost || nextPost) && (
+            <nav className="no-print grid gap-3 border-t border-caramel-200 pt-6 sm:grid-cols-2 dark:border-caramel-700">
+              {prevPost ? (
+                <Link
+                  to={`/blog/${prevPost.id}`}
+                  className="rounded-xl border border-caramel-200 bg-caramel-100 p-3 transition hover:border-caramel-400 dark:border-caramel-700 dark:bg-caramel-800"
+                >
+                  <span className="text-xs text-caramel-600 dark:text-caramel-300">← 上一篇（更新）</span>
+                  <span className="mt-1 block font-medium text-caramel-800 dark:text-caramel-100">
+                    {prevPost.title}
+                  </span>
+                </Link>
+              ) : (
+                <span />
+              )}
+              {nextPost && (
+                <Link
+                  to={`/blog/${nextPost.id}`}
+                  className="rounded-xl border border-caramel-200 bg-caramel-100 p-3 text-right transition hover:border-caramel-400 sm:text-right dark:border-caramel-700 dark:bg-caramel-800"
+                >
+                  <span className="text-xs text-caramel-600 dark:text-caramel-300">下一篇（更早）→</span>
+                  <span className="mt-1 block font-medium text-caramel-800 dark:text-caramel-100">
+                    {nextPost.title}
+                  </span>
+                </Link>
+              )}
+            </nav>
+          )}
         </footer>
       </article>
+
+      {/* 回到顶部 */}
+      {showTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="回到顶部"
+          className="no-print fixed bottom-6 right-5 z-40 grid h-10 w-10 place-items-center rounded-full border border-caramel-300 bg-caramel-100 text-caramel-700 shadow-md transition hover:bg-caramel-200 dark:border-caramel-600 dark:bg-caramel-800 dark:text-caramel-100 dark:hover:bg-caramel-700"
+        >
+          ↑
+        </button>
+      )}
     </>
   )
 }

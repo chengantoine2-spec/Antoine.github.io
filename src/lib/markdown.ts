@@ -14,6 +14,7 @@ import type { Components, Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { CodeBlock } from '../components/CodeBlock'
+import { ZoomImage } from '../components/ZoomImage'
 import { headingId } from './text'
 
 export const remarkPlugins: Options['remarkPlugins'] = [remarkGfm]
@@ -39,7 +40,21 @@ function heading(level: number) {
   return function Heading({ children, node }: { children?: ReactNode; node?: NodeWithPosition }) {
     const line = node?.position?.start?.line
     const id = headingId(textOf(children), line)
-    return createElement(tag, { id, className: 'group relative' }, children)
+    // 标题末尾挂一个可复制的锚点链接（hover 才显形），方便分享到具体小节
+    return createElement(tag, { id, className: 'heading' }, [
+      createElement('span', { key: 'text' }, children),
+      createElement(
+        'a',
+        {
+          key: 'anchor',
+          href: `#${id}`,
+          className: 'heading-anchor',
+          'aria-label': '此小节的链接',
+          title: '复制到地址栏即可分享这一节',
+        },
+        '#',
+      ),
+    ])
   }
 }
 
@@ -71,7 +86,7 @@ export const markdownComponents: Components = {
     )
   },
   img({ src, alt }) {
-    return createElement('img', { src, alt: alt || '', loading: 'lazy', decoding: 'async' })
+    return createElement(ZoomImage, { src, alt: alt || '' })
   },
   table({ children }) {
     return createElement('div', { className: 'overflow-x-auto' }, createElement('table', null, children))
