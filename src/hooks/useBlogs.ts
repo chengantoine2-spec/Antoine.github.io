@@ -11,6 +11,18 @@ import {
   isConfigured,
   type Blog,
 } from '../lib/github'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
+
+/** 用自建评论数覆盖 Issue 的评论数（Issue.comments 是 GitHub 评论，不是本站评论） */
+async function withCommentCounts(blogs: Blog[]): Promise<Blog[]> {
+  if (!isSupabaseConfigured() || blogs.length === 0) return blogs
+  const { data, error } = await supabase().rpc('comment_counts')
+  if (error || !Array.isArray(data)) return blogs
+  const map = new Map<number, number>(
+    (data as Array<{ blog_id: number; total: number | string }>).map((r) => [Number(r.blog_id), Number(r.total)]),
+  )
+  return blogs.map((b) => ({ ...b, comments: map.get(b.id) ?? 0 }))
+}
 
 export interface BlogState {
   blogs: Blog[]
@@ -40,10 +52,11 @@ function load(force = false): Promise<Blog[]> {
   if (!force && fresh) return Promise.resolve(cache as Blog[])
   if (inflight) return inflight
   inflight = fetchIssues()
-    .then((blogs) => {
-      cache = blogs
+    .then(async (blogs) => {
+      const enriched = await withCommentCounts(blogs)
+      cache = enriched
       cachedAt = Date.now()
-      return blogs
+      return enriched
     })
     .finally(() => {
       inflight = null

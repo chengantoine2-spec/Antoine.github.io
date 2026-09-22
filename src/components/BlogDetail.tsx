@@ -1,17 +1,17 @@
 /**
- * 博客详情：正文渲染 + TOC + 阅读进度 + 点赞/评论（Giscus）+ 站长操作。
+ * 博客详情：正文渲染 + TOC + 阅读进度 + 注册用户评论 + 管理员操作。
  */
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import { CommentSection } from './CommentSection'
 import { Cover } from './Cover'
-import { Giscus } from './Giscus'
 import { ReadingProgress } from './ReadingProgress'
 import { Toc } from './Toc'
 import { CATEGORY_DAILY, SITE, deleteIssue, type Blog } from '../lib/github'
 import { extractHeadings, formatDateTime, formatFull, formatRelative, readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth, usePat } from '../hooks/useAuth'
 import { invalidateBlogs, useNow } from '../hooks/useBlogs'
 
 export interface BlogDetailProps {
@@ -21,7 +21,8 @@ export interface BlogDetailProps {
 
 export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
   const headings = useMemo(() => extractHeadings(blog.body), [blog.body])
-  const { isOwner, pat } = useAuth()
+  const { isAdmin } = useAuth()
+  const { hasPat } = usePat()
   const navigate = useNavigate()
   const [closing, setClosing] = useState(false)
   const [closeError, setCloseError] = useState('')
@@ -103,7 +104,7 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
             </ul>
           )}
 
-          {isOwner && pat && (
+          {isAdmin && hasPat && (
             <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-caramel-200 bg-caramel-100 px-3 py-2 text-xs dark:border-caramel-700 dark:bg-caramel-800">
               <span className="font-medium text-caramel-700 dark:text-caramel-200">站长操作</span>
               <Link
@@ -169,17 +170,9 @@ export function BlogDetail({ blog, onClosed }: BlogDetailProps) {
             </Link>
           </div>
 
-          <section id="likes" className="rounded-2xl border border-caramel-200 bg-caramel-100 p-4 dark:border-caramel-700 dark:bg-caramel-800">
-            <h2 className="text-lg font-bold text-caramel-700 dark:text-caramel-100">点赞</h2>
-            <p className="mt-1 text-sm text-caramel-600 dark:text-caramel-300">
-              点赞即 Giscus 的 👍 reaction，由 GitHub Discussions 托管，前端不存数据。
-            </p>
-          </section>
+          {/* 点赞（本期不做）：schema.sql 末尾已留 likes 表结构，启用时在此加回 */}
 
-          <section id="comments" className="space-y-3">
-            <h2 className="text-lg font-bold text-caramel-700 dark:text-caramel-100">评论</h2>
-            <Giscus blogId={blog.id} title={blog.title} />
-          </section>
+          <CommentSection blogId={blog.id} />
         </footer>
       </article>
     </>

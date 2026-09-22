@@ -21,7 +21,7 @@ import {
 } from '../lib/github'
 import { readingMinutes } from '../lib/text'
 import { markdownComponents, rehypePlugins, remarkPlugins } from '../lib/markdown'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth, usePat } from '../hooks/useAuth'
 import { invalidateBlogs, useBlog } from '../hooks/useBlogs'
 
 const SNIPPETS: Array<{ label: string; text: string }> = [
@@ -38,7 +38,11 @@ export default function Write() {
   const editId = Number(params.get('edit') || '')
   const isEditing = Number.isFinite(editId) && editId > 0
 
-  const { isOwner, pat, user, login, error: authError } = useAuth()
+  const { isLoggedIn, isAdmin, username, configured } = useAuth()
+  const pat = usePat()
+  /** 发布 = 管理员（或尚未接入账号体系时的过渡态）+ 已保存 GitHub Token */
+  const canWrite = pat.hasPat && (!configured || isAdmin)
+
   const { blog: editing } = useBlog(isEditing ? editId : undefined)
   const navigate = useNavigate()
 
@@ -57,12 +61,14 @@ export default function Write() {
   }>({ state: 'idle', message: '' })
   const [loadedEdit, setLoadedEdit] = useState(false)
   const [patInput, setPatInput] = useState('')
+  const [patMessage, setPatMessage] = useState('')
+  const [patOk, setPatOk] = useState(false)
 
   const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   /** 进页面先自检：PAT 是否有效、有没有写权限、Issues 是否开着 */
   useEffect(() => {
-    if (!isOwner || !pat) return
+    if (!canWrite) return
     let alive = true
     setPreflight({ state: 'checking', message: '正在检查发布权限…' })
     diagnoseAccess()
@@ -77,7 +83,7 @@ export default function Write() {
     return () => {
       alive = false
     }
-  }, [isOwner, pat])
+  }, [canWrite])
 
   // 改稿模式：把 Issue 内容灌进表单（只灌一次，避免覆盖用户输入）
   useEffect(() => {
@@ -140,41 +146,95 @@ export default function Write() {
     }
   }
 
-  if (!isOwner || !pat) {
+  if (!canWrite) {
     return (
       <div className="mx-auto w-full max-w-xl space-y-5 px-4 py-16 sm:px-6">
         <h1 className="text-2xl font-bold text-caramel-800 dark:text-caramel-100">写博客</h1>
         <p className="text-caramel-700 dark:text-caramel-200">
-          该页面仅站长可见。当前{user ? '登录账号不是站长' : '未登录'}，请先在第 3 步输入 PAT 校验身份。
+          发布需要两个条件：<strong>管理员账号</strong> + 已保存的 <strong>GitHub Token</strong>。
         </p>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            const ok = await login(patInput)
-            if (ok) setPatInput('')
-          }}
-          className="space-y-3 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 dark:border-caramel-700 dark:bg-caramel-800"
-        >
-          <label className="block text-sm text-caramel-700 dark:text-caramel-200" htmlFor="write-pat">
-            Personal Access Token
-          </label>
-          <input
-            id="write-pat"
-            type="password"
-            value={patInput}
-            onChange={(e) => setPatInput(e.target.value)}
-            placeholder="ghp_..."
-            autoComplete="off"
-            className="w-full rounded-lg border border-caramel-300 bg-caramel-50 px-3 py-2 text-sm dark:border-caramel-600 dark:bg-caramel-900 dark:text-caramel-100"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-caramel-500 px-4 py-2 text-sm font-medium text-caramel-50 transition hover:bg-caramel-600"
+        <ul className="space-y-2 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 text-sm dark:border-caramel-700 dark:bg-caramel-800">
+          <li>
+            1. 账号：
+            {isLoggedIn ? (
+              <>
+                <strong>{username}</strong>
+                {isAdmin ? (
+                  <span className="ml-2 text-caramel-600 dark:text-caramel-300">管理员 ✓</span>
+                ) : (
+                  <span className="ml-2 text-caramel-700 dark:text-caramel-200">
+                    普通用户，无权写作（需要管理员在后台授权）
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                未登录 →{' '}
+                <Link to="/login?next=%2Fwrite" className="font-medium underline">
+                  去登录
+                </Link>{' '}
+                或{' '}
+                <Link to="/register" className="font-medium underline">
+                  注册
+                </Link>
+              </>
+            )}
+          </li>
+          <li>
+            2. 发布凭据：
+            {pat.hasPat ? (
+              <span className="text-caramel-600 dark:text-caramel-300">已保存 ✓</span>
+            ) : (
+              <>
+                未保存 → 到{' '}
+                <Link to="/me" className="font-medium underline">
+                  个人中心
+                </Link>{' '}
+                粘贴一个有 <code>repo</code> 权限的 GitHub Token
+              </>
+            )}
+          </li>
+        </ul>
+
+        {isAdmin && !pat.hasPat && (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              const result = await pat.save(patInput)
+              setPatMessage(result.message)
+              setPatOk(result.ok)
+              if (result.ok) setPatInput('')
+            }}
+            className="space-y-3 rounded-2xl border border-caramel-200 bg-caramel-100 p-5 dark:border-caramel-700 dark:bg-caramel-800"
           >
-            登录
-          </button>
-          {authError && <p className="text-sm text-caramel-700 dark:text-caramel-200">{authError}</p>}
-        </form>
+            <label className="block text-sm text-caramel-700 dark:text-caramel-200" htmlFor="write-pat">
+              GitHub Token（勾了 <code>repo</code> 的经典 PAT）
+            </label>
+            <input
+              id="write-pat"
+              type="password"
+              value={patInput}
+              onChange={(e) => setPatInput(e.target.value)}
+              placeholder="ghp_..."
+              autoComplete="off"
+              className="w-full rounded-lg border border-caramel-300 bg-caramel-50 px-3 py-2 text-sm dark:border-caramel-600 dark:bg-caramel-900 dark:text-caramel-100"
+            />
+            <button
+              type="submit"
+              disabled={pat.checking}
+              className="rounded-lg bg-caramel-500 px-4 py-2 text-sm font-medium text-caramel-50 transition hover:bg-caramel-600 disabled:opacity-60"
+            >
+              {pat.checking ? '校验中…' : '保存并继续'}
+            </button>
+            {patMessage && (
+              <p className="text-sm text-caramel-700 dark:text-caramel-200">
+                {patOk ? '✓ ' : '⚠ '}
+                {patMessage}
+              </p>
+            )}
+          </form>
+        )}
+
         <Link to="/" className="inline-block text-sm text-caramel-600 hover:text-caramel-700 dark:text-caramel-300">
           ← 返回首页
         </Link>

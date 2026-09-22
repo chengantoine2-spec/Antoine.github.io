@@ -44,7 +44,7 @@ export const projects: Project[] = [
     name: '焦糖布丁博客站',
     role: '独立开发（设计 + 前端 + 部署）',
     period: '2025.01 - 至今',
-    stack: ['React', 'TypeScript', 'Vite', 'Tailwind CSS', 'GitHub Issues', 'Giscus', 'GitHub Pages'],
+    stack: ['React', 'TypeScript', 'Vite', 'Tailwind CSS', 'GitHub Issues', 'Supabase', 'GitHub Pages'],
     summary:
       '以 GitHub Issues 作为内容源、Discussions 作为评论区的静态博客站。零后端、零数据库，用 Issue 当 CMS，用仓库分支当图床。',
     cover: '',
@@ -59,7 +59,7 @@ export const projects: Project[] = [
         period: '2025.01',
         title: '确定零后端架构',
         detail:
-          '用 GitHub Issues 承载正文与标签，图片存 img 分支走 jsDelivr 加速，评论点赞交给 Giscus，彻底去掉服务端。',
+          '用 GitHub Issues 承载正文与标签，图片存 img 分支走 jsDelivr 加速，账号/评论/资产库交给 Supabase（权限由 RLS 强制），前端保持纯静态。',
       },
       {
         period: '2025.01',

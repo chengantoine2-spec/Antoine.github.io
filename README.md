@@ -1,13 +1,16 @@
 # 焦糖布丁博客站
 
-以博客为核心的公开个人站：访客可读、可评论、可点赞，仅站长可写作与管理。
-**零后端**：正文存在 GitHub Issues，图片存在仓库 `img` 分支（jsDelivr 加速），评论与点赞由 Giscus 托管。
+以博客为核心的公开个人站：访客可读，**任何人都能用「用户名 + 密码」注册**，
+注册后可评论文章、维护自己的物品台账（资产库）；管理员拥有全部权限。
 
 - 线上地址：<https://chengantoine2-spec.github.io/Antoine.github.io/>
 - 源码仓库：<https://github.com/chengantoine2-spec/Antoine.github.io>
 
+架构：**纯静态前端**（GitHub Pages）+ **GitHub Issues 当 CMS**（文章正文）+ **Supabase 当后端**
+（账号、角色、评论、资产库，权限由 Postgres RLS 强制）。图片存仓库 `img` 分支，走 jsDelivr 加速。
+
 技术栈：Vite + React 18 + TypeScript + Tailwind CSS v3 + react-router-dom v6 +
-react-markdown + remark-gfm + rehype-highlight。
+react-markdown + remark-gfm + rehype-highlight + @supabase/supabase-js。
 
 ---
 
@@ -20,32 +23,61 @@ npm run build      # 类型检查 + 产出 dist/
 npm run preview
 ```
 
-未配置 GitHub 仓库时，首页会回落到内置示例数据（页面上有明确提示），方便先验收样式与交互。
-
 ---
 
-## 上线前必须补的配置
+## 配置（两部分）
 
-站点/仓库的默认值已经写在 `src/lib/github.ts` 里（指向 `chengantoine2-spec/Antoine.github.io`），
-**开箱即可显示该仓库的 Issues**。只有换仓库或想覆盖时才需要 `.env`（本地）或
-仓库 **Settings → Secrets and variables → Actions → Variables**（部署时同名变量自动注入）。
+### 1. 文章与仓库（已有默认值，通常不用改）
+
+默认值写在 `src/lib/github.ts`，已指向 `chengantoine2-spec/Antoine.github.io`。
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `VITE_GISCUS_REPO_ID` | ✅ | 评论区必需，在 [giscus.app](https://giscus.app) 生成（仓库需先开启 Discussions） |
-| `VITE_GISCUS_CATEGORY_ID` | ✅ | 同上 |
-| `VITE_GISCUS_REPO` | ⬜ | 默认已是当前仓库 |
-| `VITE_GISCUS_CATEGORY` | ⬜ | 默认 `Announcements` |
-| `VITE_GISCUS_MAPPING` | ⬜ | 默认 `pathname`；也可用 `number`（按 Issue 号）或 `specific`（按标题） |
 | `VITE_GH_USER` / `VITE_GH_REPO` / `VITE_GH_OWNER` | ⬜ | 默认已是当前仓库 |
-| `VITE_IMG_BRANCH` | ⬜ | 默认 `img`（**需先在仓库里建好该分支**，否则上传报 422） |
+| `VITE_IMG_BRANCH` | ⬜ | 默认 `img`（仓库里已建好；不存在则上传报 422） |
 | `VITE_SITE_TITLE` | ⬜ | 默认「焦糖布丁」 |
 
-站长登录：站内 `/me` 或 `/write` 填写 Personal Access Token（需 `repo` 权限）。
-**PAT 只存在浏览器 localStorage，不入库、不提交仓库。**
+### 2. 账号体系 Supabase（**必填**，否则只能读文章）
 
-> 还没写第一篇文章时首页是空列表（会有提示引导去 `/write`）；
-> 只有在仓库未配置或 API 请求失败时才会回落到内置示例数据。
+1. 到 <https://supabase.com> 新建免费项目（Region 选 Singapore / Tokyo 延迟低）。
+2. **SQL Editor** 里整段执行 [`supabase/schema.sql`](supabase/schema.sql)
+   （建 `profiles` / `comments` / `assets` 表 + RLS 策略 + 防提权触发器 + 统计函数，可重复执行）。
+3. **Authentication → Sign In / Providers → Email：关闭 “Confirm email”**。
+   本站用户名会映射成 `<用户名>@<VITE_AUTH_EMAIL_DOMAIN>` 合成邮箱，收不到验证信，必须关掉。
+4. **Project Settings → API** 取 `Project URL` 与 `anon public key`，填到：
+   - 本地：复制 `.env.example` 为 `.env`；
+   - 线上：仓库 **Settings → Secrets and variables → Actions → Variables** 加同名变量。
+5. **指定第一个管理员**：用你的用户名在站点注册，然后回到 SQL Editor 执行
+   ```sql
+   update public.profiles set role = 'admin' where username = '你的用户名';
+   ```
+   其他注册用户默认都是普通用户。
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | ✅ | `https://xxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | ✅ | anon public key。**它是设计上公开的**，权限靠 RLS；`service_role` key 绝不能进前端或仓库 |
+| `VITE_AUTH_EMAIL_DOMAIN` | ⬜ | 合成邮箱域名，默认 `caramel.local`，不需要真实可收信 |
+
+> 发布文章/上传图片仍需要一个有 `repo` 权限的 **GitHub Token（PAT）**，在 `/me` 保存，
+> 只存浏览器 localStorage，不入库、不进仓库。
+
+---
+
+## 角色与权限
+
+| 能力 | 访客 | 普通用户 | 管理员 |
+| --- | --- | --- | --- |
+| 读文章 / 看评论 | ✅ | ✅ | ✅ |
+| 注册 / 登录 | ✅ | — | — |
+| 发表、编辑、删除自己的评论 | ❌ | ✅ | ✅ |
+| 物品台账（增删改查自己的资产） | ❌ | ✅ | ✅ |
+| 查看/代管所有人的资产与评论 | ❌ | ❌ | ✅ |
+| 管理用户（改角色、封禁） | ❌ | ❌ | ✅ |
+| 写作 / 传图（需 PAT） | ❌ | ❌ | ✅ |
+
+权限的强制点在数据库：`profiles` 有防提权触发器（非管理员改不动 `role`/`banned`），
+`comments`/`assets` 的 RLS 策略按 `auth.uid()` 与 `is_admin()` 判定 —— 改前端代码拿不到别人的数据。
 
 ---
 
@@ -73,105 +105,89 @@ src/main.tsx  App.tsx  router.tsx
 src/styles/globals.css          全局样式 + 正文排版 + hljs 配色
 src/theme/colors.ts             caramel 色板（JS 侧）
 src/data/projects.ts            项目经历静态数据
-src/lib/github.ts               GitHub API（Issues / 上传图片 / PAT）
-src/lib/giscus.ts               Giscus 配置与主题同步
+src/lib/github.ts               GitHub API（Issues / 上传图片 / PAT 读写）
+src/lib/supabase.ts             Supabase 客户端、用户名↔合成邮箱、错误翻译
 src/lib/markdown.ts             react-markdown 配置（重依赖，按需加载）
 src/lib/text.ts                 纯文本工具（日期 / 时长 / TOC 抽取）
-src/hooks/useBlogs.ts  useAuth.ts
-src/components/                 BlogCard BlogList BlogDetail Toc ReadingProgress
-                                CodeBlock ThemeToggle Cover TagFilter Giscus ImageUploader
-src/pages/                      Home Blog Projects ProjectDetail Me Write
+src/hooks/useBlogs.ts           Issue 列表 + 评论数合并 + 缓存
+src/hooks/useAuth.ts            useAuth()（Supabase 会话）+ usePat()（发布凭据）
+src/components/                 BlogCard BlogList BlogDetail Toc ReadingProgress CodeBlock
+                                ThemeToggle Cover TagFilter CommentSection ImageUploader
+src/pages/                      Home Blog Projects ProjectDetail Login Register Assets Admin Me Write
+supabase/schema.sql             建表 + RLS + 触发器 + 统计函数（在 Supabase SQL Editor 执行）
 ```
-
-唯一新增文件是 `src/lib/text.ts`，原因见文末「与 AGENTS.md 的偏差」。
 
 ---
 
 ## 部署（GitHub Pages，同仓库）
 
-**最简 5 步（不配置任何变量也能先看到效果，首页会显示内置示例数据）**
-
-```bash
-git init && git add -A && git commit -m "feat: 焦糖布丁博客站"
-git branch -M main
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
-git push -u origin main
-```
-
-1. 仓库 Settings → Pages → **Source 选 “GitHub Actions”**（不选的话 workflow 会报 `Pages not enabled`）。
+1. 仓库 Settings → Pages → **Source 选 “GitHub Actions”**。
 2. Push 到 `main`，`.github/workflows/deploy.yml` 自动：推导 base → `npm ci` → `npm run build` → 发布。
-3. 访问 `https://<用户名>.github.io/<仓库名>/` 即可预览。
-4. 想显示真实内容：Settings → Secrets and variables → Actions → **Variables** 里加 `VITE_GH_USER` /
-   `VITE_GH_REPO` / `VITE_GH_OWNER`，再点 Re-run 或重新 push 一次。
-5. 想开评论：仓库开启 Discussions → 到 giscus.app 装 app 取 `repo-id` / `category-id` → 加两个 Variables 再部署。
+3. 访问 `https://<用户名>.github.io/<仓库名>/`。
+4. 记得在 Variables 里加 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`，否则线上没有账号功能。
 
 **注意事项**
 
-- **私有仓库**：GitHub Free 只能从**公开仓库**发布 Pages；私有仓库要发布 Pages 需要 Pro/Team/Enterprise（[官方说明](https://docs.github.com/en/pages/getting-started-with-github-pages)）。只想自己看的话，本地 `npm run dev` 即可。
-- **仓库命名**：叫 `<user>.github.io` 时是「用户站」，会发布到根路径 `https://<user>.github.io/`。
-  workflow 已自动把 base 设为 `/`；这时还需把 `public/404.html` 里的
-  `pathSegmentsToKeep` 从 `1` 改成 `0`（项目站保持 `1`）。
-- **PAT 与预览无关**：预览/访客阅读评论都不需要 PAT；PAT 只是 `/write` 写作用的本地凭据，绝不进仓库。
-- **图片上传**：先在仓库里建好 `img` 分支，否则上传会 422。
-- **深链回退**：`public/404.html` 负责把 `/<repo>/blog/1` 重写成 `/<repo>/?/blog/1`，
-  `index.html` 头部的内联脚本再还原成干净 URL 并交给 BrowserRouter。
-  因此**不要**把 `index.html` 复制成 `404.html`，那会覆盖重定向脚本。
-
-**替代方案（不想用 Actions）**：本地 `VITE_BASE=/<repo>/ npm run build`，把 `dist/` 手动推到
-`gh-pages` 分支，Settings → Pages → Source 选该分支的 `/(root)`。
+- **私有仓库**：GitHub Free 只能从公开仓库发布 Pages（[官方说明](https://docs.github.com/en/pages/getting-started-with-github-pages)）。
+- **仓库命名**：叫 `<user>.github.io` 且用户名一致时才是「用户站」（根路径）。当前仓库名 `Antoine.github.io`
+  与用户名 `chengantoine2-spec` 不一致，属于项目站，base 由 workflow 自动推导为 `/Antoine.github.io/`。
+- **深链回退**：`public/404.html` 把 `/<repo>/blog/1` 重写成 `/<repo>/?/blog/1`，`index.html` 头部脚本再还原。
+  因此**不要**把 `index.html` 复制成 `404.html`。
 
 ---
 
 ## 验收标准自查
 
-| # | 标准 | 状态 | 证据 / 说明 |
-| --- | --- | --- | --- |
-| 1 | 首页卡片列表 + 标签筛选 | ✅ | `filterBlogs` + `TagFilter`，筛选条件写入 `?category=&tag=`，可分享/回退 |
-| 2 | 详情页正文 + TOC + 进度条 + 点赞评论 | ✅ | SSR 冒烟测试 22/22 通过；TOC 锚点与正文标题 id 一致性已断言 |
-| 3 | 代码块高亮 + 复制按钮 | ✅ | rehype-highlight + `CodeBlock`（含 `execCommand` 回落） |
-| 4 | 亮暗主题切换、主色恒为焦糖布丁 | ✅ | `darkMode: 'class'`；全站仅 caramel-50…900，未硬编码其它色值 |
-| 5 | `/projects` 与详情页结构化展示 | ✅ | 封面 / 角色 / 周期 / 技术栈卡片 / 亮点时间线 / 成果指标 |
-| 6 | `/write` 仅站长、可传图并发布 Issue | ✅（待真实仓库联调） | 未登录或非站长账号显示拦截页；上传走 Contents API |
-| 7 | 访客 GitHub 登录后可评论点赞 | ✅（待 Giscus 配置） | Giscus reactions 承载点赞；未配置时页面给出配置指引 |
-| 8 | 部署在 GitHub Pages 同仓库 | ✅（本机无 git，未实跑） | Actions workflow + base 注入 + 404 回退已就位 |
-| 9 | 反馈不足与待补信息 | ✅ | 见下方两节 |
+| # | 标准 | 状态 |
+| --- | --- | --- |
+| 1 | 首页卡片列表 + 标签筛选 | ✅ 筛选条件写进 `?category=&tag=`，可分享/回退 |
+| 2 | 详情页正文 + TOC + 进度条 + 评论 | ✅ 评论为自建；**点赞本期不做**（表结构已留） |
+| 3 | 代码块高亮 + 复制按钮 | ✅ rehype-highlight + CodeBlock |
+| 4 | 亮暗主题、主色恒为焦糖布丁 | ✅ 仅 caramel-50…900 |
+| 5 | `/projects` 结构化项目经历 | ✅ 技术栈卡片 / 时间线 / 成果指标 |
+| 6 | `/write` 仅管理员 + PAT，可传图发布 Issue | ✅ 未满足条件时给出明确的缺项清单 |
+| 7 | 任何人可注册（用户名+密码）并评论 | ✅ 待 Supabase 配置完成后线上生效 |
+| 8 | 管理员可管理用户（改角色/封禁/统计） | ✅ `/admin`，数据来自 RLS 保护的 RPC |
+| 9 | 普通用户物品台账（属主隔离） | ✅ `/assets`，RLS 保证只能动自己的 |
+| 10 | 部署在 GitHub Pages 同仓库 | ✅ Actions 自动构建发布 |
+| 11 | 反馈不足与待补信息 | ✅ 见下方 |
 
-已验证：`tsc --noEmit` 0 错误；`vite build` 成功（入口包 **76.85 KB gzip**，Markdown 渲染器 102.84 KB gzip 按需加载）；
-SSR 冒烟测试覆盖 Markdown 表格/引用/代码高亮、TOC 锚点一致性、围栏代码块内的 `#` 不误判为标题、
-项目页、个人中心、写博客页拦截。
-
-未验证（需要真实环境）：真实 GitHub Issues 数据、PAT 写操作与图片上传、Giscus 评论区、线上 Pages 访问。
-
----
-
-## 与 AGENTS.md 的偏差（3 处，均已说明理由）
-
-1. **新增 `src/lib/text.ts`**：日期/阅读时长/TOC 抽取是纯函数，原先放在 `lib/markdown.ts` 里导致
-   首屏包把 react-markdown + highlight.js 一起拖进来（145 KB → 拆分后 77 KB gzip）。
-2. **未引入 highlight.js 主题 CSS**：`globals.css` 里手写了 `hljs-*` 配色，
-   目的是遵守「只用 caramel 色板、禁止硬编码其他颜色」——官方主题含大量非色板色值。
-3. **数据源配置走 `VITE_*` 环境变量**（`src/lib/github.ts` 里保留 TODO 默认值），
-   比把用户名/仓库名写死在代码里更适合公开仓库。
+已验证：`tsc --noEmit` 0 错误；`vite build` 成功；SSR 冒烟测试覆盖 Markdown 渲染、
+TOC 锚点一致性、项目页、个人中心、写博客页拦截、时间格式。
+**未验证**：Supabase 注册/登录/评论/资产/管理后台的真实链路（需要线上凭据后逐项实测）。
 
 ---
 
 ## 已知限制
 
-- 无草稿箱：草稿只能先发布再关闭，或自行用 `draft` label。
-- 列表排序仅按创建时间倒序；GitHub Issues API 不支持自定义排序。
-- 阅读时长按中文 350 字/分钟估算，非精确值。
-- 未闭合的代码围栏（写到一半）里的 `#` 会被当成标题。
-- `Issue.comments` 来自 Issue 自身评论数，与 Giscus 的 Discussion 评论数不是同一份数据。
-- 大图原样上传，未做压缩或尺寸限制（`uploadImage` 里已留 TODO）。
-- 未做 SEO / sitemap / RSS。
+- **点赞未实现**：`supabase/schema.sql` 末尾已留 `likes` 表与策略，启用时在 `CommentSection` 同级加组件即可。
+- **删除账号**需要 `service_role`，客户端做不了：请到 Supabase Dashboard → Authentication → Users 删，
+  profile / 评论 / 资产会因外键级联清理。
+- **Supabase 免费项目 7 天低活动会被自动暂停**（[官方文档](https://supabase.com/docs/guides/platform/free-project-pausing)），
+  期间评论/资产不可用（文章仍能读）；可手动 Resume，或加个每日定时任务保活。
+- 账号是本站自建，与 GitHub 账号无关；访客评论不需要 GitHub，但写作仍需要 PAT。
+- 无草稿箱；列表排序仅按创建时间倒序；阅读时长按中文 350 字/分钟估算。
+- 大图原样上传未压缩；未做 SEO / RSS / 站内搜索。
+
+---
+
+## 与 AGENTS.md 的偏差（已在 AGENTS.md「修订记录」登记）
+
+1. **引入 Supabase（后端即服务）**：原「暂不做：后端服务器、云数据库、账号系统」两条被本次需求废止，
+   改为「纯静态前端 + Supabase」。这是架构级变更，密码校验与角色强制都在服务端完成。
+2. **Giscus 下线**：`src/components/Giscus.tsx`、`src/lib/giscus.ts` 已删除，改为自建评论。
+   访客评论不再需要 GitHub 账号。
+3. **资产库上线**：原「资产 CRUD（P1 占位）」转为已实现（物品台账）。
+4. **新增文件**：`src/lib/supabase.ts`、`src/components/CommentSection.tsx`、
+   `src/pages/{Login,Register,Assets,Admin}.tsx`、`supabase/schema.sql`；
+   **新增依赖**：`@supabase/supabase-js`。
+5. **新增 `src/lib/text.ts`**：纯函数（日期/时长/TOC）与渲染器分离，首屏包从 145 KB 降到 ~78 KB gzip。
+6. **未引入 highlight.js 官方主题 CSS**：`globals.css` 手写 `hljs-*` 配色以守住 caramel 色板。
 
 ---
 
 ## 还需要你补充的信息
 
-1. `VITE_GH_USER` / `VITE_GH_REPO` / `VITE_GH_OWNER` 的真实值。
-2. Giscus 的 `repo-id` 与 `category-id`，以及 Discussions 打算用哪个分类（建议 `Announcements`）。
-3. `img` 分支是否已创建（未创建时上传图片会 422）。
-4. 是否需要把首图自动当封面（当前策略：frontmatter `cover:` 优先，其次正文第一张图）。
-5. 是否需要「站点外观」在线上可改（当前只有亮暗切换；改主色需改 `tailwind.config.js` 重新部署）。
-6. 音乐、个人资产等 P1 占位是否维持只留 `/me` 里的占位清单。
+1. Supabase 的 `Project URL` 与 `anon public key`（贴给我即可；`anon` 公开无妨，别无 `service_role`）。
+2. 打算用哪个用户名注册成第一个管理员。
+3. 「进一步优化内容」里你说的「其它」具体指什么（首页信息架构？归档/搜索？移动端导航？）。

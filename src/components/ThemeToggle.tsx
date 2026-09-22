@@ -1,9 +1,8 @@
 /**
- * 亮/暗主题切换：默认亮色，偏好存 localStorage，并同步通知 Giscus 换主题。
+ * 亮/暗主题切换：默认亮色，偏好存 localStorage。
  * html 上的 class 由 index.html 的内联脚本在首屏前设置，避免闪烁。
  */
 import { useCallback, useEffect, useState } from 'react'
-import { giscusThemeFor, setGiscusTheme } from '../lib/giscus'
 
 export const THEME_KEY = 'caramel.theme'
 export type Theme = 'light' | 'dark'
@@ -23,7 +22,6 @@ export function applyTheme(theme: Theme): void {
   root.classList.toggle('dark', theme === 'dark')
   root.classList.toggle('light', theme === 'light')
   root.style.colorScheme = theme
-  setGiscusTheme(giscusThemeFor(theme === 'dark'))
   window.dispatchEvent(new CustomEvent<Theme>('caramel:theme', { detail: theme }))
 }
 

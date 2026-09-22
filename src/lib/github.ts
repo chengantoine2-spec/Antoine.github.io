@@ -95,6 +95,23 @@ function getToken(): string {
 /** true 表示当前进程内已有 PAT（仅用于请求头决策，不缓存过期判断） */
 export const hasToken = (): boolean => getToken().length > 0
 
+/** 保存站长发布凭据（只存本机 localStorage，不入库、不进仓库） */
+export function setToken(token: string): void {
+  try {
+    localStorage.setItem(PAT_STORAGE_KEY, token.trim())
+  } catch {
+    /* 隐私模式可能写入失败 */
+  }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(PAT_STORAGE_KEY)
+  } catch {
+    /* 忽略 */
+  }
+}
+
 async function gh<T>(path: string, init: RequestInit = {}, withToken = false): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/vnd.github+json')
@@ -554,7 +571,7 @@ export const DEMO_BLOGS: Blog[] = [
       '',
       '- 正文 → Issue body',
       '- 分类与标签 → labels',
-      '- 评论点赞 → Discussions / Giscus',
+      '- 评论 → Supabase（注册用户评论，见 supabase/schema.sql）',
       '',
       '### 代价',
       '',

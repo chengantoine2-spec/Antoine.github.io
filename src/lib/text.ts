@@ -64,6 +64,11 @@ export function extractHeadings(markdown: string): TocItem[] {
   return items
 }
 
+/** 展示格式化：2025-01-05（用于 date 类型字段，如购入时间） */
+export function formatDate(iso: string): string {
+  return iso ? iso.slice(0, 10) : ''
+}
+
 /** 展示格式化：2025-01-05 15:20（本地时区） */
 export function formatDateTime(iso: string): string {
   if (!iso) return ''

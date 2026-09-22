@@ -45,10 +45,10 @@ jobs:
           VITE_GH_USER: ${{ vars.VITE_GH_USER }}
           VITE_GH_REPO: ${{ vars.VITE_GH_REPO }}
           VITE_GH_OWNER: ${{ vars.VITE_GH_OWNER }}
-          VITE_GISCUS_REPO: ${{ vars.VITE_GISCUS_REPO }}
-          VITE_GISCUS_REPO_ID: ${{ vars.VITE_GISCUS_REPO_ID }}
-          VITE_GISCUS_CATEGORY: ${{ vars.VITE_GISCUS_CATEGORY }}
-          VITE_GISCUS_CATEGORY_ID: ${{ vars.VITE_GISCUS_CATEGORY_ID }}
+          # 账号体系（anon key 是公开值，放 Variables 即可；service_role key 绝不能进前端）
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_AUTH_EMAIL_DOMAIN: ${{ vars.VITE_AUTH_EMAIL_DOMAIN }}
         run: npm run build
 
       - uses: actions/configure-pages@v5

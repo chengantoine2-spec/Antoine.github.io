@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SITE, isConfigured, jsdelivrUrl, uploadImage } from '../lib/github'
-import { useAuth } from '../hooks/useAuth'
+import { usePat } from '../hooks/useAuth'
 
 export interface ImageUploaderProps {
   /** 上传成功后把 Markdown 片段插到正文光标处 */
@@ -19,7 +19,7 @@ interface Uploaded {
 }
 
 export function ImageUploader({ onInsert, disabled = false }: ImageUploaderProps) {
-  const { pat } = useAuth()
+  const { hasPat } = usePat()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -37,7 +37,7 @@ export function ImageUploader({ onInsert, disabled = false }: ImageUploaderProps
         setError('尚未配置 GitHub 仓库，无法上传')
         return
       }
-      if (!pat) {
+      if (!hasPat) {
         setError('请先登录站长 PAT，再上传图片')
         return
       }
@@ -55,7 +55,7 @@ export function ImageUploader({ onInsert, disabled = false }: ImageUploaderProps
       }
       setBusy(false)
     },
-    [onInsert, pat],
+    [onInsert, hasPat],
   )
 
   // 支持直接粘贴剪贴板图片
@@ -120,7 +120,7 @@ export function ImageUploader({ onInsert, disabled = false }: ImageUploaderProps
         />
       </div>
 
-      {!pat && !disabled && (
+      {!hasPat && !disabled && (
         <p className="text-xs text-caramel-600 dark:text-caramel-300">
           未登录：上传走站长 PAT，登录后再来插图。
         </p>

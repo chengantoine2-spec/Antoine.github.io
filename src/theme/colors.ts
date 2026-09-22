@@ -1,6 +1,6 @@
 /**
  * 焦糖布丁色板（唯一颜色来源）
- * tailwind.config.js 里同步扩展了同名色阶；此处导出供 JS 场景（如 Giscus 主题、
+ * tailwind.config.js 里同步扩展了同名色阶；此处导出供 JS 场景（如图表、
  * 图表、内联样式）复用，避免出现第二套硬编码颜色。
  */
 export const caramel = {

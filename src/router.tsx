@@ -1,6 +1,6 @@
 /**
- * 路由表：/ 首页、/blog/:id 详情、/projects 列表、/projects/:id 详情、
- * /me 个人中心（P1 占位 + PAT 登录）、/write 写博客（仅站长）。
+ * 路由表：文章（GitHub Issues 驱动）、项目经历、账号（注册/登录）、
+ * 资产库（物品台账）、管理后台、写博客（管理员 + PAT）。
  */
 import { lazy, Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
@@ -13,6 +13,10 @@ const Projects = lazy(() => import('./pages/Projects'))
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
 const Me = lazy(() => import('./pages/Me'))
 const Write = lazy(() => import('./pages/Write'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const Assets = lazy(() => import('./pages/Assets'))
+const Admin = lazy(() => import('./pages/Admin'))
 
 function PageFallback() {
   return (
@@ -26,7 +30,7 @@ function PageFallback() {
 
 const withSuspense = (node: ReactNode) => <Suspense fallback={<PageFallback />}>{node}</Suspense>
 
-/** GitHub Pages 项目站的 base（如 /caramel-blog/），由 vite 注入 */
+/** GitHub Pages 项目站的 base（如 /Antoine.github.io/），由 vite 注入 */
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 
 export const router = createBrowserRouter(
@@ -40,6 +44,10 @@ export const router = createBrowserRouter(
         { path: 'projects', element: withSuspense(<Projects />) },
         { path: 'projects/:id', element: withSuspense(<ProjectDetail />) },
         { path: 'me', element: withSuspense(<Me />) },
+        { path: 'login', element: withSuspense(<Login />) },
+        { path: 'register', element: withSuspense(<Register />) },
+        { path: 'assets', element: withSuspense(<Assets />) },
+        { path: 'admin', element: withSuspense(<Admin />) },
         { path: 'write', element: withSuspense(<Write />) },
         { path: '*', element: <Navigate to="/" replace /> },
       ],
