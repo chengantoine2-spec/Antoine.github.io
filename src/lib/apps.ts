@@ -12,7 +12,14 @@ export const APPS: AppDef[] = [
     /* 卡片是两列，默认给宽一点 */
     defaultSize: { w: 900, h: 620 },
   },
-  { id: 'blog', name: '博客', path: '/blog', source: 'GitHub Issues（待接入）', icon: 'blog' },
+  {
+    id: 'blog',
+    name: '博客',
+    path: '/blog',
+    source: 'GitHub Issues（chengantoine2-spec/Antoine.github.io）',
+    icon: 'blog',
+    defaultSize: { w: 860, h: 640 },
+  },
   { id: 'skills', name: '技能', path: '/skills', source: '本地静态', icon: 'skills' },
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },
   { id: 'terminal', name: '终端', path: '/terminal', source: '无（前端假命令）', icon: 'terminal' },

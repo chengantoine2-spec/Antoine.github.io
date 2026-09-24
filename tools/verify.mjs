@@ -187,7 +187,18 @@ async function run() {
     `${detail.path}｜标题「${detail.title}」`,
   )
 
-  // 10 页面无运行时错误
+  // 10 博客窗口（数据来自 GitHub Issues；限流时显示缓存或提示，都算通过）
+  await p.click(`${DOCK} button[aria-label="博客"]`)
+  await p.waitForTimeout(2500)
+  const blog = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="博客 窗口"]')
+    if (!win) return null
+    const text = (win.textContent ?? '').trim()
+    return { len: text.length, head: text.slice(0, 30) }
+  })
+  check('点「博客」→ 窗口渲染出列表或提示', !!blog && blog.len > 0, blog ? blog.head : '窗口未出现')
+
+  // 11 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

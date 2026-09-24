@@ -4,13 +4,30 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**
-- 其余 6 个（项目 / 博客 / 技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**
+- 其余 4 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
 
 ## 技术栈
 
 Vite 5 + React 18 + TypeScript + Tailwind 3 + react-router-dom 6。
-**无后端**：所有设置存浏览器 localStorage，不接任何服务端。
+**无后端**：所有设置存浏览器 localStorage；博客正文来自 GitHub Issues。
+
+## 依赖清单（**新增依赖必须记在这里，并在回复里当场提示用户**）
+
+> 约定：每加一个依赖，都要写清「为什么需要」。
+
+| 依赖 | 用途 | 加入时机 |
+|---|---|---|
+| `react` / `react-dom` 18 | UI 框架 | 初始 |
+| `react-router-dom` 6 | 路由：一个窗口一条真实路由 | 初始 |
+| `vite` / `@vitejs/plugin-react` | 构建与开发服务器 | 初始 |
+| `typescript` | 类型检查（`build` 里跑 `tsc --noEmit`） | 初始 |
+| `tailwindcss` / `postcss` / `autoprefixer` | 样式 | 初始 |
+| `react-markdown` 9 | 博客正文 markdown 渲染 | 博客窗口 |
+| `remark-gfm` 4 | GFM 语法：表格、任务列表、删除线 | 博客窗口 |
+| `rehype-highlight` 7 | 代码块语法高亮（配色不引第三方 CSS，用主题令牌写在 `globals.css`） | 博客窗口 |
+
+**故意不装的**：`@tailwindcss/typography`（用 `.md` 自定义规则代替）、`playwright`（验证脚本复用 DSH 那份）、任何 UI 组件库。
 
 ## 常用命令
 
@@ -32,7 +49,8 @@ npm run typecheck    # 只做类型检查
 | `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
-| `src/data/site.ts` | 站点文案，改「关于」窗口只动这里 |
+| `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`） |
+| `src/lib/github.ts` | 博客数据源：GitHub Issues + 缓存 + 限流回退 |
 | `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底） |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
@@ -69,6 +87,7 @@ rounded-window / rounded-dock    圆角
 | `desktop.wallpaperDim` | `0` \| `0.15` \| `0.3` \| `0.45` |
 | `desktop.dock` | `{ position, length, thickness, iconSize, dockApps }` |
 | `desktop.windows` | 窗口几何记忆；**关闭窗口不清除**，下次打开回到原处 |
+| `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
