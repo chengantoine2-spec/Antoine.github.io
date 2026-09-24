@@ -20,10 +20,18 @@
     outline: 2px solid var(--c-accent);
     outline-offset: 2px;
   }
+
+  /* 四边让位的兜底值；真实值由 DesktopShell 按任务栏位置写行内变量 */
+  :root {
+    --inset-top: 0px;
+    --inset-right: 0px;
+    --inset-bottom: 0px;
+    --inset-left: 0px;
+  }
 }
 
 @layer components {
-  /* 壁纸：用变量承载渐变，皮肤切换只换值 */
+  /* 壁纸：用变量承载渐变，作为视频加载完成前的底色 */
   .desktop__wall {
     position: absolute;
     inset: 0;
@@ -32,10 +40,21 @@
     background-position: center;
   }
 
-  /* 窗口层：夹在顶栏与任务栏之间，独立层叠上下文，窗口 z 不会盖过外壳 */
+  /* 桌面壁纸（图片/视频通用）：铺满 + 裁切，压在渐变之上、窗口层之下 */
+  .desktop__media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* 窗口层：躲开顶栏与任务栏，独立层叠上下文，窗口 z 不会盖过外壳 */
   .desktop__layer {
     position: absolute;
-    inset: var(--inset-top) 0 var(--inset-bottom) 0;
+    inset: var(--inset-top) var(--inset-right) var(--inset-bottom) var(--inset-left);
     z-index: 10;
   }
 

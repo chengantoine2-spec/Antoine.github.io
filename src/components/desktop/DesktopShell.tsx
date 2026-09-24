@@ -1,8 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { matchApp } from '../../lib/apps'
+import { dockInsets } from '../../lib/dock'
+import { useDock } from '../../hooks/useDock'
 import { useSkin } from '../../hooks/useSkin'
 import { useWindows } from '../../hooks/useWindows'
+/* 桌面壁纸走 import：部署到子路径时不会失效，也和其它资源一起被指纹化 */
+import desktopWallpaper from '../../assets/wallpapers/desktop.jpg'
 import { Dock } from './Dock'
 import { TopBar } from './TopBar'
 import { Window } from './Window'
@@ -12,7 +16,17 @@ export function DesktopShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { skin } = useSkin()
+  const { position, thickness } = useDock()
   const { windows, dispatch } = useWindows()
+
+  /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层 */
+  const insets = dockInsets(position, skin, thickness ?? undefined)
+  const insetVars = {
+    '--inset-top': `${insets.top}px`,
+    '--inset-right': `${insets.right}px`,
+    '--inset-bottom': `${insets.bottom}px`,
+    '--inset-left': `${insets.left}px`,
+  } as CSSProperties
 
   const layerRef = useRef<HTMLDivElement | null>(null)
   const app = matchApp(pathname)
@@ -37,8 +51,17 @@ export function DesktopShell() {
   const win = app ? windows.find((w) => w.id === app.id) : undefined
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-chrome">
+    <div className="relative h-full w-full overflow-hidden bg-chrome" style={insetVars}>
       <div className="desktop__wall" aria-hidden="true" />
+
+      {/* 桌面壁纸：铺满并裁切，不拦截鼠标 */}
+      <img
+        className="desktop__media"
+        src={desktopWallpaper}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
 
       <div className="desktop__layer" ref={layerRef}>
         {win && !win.minimized ? (

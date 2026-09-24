@@ -1,5 +1,8 @@
 export type SkinId = 'ubuntu' | 'win11'
 
+/** 任务栏停靠位置；左/右为竖排 */
+export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
+
 export type IconName =
   | 'about'
   | 'projects'

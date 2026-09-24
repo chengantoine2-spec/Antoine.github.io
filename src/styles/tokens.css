@@ -16,9 +16,6 @@
 
   --r-window: 10px;
   --r-dock: 14px;
-
-  --inset-top: 34px;
-  --inset-bottom: 0px;
 }
 
 :root[data-skin='win11'] {
@@ -38,7 +35,4 @@
 
   --r-window: 8px;
   --r-dock: 10px;
-
-  --inset-top: 0px;
-  --inset-bottom: 60px;
 }

@@ -7,8 +7,6 @@ import {
   type ReactNode,
 } from 'react'
 import type { SkinId } from '../types/desktop'
-/* 走 import 而不是 public/ 绝对路径：部署到 GitHub Pages 子路径时不会失效 */
-import win11Wallpaper from '../assets/wallpapers/win11.jpg'
 
 const STORAGE_KEY = 'desktop.skin'
 
@@ -35,9 +33,6 @@ export function SkinProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement
     root.dataset.skin = skin
-    /* Win11 用照片壁纸；Ubuntu 保留 tokens.css 里的渐变 */
-    if (skin === 'win11') root.style.setProperty('--c-wallpaper', `url("${win11Wallpaper}")`)
-    else root.style.removeProperty('--c-wallpaper')
     try {
       localStorage.setItem(STORAGE_KEY, skin)
     } catch {
