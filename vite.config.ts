@@ -1,7 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+/* GitHub Pages 项目站要挂在子路径下：构建时用 VITE_BASE=/<repo>/ 注入；本地默认根路径。
+   路由的 basename 取自 import.meta.env.BASE_URL，所以两边自动一致。 */
+const base = process.env.VITE_BASE ?? '/'
+
 export default defineConfig({
+  base,
   plugins: [react()],
   server: {
     port: 5173,

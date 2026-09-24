@@ -31,6 +31,17 @@ export interface AppDef {
   /** 数据源 */
   source: string
   icon: IconName
+  /** 打开时的默认尺寸；不写就用全局默认 760×520。窗口层放不下会自动缩 */
+  defaultSize?: { w: number; h: number }
+}
+
+/** 一个窗口的位置与大小（含最大化状态），用于记忆 */
+export interface WindowGeometry {
+  x: number
+  y: number
+  w: number
+  h: number
+  maximized: boolean
 }
 
 export interface WindowState {
@@ -50,8 +61,14 @@ export interface DesktopState {
 }
 
 export type WindowAction =
-  /** bounds = 窗口层尺寸，用于把新窗口摆到正中 */
-  | { type: 'open'; id: AppId; bounds: { w: number; h: number } }
+  /** bounds = 窗口层尺寸；geometry = 记住的几何（有就恢复，没有就按 size 居中） */
+  | {
+      type: 'open'
+      id: AppId
+      bounds: { w: number; h: number }
+      size?: { w: number; h: number }
+      geometry?: WindowGeometry
+    }
   | { type: 'focus'; id: AppId }
   | { type: 'close'; id: AppId }
   | { type: 'closeAll' }

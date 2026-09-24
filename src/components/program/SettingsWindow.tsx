@@ -13,6 +13,7 @@ import {
 } from '../../lib/theme'
 import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
+import { useWindows } from '../../hooks/useWindows'
 import type { DockPosition } from '../../types/desktop'
 import { PositionGlyph } from '../desktop/DockPositionMenu'
 
@@ -104,6 +105,7 @@ export function SettingsWindow() {
     toggleDockApp,
     resetDock,
   } = useDock()
+  const { clearWindowMemory } = useWindows()
 
   const atDefault =
     theme === DEFAULT_THEME &&
@@ -265,14 +267,24 @@ export function SettingsWindow() {
       </Section>
 
       <Section title="重置">
-        <button
-          type="button"
-          onClick={resetAll}
-          disabled={atDefault}
-          className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          恢复默认（焦糖布丁 · 主题渐变 · 底部任务栏 · 全部应用 · 自适应尺寸）
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={resetAll}
+            disabled={atDefault}
+            className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            恢复默认（焦糖布丁 · 主题渐变 · 底部任务栏 · 全部应用 · 自适应尺寸）
+          </button>
+
+          <button
+            type="button"
+            onClick={clearWindowMemory}
+            className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover"
+          >
+            清除窗口位置记忆
+          </button>
+        </div>
       </Section>
 
       <Section title="操作说明">

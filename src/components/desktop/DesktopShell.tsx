@@ -16,7 +16,7 @@ export function DesktopShell() {
   const navigate = useNavigate()
   const { wallpaper, wallpaperFit, wallpaperDim } = useAppearance()
   const { position, thickness } = useDock()
-  const { windows, dispatch } = useWindows()
+  const { windows, dispatch, geometryOf } = useWindows()
 
   /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层 */
   const insets = dockInsets(position, thickness ?? undefined)
@@ -37,15 +37,19 @@ export function DesktopShell() {
     }
     /* 以窗口层为准居中：任务栏占掉的高度不算，窗口不会压到任务栏下面 */
     const rect = layerRef.current?.getBoundingClientRect()
+    const bounds = {
+      w: rect?.width ?? window.innerWidth,
+      h: rect?.height ?? window.innerHeight,
+    }
     dispatch({
       type: 'open',
       id: app.id,
-      bounds: {
-        w: rect?.width ?? window.innerWidth,
-        h: rect?.height ?? window.innerHeight,
-      },
+      bounds,
+      /* app 自己的默认尺寸 + 上次记住的几何（有就恢复原处） */
+      size: app.defaultSize,
+      geometry: geometryOf(app.id),
     })
-  }, [app, dispatch])
+  }, [app, dispatch, geometryOf])
 
   const win = app ? windows.find((w) => w.id === app.id) : undefined
 

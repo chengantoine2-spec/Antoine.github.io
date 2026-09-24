@@ -1,23 +1,39 @@
-import type { DesktopState, WindowAction, WindowState } from '../types/desktop'
+import type { DesktopState, WindowAction, WindowGeometry, WindowState } from '../types/desktop'
 
 const DEFAULT_W = 760
 const DEFAULT_H = 520
 const MIN_W = 360
 const MIN_H = 240
-
-export const initialDesktopState: DesktopState = { windows: [], topZ: 1 }
-
 const GAP = 24
 
-/** 新窗口落位：一律居中；窗口层放不下时先缩到能放下，再居中 */
-function centerSpot(bounds: { w: number; h: number }) {
-  const w = Math.max(MIN_W, Math.min(DEFAULT_W, bounds.w - GAP))
-  const h = Math.max(MIN_H, Math.min(DEFAULT_H, bounds.h - GAP))
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+/** 把记住的几何夹进当前窗口层：换了小屏也不会把窗口丢到看不见的地方 */
+function clampGeometry(geo: WindowGeometry, bounds: { w: number; h: number }): WindowGeometry {
+  const w = clamp(Math.round(geo.w), MIN_W, Math.max(MIN_W, bounds.w - GAP))
+  const h = clamp(Math.round(geo.h), MIN_H, Math.max(MIN_H, bounds.h - GAP))
+  return {
+    w,
+    h,
+    x: clamp(Math.round(geo.x), 0, Math.max(0, bounds.w - w)),
+    y: clamp(Math.round(geo.y), 0, Math.max(0, bounds.h - h)),
+    maximized: geo.maximized,
+  }
+}
+
+/** 新窗口落位：按 app 的默认尺寸居中；放不下就缩到能放下 */
+function centerSpot(bounds: { w: number; h: number }, size?: { w: number; h: number }): WindowGeometry {
+  const target = size ?? { w: DEFAULT_W, h: DEFAULT_H }
+  const w = Math.max(MIN_W, Math.min(target.w, bounds.w - GAP))
+  const h = Math.max(MIN_H, Math.min(target.h, bounds.h - GAP))
   return {
     w,
     h,
     x: Math.max(0, Math.round((bounds.w - w) / 2)),
     y: Math.max(0, Math.round((bounds.h - h) / 2)),
+    maximized: false,
   }
 }
 
@@ -29,7 +45,7 @@ function update(
   return { ...state, windows: state.windows.map((w) => (w.id === id ? patch(w) : w)) }
 }
 
-/** 纯函数窗口管理器：不碰 DOM、不读 localStorage，方便后续单独测试与移植 */
+/** 纯函数窗口管理器：不碰 DOM、不读 localStorage，方便单独测试与移植 */
 export function windowReducer(state: DesktopState, action: WindowAction): DesktopState {
   switch (action.type) {
     case 'open': {
@@ -43,17 +59,11 @@ export function windowReducer(state: DesktopState, action: WindowAction): Deskto
           ),
         }
       }
-      const spot = centerSpot(action.bounds)
-      const win: WindowState = {
-        id: action.id,
-        x: spot.x,
-        y: spot.y,
-        w: spot.w,
-        h: spot.h,
-        z,
-        minimized: false,
-        maximized: false,
-      }
+      /* 记得住就用记得的，否则按默认尺寸居中 */
+      const spot = action.geometry
+        ? clampGeometry(action.geometry, action.bounds)
+        : centerSpot(action.bounds, action.size)
+      const win: WindowState = { id: action.id, ...spot, z, minimized: false }
       return { topZ: z, windows: [...state.windows, win] }
     }
 

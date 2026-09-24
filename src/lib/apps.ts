@@ -9,7 +9,15 @@ export const APPS: AppDef[] = [
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },
   { id: 'terminal', name: '终端', path: '/terminal', source: '无（前端假命令）', icon: 'terminal' },
   { id: 'assets', name: '资产库', path: '/assets', source: 'Supabase（待接入）', icon: 'assets' },
-  { id: 'settings', name: '设置', path: '/settings', source: '浏览器本地设置（localStorage）', icon: 'settings' },
+  {
+    id: 'settings',
+    name: '设置',
+    path: '/settings',
+    source: '浏览器本地设置（localStorage）',
+    icon: 'settings',
+    /* 设置项比一般窗口多，默认给高一点，免得一进来就要滚 */
+    defaultSize: { w: 720, h: 620 },
+  },
 ]
 
 export function getApp(id: AppId): AppDef {
