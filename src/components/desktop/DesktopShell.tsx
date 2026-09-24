@@ -14,7 +14,7 @@ import { Window } from './Window'
 export function DesktopShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { wallpaper } = useAppearance()
+  const { wallpaper, wallpaperFit, wallpaperDim } = useAppearance()
   const { position, thickness } = useDock()
   const { windows, dispatch } = useWindows()
 
@@ -51,16 +51,25 @@ export function DesktopShell() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-chrome" style={insetVars}>
-      {/* 默认背景就是主题渐变；只有选了图片壁纸才多渲染这一层 */}
-      <div className="desktop__wall" aria-hidden="true" />
+      {/* 背景层：渐变 / 纯 CSS 纹理；选了图片时才多一层图片，再叠可选暗化 */}
+      <div
+        className={`desktop__wall desktop__wall--${wallpaper === 'image' ? 'gradient' : wallpaper}`}
+        aria-hidden="true"
+      />
 
       {wallpaper === 'image' ? (
-        <img
-          className="desktop__media"
-          src={desktopWallpaper}
-          alt=""
+        <div
+          className={`desktop__media desktop__media--${wallpaperFit}`}
+          style={{ backgroundImage: `url("${desktopWallpaper}")` }}
           aria-hidden="true"
-          draggable={false}
+        />
+      ) : null}
+
+      {wallpaperDim > 0 ? (
+        <div
+          className="desktop__dim"
+          style={{ backgroundColor: `rgba(0, 0, 0, ${wallpaperDim})` }}
+          aria-hidden="true"
         />
       ) : null}
 

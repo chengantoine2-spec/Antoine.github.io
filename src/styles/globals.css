@@ -30,66 +30,108 @@
   }
 }
 
-@layer components {
-  /* 壁纸：用变量承载渐变，作为视频加载完成前的底色 */
-  .desktop__wall {
-    position: absolute;
-    inset: 0;
-    background-image: var(--c-wallpaper);
-    background-size: cover;
-    background-position: center;
-  }
+/* ─────────────────────────────────────────────────────────────
+   以下自定义类故意**不放进 @layer components**：
+   放进 @layer 的规则会被 Tailwind 按 content 扫描结果裁剪，而这些类名是运行时拼出来的
+   （`desktop__wall--${wallpaper}`、`desktop__media--${fit}`），扫描不到就整条被删，
+   表现为"渐变壁纸不显示、填充方式切了没反应"。放在 @layer 之外就永远会被输出。
+   ───────────────────────────────────────────────────────────── */
 
-  /* 桌面壁纸（图片/视频通用）：铺满 + 裁切，压在渐变之上、窗口层之下 */
-  .desktop__media {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    pointer-events: none;
-    user-select: none;
-  }
+/* 桌面背景层：渐变与三种纹理都从 --c-* 取色，所以永远跟随主题 */
+.desktop__wall {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+}
 
-  /* 窗口层：躲开顶栏与任务栏，独立层叠上下文，窗口 z 不会盖过外壳 */
-  .desktop__layer {
-    position: absolute;
-    inset: var(--inset-top) var(--inset-right) var(--inset-bottom) var(--inset-left);
-    z-index: 10;
-  }
+.desktop__wall--gradient {
+  background-image: var(--c-wallpaper);
+}
 
-  /* 一期唯一动画：窗口打开。不做关闭/最小化/Dock 放大等 */
-  .window {
-    animation: win-in 130ms ease-out both;
-  }
+.desktop__wall--grid {
+  background-color: var(--c-surface-2);
+  background-image:
+    linear-gradient(var(--c-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--c-border) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
 
-  /* 最大化用 !important 压过组件上的内联几何值 */
-  .window--max {
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    border-radius: 0;
-  }
+.desktop__wall--noise {
+  background-color: var(--c-surface-2);
+  background-image: radial-gradient(var(--c-border) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
 
-  .window__resize {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 16px;
-    height: 16px;
-    cursor: nwse-resize;
-  }
+.desktop__wall--stripe {
+  background-color: var(--c-surface-2);
+  background-image: repeating-linear-gradient(45deg, var(--c-border) 0 2px, transparent 2px 12px);
+}
 
-  /* 任务栏放不下时的滚动容器：隐藏滚动条，靠拖动或滚轮横滑 */
-  .no-scrollbar {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
+/* 图片背景：压在主题渐变之上、窗口层之下；填充方式由修饰类切换 */
+.desktop__media {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+}
 
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
+.desktop__media--contain {
+  background-size: contain;
+}
+
+.desktop__media--repeat {
+  background-size: auto;
+  background-repeat: repeat;
+}
+
+/* 暗化蒙层：浅色壁纸上让图标与窗口边缘更清楚 */
+.desktop__dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 窗口层：躲开任务栏，独立层叠上下文，窗口 z 不会盖过外壳 */
+.desktop__layer {
+  position: absolute;
+  inset: var(--inset-top) var(--inset-right) var(--inset-bottom) var(--inset-left);
+  z-index: 10;
+}
+
+/* 一期唯一动画：窗口打开 */
+.window {
+  animation: win-in 130ms ease-out both;
+}
+
+/* 最大化用 !important 压过组件上的内联几何值 */
+.window--max {
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+}
+
+.window__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+/* 任务栏放不下时的滚动容器：隐藏滚动条，靠拖动或滚轮滑动 */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes win-in {

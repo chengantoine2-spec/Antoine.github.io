@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { APPS, getApp } from '../../lib/apps'
+import { getApp } from '../../lib/apps'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import {
@@ -93,7 +93,8 @@ interface GripState {
 
 /** 任务栏：位置可切到下/上/左/右（左右为竖排），厚度与长度靠拖边缘调整 */
 export function Dock() {
-  const { position, length, thickness, setPosition, setLength, setThickness } = useDock()
+  const { position, length, thickness, iconSize, dockApps, setPosition, setLength, setThickness } =
+    useDock()
   const { windows, dispatch } = useWindows()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -109,8 +110,9 @@ export function Dock() {
   const grip = useRef<GripState | null>(null)
   const vertical = isVertical(position)
 
-  /* 按钮随厚度缩放；超过上限就不再变大，多出来的厚度改成多行 */
-  const btn = Math.round(clamp((thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2, 28, BTN_MAX))
+  /* 图标边长：设置里选过就用选的，否则跟随厚度；跟随厚度时超过上限不再变大，富余厚度改成多行 */
+  const autoBtn = clamp((thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2, 28, BTN_MAX)
+  const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 28, 56))
   const btnStyle: CSSProperties = { width: btn, height: btn }
 
   /* 当前厚度能塞下几行（竖排时是几列），最多 3 */
@@ -118,10 +120,11 @@ export function Dock() {
   const lines = Math.round(clamp(Math.floor((crossAvail + GAP) / (btn + GAP)), 1, MAX_LINES))
 
   /* 多行时按行数约束主轴尺寸，按钮才会真的折成 2~3 行并居中；用户手动定过长度就不干预 */
-  const perLine = Math.ceil(APPS.length / lines)
+  const itemCount = dockApps.length
+  const perLine = Math.max(1, Math.ceil(itemCount / lines))
   const lineSize = perLine * btn + (perLine - 1) * GAP
   const scrollerStyle: CSSProperties = {}
-  if (lines > 1 && length === null) {
+  if (lines > 1 && length === null && itemCount > 0) {
     if (vertical) scrollerStyle.height = lineSize
     else scrollerStyle.width = lineSize
   }
@@ -385,7 +388,8 @@ export function Dock() {
           lines > 1 ? 'flex-wrap' : 'flex-nowrap'
         } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
       >
-        {APPS.map((app) => {
+        {dockApps.map((id) => {
+          const app = getApp(id)
           const running = windows.some((w) => w.id === app.id)
           const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
 

@@ -1,8 +1,11 @@
 /** 主题：只影响颜色与圆角 */
 export type ThemeId = 'caramel' | 'linen' | 'night'
 
-/** 桌面背景：默认主题渐变，可切到图片 */
-export type WallpaperId = 'gradient' | 'image'
+/** 桌面背景：主题渐变 / 三种纯 CSS 纹理 / 图片 */
+export type WallpaperId = 'gradient' | 'grid' | 'noise' | 'stripe' | 'image'
+
+/** 图片背景的填充方式 */
+export type WallpaperFit = 'cover' | 'contain' | 'repeat'
 
 /** 任务栏停靠位置；左/右为竖排 */
 export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
