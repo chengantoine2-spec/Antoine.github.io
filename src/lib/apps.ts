@@ -9,7 +9,7 @@ export const APPS: AppDef[] = [
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },
   { id: 'terminal', name: '终端', path: '/terminal', source: '无（前端假命令）', icon: 'terminal' },
   { id: 'assets', name: '资产库', path: '/assets', source: 'Supabase（待接入）', icon: 'assets' },
-  { id: 'settings', name: '设置', path: '/settings', source: 'localStorage', icon: 'settings' },
+  { id: 'settings', name: '设置', path: '/settings', source: '浏览器本地设置（localStorage）', icon: 'settings' },
 ]
 
 export function getApp(id: AppId): AppDef {

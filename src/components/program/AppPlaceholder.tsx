@@ -1,5 +1,5 @@
-import { getApp } from '../lib/apps'
-import type { AppId } from '../types/desktop'
+import { getApp } from '../../lib/apps'
+import type { AppId } from '../../types/desktop'
 
 interface AppPlaceholderProps {
   id: AppId
@@ -7,7 +7,7 @@ interface AppPlaceholderProps {
   route?: string
 }
 
-/** 一期窗口内容占位：只显示窗口名、路由、数据源，真实内容等后续命令 */
+/** 未实现的窗口内容占位：只显示窗口名、路由、数据源 */
 export function AppPlaceholder({ id, route }: AppPlaceholderProps) {
   const app = getApp(id)
 

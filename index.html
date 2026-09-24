@@ -1,15 +1,17 @@
 <!doctype html>
-<html lang="zh-CN" data-skin="ubuntu">
+<html lang="zh-CN" data-theme="caramel">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>桌面 · 个人站</title>
     <script>
-      /* 首屏前置皮肤，避免刷新时闪成另一套皮肤；与 useSkin 共用同一个 key */
+      /* 首屏前置主题，避免刷新时闪成另一套配色；与 useAppearance 共用同一个 key */
       ;(function () {
         try {
-          var s = localStorage.getItem('desktop.skin')
-          if (s === 'ubuntu' || s === 'win11') document.documentElement.dataset.skin = s
+          var t = localStorage.getItem('desktop.theme')
+          if (t === 'caramel' || t === 'linen' || t === 'night') {
+            document.documentElement.dataset.theme = t
+          }
         } catch (e) {
           /* 隐私模式下读不到 localStorage 时忽略 */
         }

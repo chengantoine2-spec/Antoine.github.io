@@ -1,4 +1,8 @@
-export type SkinId = 'ubuntu' | 'win11'
+/** 主题：只影响颜色与圆角 */
+export type ThemeId = 'caramel' | 'linen' | 'night'
+
+/** 桌面背景：默认主题渐变，可切到图片 */
+export type WallpaperId = 'gradient' | 'image'
 
 /** 任务栏停靠位置；左/右为竖排 */
 export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
@@ -21,7 +25,7 @@ export interface AppDef {
   name: string
   /** 路由 */
   path: string
-  /** 数据源（一期只登记，不接入） */
+  /** 数据源 */
   source: string
   icon: IconName
 }

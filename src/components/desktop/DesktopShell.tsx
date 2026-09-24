@@ -2,25 +2,24 @@ import { useEffect, useRef, type CSSProperties } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { matchApp } from '../../lib/apps'
 import { dockInsets } from '../../lib/dock'
+import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
-import { useSkin } from '../../hooks/useSkin'
 import { useWindows } from '../../hooks/useWindows'
 /* 桌面壁纸走 import：部署到子路径时不会失效，也和其它资源一起被指纹化 */
 import desktopWallpaper from '../../assets/wallpapers/desktop.jpg'
 import { Dock } from './Dock'
-import { TopBar } from './TopBar'
 import { Window } from './Window'
 
 /** 桌面外壳：所有窗口路由的父布局，路由 ↔ 窗口状态在这里对齐 */
 export function DesktopShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { skin } = useSkin()
+  const { wallpaper } = useAppearance()
   const { position, thickness } = useDock()
   const { windows, dispatch } = useWindows()
 
   /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层 */
-  const insets = dockInsets(position, skin, thickness ?? undefined)
+  const insets = dockInsets(position, thickness ?? undefined)
   const insetVars = {
     '--inset-top': `${insets.top}px`,
     '--inset-right': `${insets.right}px`,
@@ -36,7 +35,7 @@ export function DesktopShell() {
       dispatch({ type: 'closeAll' })
       return
     }
-    /* 以窗口层为准居中：顶栏/任务栏占掉的高度不算，窗口不会压到任务栏下面 */
+    /* 以窗口层为准居中：任务栏占掉的高度不算，窗口不会压到任务栏下面 */
     const rect = layerRef.current?.getBoundingClientRect()
     dispatch({
       type: 'open',
@@ -52,16 +51,18 @@ export function DesktopShell() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-chrome" style={insetVars}>
+      {/* 默认背景就是主题渐变；只有选了图片壁纸才多渲染这一层 */}
       <div className="desktop__wall" aria-hidden="true" />
 
-      {/* 桌面壁纸：铺满并裁切，不拦截鼠标 */}
-      <img
-        className="desktop__media"
-        src={desktopWallpaper}
-        alt=""
-        aria-hidden="true"
-        draggable={false}
-      />
+      {wallpaper === 'image' ? (
+        <img
+          className="desktop__media"
+          src={desktopWallpaper}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+      ) : null}
 
       <div className="desktop__layer" ref={layerRef}>
         {win && !win.minimized ? (
@@ -71,7 +72,6 @@ export function DesktopShell() {
         ) : null}
       </div>
 
-      {skin === 'ubuntu' ? <TopBar /> : null}
       <Dock />
     </div>
   )

@@ -1,38 +1,56 @@
-/* 皮肤令牌：Ubuntu / Win11 两套值，组件只读变量，不写死颜色 */
+/* 主题令牌：三套主题只是三组变量值。
+   组件只读变量、不写死颜色，所以换主题不需要动任何组件。
+   色板沿用焦糖布丁：caramel-50 #FFF8F0 → caramel-900 #3D2B1F */
 
 :root,
-:root[data-skin='ubuntu'] {
-  --c-wallpaper: radial-gradient(120% 120% at 18% 8%, #6d2f5c 0%, #3a1230 46%, #1b0a19 100%);
-  --c-chrome: #1d1d1d;
-  --c-chrome-fg: #f2f2f2;
-  --c-surface: #f7f6f4;
-  --c-surface-2: #ebe8e4;
-  --c-border: #d9d4cd;
-  --c-text: #1d1d1d;
-  --c-text-dim: #6b6660;
-  --c-accent: #e95420;
-  --c-accent-fg: #ffffff;
-  --c-hover: #ded9d2;
+:root[data-theme='caramel'] {
+  /* 默认桌面背景：焦糖布丁渐变（纯 CSS，不加载图片） */
+  --c-wallpaper: linear-gradient(160deg, #fff8f0 0%, #f7e6d0 30%, #e0b98a 64%, #855434 100%);
+  --c-chrome: rgba(61, 43, 31, 0.82);
+  --c-chrome-fg: #fff8f0;
+  --c-surface: #fff8f0;
+  --c-surface-2: #f7e6d0;
+  --c-border: #efd3b0;
+  --c-text: #3d2b1f;
+  --c-text-dim: #855434;
+  --c-accent: #a96f44;
+  --c-accent-fg: #fff8f0;
+  --c-hover: rgba(255, 248, 240, 0.18);
+
+  --r-window: 12px;
+  --r-dock: 16px;
+}
+
+:root[data-theme='linen'] {
+  --c-wallpaper: linear-gradient(165deg, #fbf7ee 0%, #f0e6d2 45%, #dccbb0 100%);
+  --c-chrome: rgba(74, 63, 50, 0.78);
+  --c-chrome-fg: #fbf7ee;
+  --c-surface: #fbf7ee;
+  --c-surface-2: #f1e8d8;
+  --c-border: #dccdb4;
+  --c-text: #3a3226;
+  --c-text-dim: #7a6a52;
+  --c-accent: #8a6a45;
+  --c-accent-fg: #fbf7ee;
+  --c-hover: rgba(120, 100, 75, 0.18);
 
   --r-window: 10px;
   --r-dock: 14px;
 }
 
-:root[data-skin='win11'] {
-  /* 这里的渐变只是回退值：真实壁纸是 src/assets/wallpapers/win11.jpg，
-     由 useSkin 以行内 --c-wallpaper 覆盖（行内样式优先级更高） */
-  --c-wallpaper: radial-gradient(115% 115% at 50% 6%, #2f7fd6 0%, #0f4c8a 44%, #062038 100%);
-  --c-chrome: rgba(28, 28, 30, 0.72);
-  --c-chrome-fg: #f5f5f5;
-  --c-surface: #f3f3f3;
-  --c-surface-2: #e9e9ec;
-  --c-border: #d2d2d8;
-  --c-text: #1b1b1b;
-  --c-text-dim: #5f5f6b;
-  --c-accent: #0078d4;
-  --c-accent-fg: #ffffff;
-  --c-hover: #dcdce2;
+:root[data-theme='night'] {
+  --c-wallpaper: linear-gradient(160deg, #1b1d22 0%, #14161a 55%, #0c0d10 100%);
+  --c-chrome: rgba(32, 34, 40, 0.86);
+  --c-chrome-fg: #e8e6e1;
+  --c-surface: #22252b;
+  --c-surface-2: #2a2e35;
+  --c-border: #3a3f48;
+  --c-text: #e8e6e1;
+  --c-text-dim: #9aa1ac;
+  --c-accent: #c68a5b;
+  --c-accent-fg: #1b1d22;
+  --c-hover: rgba(255, 255, 255, 0.1);
 
-  --r-window: 8px;
-  --r-dock: 10px;
+  --r-window: 12px;
+  --r-dock: 16px;
 }

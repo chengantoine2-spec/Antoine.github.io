@@ -2,18 +2,15 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { useLocation, useNavigate } from 'react-router-dom'
 import { APPS, getApp } from '../../lib/apps'
 import { useDock } from '../../hooks/useDock'
-import { useSkin } from '../../hooks/useSkin'
 import { useWindows } from '../../hooks/useWindows'
 import {
   DOCK_MARGIN,
   DOCK_MIN_LENGTH,
   DOCK_MIN_THICKNESS,
   DOCK_THICKNESS,
-  dockOffset,
   isVertical,
   maxDockLength,
   maxDockThickness,
-  topChrome,
 } from '../../lib/dock'
 import type { AppId } from '../../types/desktop'
 import { AppIcon } from './AppIcon'
@@ -96,7 +93,6 @@ interface GripState {
 
 /** 任务栏：位置可切到下/上/左/右（左右为竖排），厚度与长度靠拖边缘调整 */
 export function Dock() {
-  const { skin } = useSkin()
   const { position, length, thickness, setPosition, setLength, setThickness } = useDock()
   const { windows, dispatch } = useWindows()
   const navigate = useNavigate()
@@ -107,7 +103,9 @@ export function Dock() {
   const bar = useRef<HTMLElement | null>(null)
   const posWrap = useRef<HTMLDivElement | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
-  const drag = useRef<{ px: number; py: number; sx: number; sy: number } | null>(null)
+  const drag = useRef<{ px: number; py: number; sx: number; sy: number; moved: boolean } | null>(
+    null,
+  )
   const grip = useRef<GripState | null>(null)
   const vertical = isVertical(position)
 
@@ -205,18 +203,30 @@ export function Dock() {
     }
   }
 
-  /* 工具条放不下时：按住拖动即可横滑（竖排即竖滑），滚轮同样可用 */
+  /* 工具条放不下时：按住拖动即可横滑（竖排即竖滑），滚轮同样可用。
+     注意：这里**不能**在 pointerdown 就 setPointerCapture —— 那会把 pointerup 改派到
+     容器，滚动容器里按钮的 click 就永远不会触发（点不动应用）。等真拖出 4px 再抓。 */
   function startDrag(e: React.PointerEvent<HTMLDivElement>) {
     const el = scroller.current
     if (!el) return
-    drag.current = { px: e.clientX, py: e.clientY, sx: el.scrollLeft, sy: el.scrollTop }
-    el.setPointerCapture(e.pointerId)
+    drag.current = {
+      px: e.clientX,
+      py: e.clientY,
+      sx: el.scrollLeft,
+      sy: el.scrollTop,
+      moved: false,
+    }
   }
 
   function onDrag(e: React.PointerEvent<HTMLDivElement>) {
     const el = scroller.current
     const d = drag.current
     if (!el || !d) return
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.px) < 4 && Math.abs(e.clientY - d.py) < 4) return
+      d.moved = true
+      el.setPointerCapture(e.pointerId)
+    }
     el.scrollLeft = d.sx - (e.clientX - d.px)
     el.scrollTop = d.sy - (e.clientY - d.py)
   }
@@ -279,7 +289,7 @@ export function Dock() {
   /* 位置用内联几何：tailwind 里没法按四个方向动态拼类名 */
   const barStyle: CSSProperties = {}
   if (vertical) {
-    barStyle.top = `calc(50% + ${topChrome(skin) / 2}px)`
+    barStyle.top = '50%'
     barStyle.transform = 'translateY(-50%)'
     if (position === 'left') barStyle.left = DOCK_MARGIN
     else barStyle.right = DOCK_MARGIN
@@ -290,7 +300,7 @@ export function Dock() {
   } else {
     barStyle.left = '50%'
     barStyle.transform = 'translateX(-50%)'
-    if (position === 'top') barStyle.top = dockOffset(position, skin)
+    if (position === 'top') barStyle.top = DOCK_MARGIN
     else barStyle.bottom = DOCK_MARGIN
     barStyle.maxWidth = '87.5vw'
     barStyle.maxHeight = '25vh'
