@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { DesktopShell } from './components/desktop/DesktopShell'
 import { AboutWindow } from './components/program/AboutWindow'
 import { AppPlaceholder } from './components/program/AppPlaceholder'
+import { ProjectDetailWindow } from './components/program/ProjectDetailWindow'
+import { ProjectsWindow } from './components/program/ProjectsWindow'
 import { SettingsWindow } from './components/program/SettingsWindow'
 import { APPS } from './lib/apps'
 import type { AppId } from './types/desktop'
@@ -10,6 +12,7 @@ import type { AppId } from './types/desktop'
 /** 已实现的窗口；没登记的仍走 AppPlaceholder */
 const WINDOWS: Partial<Record<AppId, ReactElement>> = {
   about: <AboutWindow />,
+  projects: <ProjectsWindow />,
   settings: <SettingsWindow />,
 }
 
@@ -29,6 +32,7 @@ export const router = createBrowserRouter(
           path: app.path.slice(1),
           element: WINDOWS[app.id] ?? <AppPlaceholder id={app.id} />,
         })),
+        { path: 'projects/:id', element: <ProjectDetailWindow /> },
         { path: 'blog/:id', element: <AppPlaceholder id="blog" route="/blog/:id" /> },
         { path: '*', element: <Navigate to="/" replace /> },
       ],

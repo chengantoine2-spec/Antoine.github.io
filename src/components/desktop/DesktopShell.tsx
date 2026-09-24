@@ -79,7 +79,7 @@ export function DesktopShell() {
 
       <div className="desktop__layer" ref={layerRef}>
         {win && !win.minimized ? (
-          <Window win={win} onClose={() => navigate('/')}>
+          <Window key={win.id} win={win} onClose={() => navigate('/')}>
             <Outlet />
           </Window>
         ) : null}

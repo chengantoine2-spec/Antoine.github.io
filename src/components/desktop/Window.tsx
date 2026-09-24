@@ -1,6 +1,7 @@
-import { useRef, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { getApp } from '../../lib/apps'
 import { useWindows } from '../../hooks/useWindows'
+import { WindowTitleProvider } from '../../hooks/useWindowTitle'
 import type { WindowState } from '../../types/desktop'
 import { AppIcon } from './AppIcon'
 
@@ -10,10 +11,11 @@ interface WindowProps {
   onClose: () => void
 }
 
-/** 窗口框架：拖动 / 缩放 / 最小化 / 最大化，两套皮肤共用同一份实现 */
+/** 窗口框架：拖动 / 缩放 / 最小化 / 最大化；标题栏文字可被窗口内容覆盖 */
 export function Window({ win, children, onClose }: WindowProps) {
   const { dispatch } = useWindows()
   const app = getApp(win.id)
+  const [title, setTitle] = useState<string | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const resize = useRef<{ x: number; y: number } | null>(null)
 
@@ -78,7 +80,7 @@ export function Window({ win, children, onClose }: WindowProps) {
       >
         <span className="flex items-center gap-2 text-xs font-medium text-ink">
           <AppIcon name={app.icon} className="h-4 w-4 text-accent" />
-          {app.name}
+          {title ?? app.name}
         </span>
 
         <span className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
@@ -109,7 +111,9 @@ export function Window({ win, children, onClose }: WindowProps) {
         </span>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5 text-sm">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto p-5 text-sm">
+        <WindowTitleProvider setTitle={setTitle}>{children}</WindowTitleProvider>
+      </div>
 
       {win.maximized ? null : (
         <span

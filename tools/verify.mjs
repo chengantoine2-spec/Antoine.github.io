@@ -166,7 +166,28 @@ async function run() {
   )
   check('取消勾选后应用从任务栏移除', docked === false)
 
-  // 9 页面无运行时错误
+  // 9 项目窗口：列表 → 详情，标题栏跟着换
+  await p.click(`${DOCK} button[aria-label="项目"]`)
+  await p.waitForTimeout(500)
+  const list = await p.evaluate(() => ({
+    path: location.pathname,
+    cards: document.querySelectorAll('[aria-label="项目 窗口"] ul.grid > li > button').length,
+  }))
+  check('点「项目」→ 卡片列表出现', list.path === '/projects' && list.cards > 0, `${list.cards} 张卡`)
+
+  await p.click('[aria-label="项目 窗口"] ul.grid > li > button')
+  await p.waitForTimeout(500)
+  const detail = await p.evaluate(() => ({
+    path: location.pathname,
+    title: document.querySelector('[aria-label="项目 窗口"] header span')?.textContent?.trim() ?? '',
+  }))
+  check(
+    '点卡片 → 进详情，且窗口标题变成项目名',
+    detail.path.startsWith('/projects/') && detail.title !== '' && detail.title !== '项目',
+    `${detail.path}｜标题「${detail.title}」`,
+  )
+
+  // 10 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()
