@@ -1,0 +1,44 @@
+/* 皮肤令牌：Ubuntu / Win11 两套值，组件只读变量，不写死颜色 */
+
+:root,
+:root[data-skin='ubuntu'] {
+  --c-wallpaper: radial-gradient(120% 120% at 18% 8%, #6d2f5c 0%, #3a1230 46%, #1b0a19 100%);
+  --c-chrome: #1d1d1d;
+  --c-chrome-fg: #f2f2f2;
+  --c-surface: #f7f6f4;
+  --c-surface-2: #ebe8e4;
+  --c-border: #d9d4cd;
+  --c-text: #1d1d1d;
+  --c-text-dim: #6b6660;
+  --c-accent: #e95420;
+  --c-accent-fg: #ffffff;
+  --c-hover: #ded9d2;
+
+  --r-window: 10px;
+  --r-dock: 14px;
+
+  --inset-top: 34px;
+  --inset-bottom: 0px;
+}
+
+:root[data-skin='win11'] {
+  /* 这里的渐变只是回退值：真实壁纸是 src/assets/wallpapers/win11.jpg，
+     由 useSkin 以行内 --c-wallpaper 覆盖（行内样式优先级更高） */
+  --c-wallpaper: radial-gradient(115% 115% at 50% 6%, #2f7fd6 0%, #0f4c8a 44%, #062038 100%);
+  --c-chrome: rgba(28, 28, 30, 0.72);
+  --c-chrome-fg: #f5f5f5;
+  --c-surface: #f3f3f3;
+  --c-surface-2: #e9e9ec;
+  --c-border: #d2d2d8;
+  --c-text: #1b1b1b;
+  --c-text-dim: #5f5f6b;
+  --c-accent: #0078d4;
+  --c-accent-fg: #ffffff;
+  --c-hover: #dcdce2;
+
+  --r-window: 8px;
+  --r-dock: 10px;
+
+  --inset-top: 0px;
+  --inset-bottom: 60px;
+}

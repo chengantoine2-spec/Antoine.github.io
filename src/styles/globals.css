@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    color: var(--c-text);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* 壁纸：用变量承载渐变，皮肤切换只换值 */
+  .desktop__wall {
+    position: absolute;
+    inset: 0;
+    background-image: var(--c-wallpaper);
+    background-size: cover;
+    background-position: center;
+  }
+
+  /* 窗口层：夹在顶栏与任务栏之间，独立层叠上下文，窗口 z 不会盖过外壳 */
+  .desktop__layer {
+    position: absolute;
+    inset: var(--inset-top) 0 var(--inset-bottom) 0;
+    z-index: 10;
+  }
+
+  /* 一期唯一动画：窗口打开。不做关闭/最小化/Dock 放大等 */
+  .window {
+    animation: win-in 130ms ease-out both;
+  }
+
+  /* 最大化用 !important 压过组件上的内联几何值 */
+  .window--max {
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 0;
+  }
+
+  .window__resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+  }
+
+  /* 任务栏放不下时的滚动容器：隐藏滚动条，靠拖动或滚轮横滑 */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes win-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window {
+    animation: none;
+  }
+}
