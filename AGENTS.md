@@ -102,6 +102,9 @@ rounded-window / rounded-dock    圆角
 ## 数据约定（GitHub 仓库即后端）
 
 - **文章 = Issues**：分类用 `daily` / `project` 标签，其余标签当 tag；封面取正文里第一张图。
+  - **增 / 改**：`POST /issues`、`PATCH /issues/{n}`
+  - **删**：REST 没有删 issue 的接口，只能走 GraphQL `deleteIssue`（需要 issue 的 `node_id`，列表接口会给）
+  - **下架 = close**：公开博客列表只显示 `state=open`，下架的仍能在创作窗口看到并「重新显示」
 - **图片 = `img` 分支**：路径 `YYYY/MM/<随机16位>.<ext>`，对外地址
   `https://cdn.jsdelivr.net/gh/chengantoine2-spec/Antoine.github.io@img/<路径>`（jsDelivr 加速）。
   上传走 Contents API（`PUT /contents/<path>` + `branch: 'img'`），需要 Token；
@@ -112,7 +115,7 @@ rounded-window / rounded-dock    圆角
 > 现在按"测试阶段、暂不处理安全"处理，**正式上线前必须撤销并重建**。
 > 影响范围：`desktop.ghToken` 泄露 = 该仓库的 Issues 与 Contents 写入权限。
 
-## 三个已经踩过的坑（别再踩）
+## 四个已经踩过的坑（别再踩）
 
 **坑 1 · 自定义 CSS 不要放进 `@layer components`。**
 Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不到"的规则，而运行时拼出来的类名
@@ -128,6 +131,11 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 `A component suspended while responding to synchronous input`，React Router 直接把整页替换成错误页。
 对策（两招一起用）：`startTransition(() => navigate/setState(...))`，并在窗口挂载时 `void import('./Markdown')` 预热。
 以后再加 lazy 组件，照这个模式来。
+
+**坑 4 · Vite dev server 会缓存旧模块导出。**
+改了某个模块的导出（例如给 `lib/github.ts` 加 `deleteIssue`）后，浏览器可能报
+`The requested module '…' does not provide an export named 'X'`，而 `tsc --noEmit` 和 `vite build` 都是通过的。
+**重启 dev server 即可**（别去改源码，源码没错）。
 
 ## 验证
 

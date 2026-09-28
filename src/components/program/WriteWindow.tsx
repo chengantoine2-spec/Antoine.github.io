@@ -12,6 +12,7 @@ import {
   clearBlogCache,
   clearImageCache,
   createIssue,
+  deleteIssue,
   listImages,
   readToken,
   saveToken,
@@ -353,6 +354,23 @@ export function WriteWindow() {
     }
   }
 
+  /** 彻底删除（GraphQL）；GitHub 上不可撤销，所以先 confirm */
+  async function removePost(post: BlogPost) {
+    if (!window.confirm(`彻底删除 #${post.id}「${post.title}」？GitHub 上无法撤销。`)) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      await deleteIssue(token, post.nodeId)
+      setNotice({ kind: 'ok', text: `已彻底删除 #${post.id}` })
+      clearBlogCache()
+      refresh()
+    } catch (error) {
+      setNotice({ kind: 'err', text: error instanceof Error ? error.message : '删除失败' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const previewPane = (extra: string) => (
     <div className={`overflow-auto rounded border border-edge bg-surface p-3 ${extra}`}>
       <Suspense fallback={<p className="text-sm text-dim">正在排版…</p>}>
@@ -579,11 +597,18 @@ export function WriteWindow() {
             {posts.map((post) => (
               <li
                 key={post.id}
-                className="flex flex-wrap items-center gap-2 rounded border border-edge bg-surface-2 px-3 py-2"
+                className={`flex flex-wrap items-center gap-2 rounded border border-edge px-3 py-2 ${
+                  post.state === 'closed' ? 'bg-surface opacity-70' : 'bg-surface-2'
+                }`}
               >
                 <span className="min-w-0 flex-1 truncate text-sm text-ink">
                   #{post.id} {post.title}
                 </span>
+                {post.state === 'closed' ? (
+                  <span className="rounded border border-edge px-1.5 py-0.5 text-[11px] text-dim">
+                    已下架
+                  </span>
+                ) : null}
                 <span className="text-[11px] text-dim">{post.labels.join(' · ') || '无标签'}</span>
                 <button
                   type="button"
@@ -597,11 +622,19 @@ export function WriteWindow() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => changeState(post, 'closed')}
+                  onClick={() => changeState(post, post.state === 'open' ? 'closed' : 'open')}
                   disabled={busy}
                   className="rounded border border-edge px-2 py-0.5 text-[11px] text-dim hover:bg-hover disabled:opacity-50"
                 >
-                  下架
+                  {post.state === 'open' ? '下架' : '重新显示'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removePost(post)}
+                  disabled={busy}
+                  className="rounded border border-edge px-2 py-0.5 text-[11px] text-accent hover:bg-hover disabled:opacity-50"
+                >
+                  删除
                 </button>
               </li>
             ))}

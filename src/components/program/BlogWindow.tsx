@@ -16,7 +16,8 @@ export function BlogWindow() {
     void import('./Markdown')
   }, [])
 
-  const posts = feed?.posts ?? []
+  /* 公开列表只显示已发布的；下架的文章不在这里出现（创作窗口里仍能看到并恢复） */
+  const posts = (feed?.posts ?? []).filter((post) => post.state === 'open')
 
   const tags = useMemo(() => {
     const set = new Set<string>()

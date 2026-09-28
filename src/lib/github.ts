@@ -21,12 +21,16 @@ export type CategoryId = (typeof CATEGORIES)[number]['id']
 
 export interface BlogPost {
   id: number
+  /** GraphQL 删除要用的全局 id */
+  nodeId: string
   title: string
   body: string
   /** 全部标签原文 */
   labels: string[]
   /** daily / project / other */
   category: 'daily' | 'project' | 'other'
+  /** open = 线上可见；closed = 已下架（仅创作窗口能看到） */
+  state: 'open' | 'closed'
   /** 正文里第一张图，作为封面 */
   cover: string | null
   createdAt: string
@@ -49,9 +53,11 @@ const TTL_MS = 10 * 60 * 1000
 
 interface RawIssue {
   number: number
+  node_id: string
   title: string
   body: string | null
   labels: Array<{ name?: string } | string>
+  state: string
   created_at: string
   updated_at: string
   html_url: string
@@ -74,10 +80,12 @@ function toPost(issue: RawIssue): BlogPost {
   const body = issue.body ?? ''
   return {
     id: issue.number,
+    nodeId: issue.node_id,
     title: issue.title,
     body,
     labels,
     category: labels.includes('project') ? 'project' : labels.includes('daily') ? 'daily' : 'other',
+    state: issue.state === 'closed' ? 'closed' : 'open',
     cover: pickCover(body),
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
@@ -117,11 +125,24 @@ export function clearBlogCache(): void {
 }
 
 /** 读取用的头：本机有 Token 就带上（未认证 60 次/小时 → 认证后 5000 次/小时） */
-function readHeaders(): HeadersInit {
-  const token = readToken()
+function readHeaders(withToken: boolean): HeadersInit {
+  const token = withToken ? readToken() : ''
   return token
     ? { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` }
     : { Accept: 'application/vnd.github+json' }
+}
+
+/**
+ * 带 Token 读一次；若 401/403（Token 过期或权限不够）就退回匿名再读一次。
+ * 否则一个失效的 Token 会把"看文章"也一起弄坏。
+ */
+async function fetchRead(url: string): Promise<Response> {
+  const hasToken = readToken() !== ''
+  let response = await fetch(url, { headers: readHeaders(true) })
+  if (hasToken && (response.status === 401 || response.status === 403)) {
+    response = await fetch(url, { headers: readHeaders(false) })
+  }
+  return response
 }
 
 export async function loadPosts(options: { force?: boolean } = {}): Promise<BlogFeed> {
@@ -132,9 +153,7 @@ export async function loadPosts(options: { force?: boolean } = {}): Promise<Blog
   }
 
   try {
-    const response = await fetch(`${API}?state=all&per_page=50&sort=created&direction=desc`, {
-      headers: readHeaders(),
-    })
+    const response = await fetchRead(`${API}?state=all&per_page=50&sort=created&direction=desc`)
 
     if (!response.ok) {
       const limited = response.status === 403 || response.status === 429
@@ -272,6 +291,23 @@ export async function setIssueState(
   if (!response.ok) throw new Error(await readError(response))
 }
 
+/** 彻底删除一篇文章。REST 没有删 issue 的接口，只能走 GraphQL deleteIssue */
+export async function deleteIssue(token: string, nodeId: string): Promise<void> {
+  const response = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: writeHeaders(token),
+    body: JSON.stringify({
+      query: 'mutation($id:ID!){deleteIssue(input:{issueId:$id}){repository{name}}}',
+      variables: { id: nodeId },
+    }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  const data = (await response.json()) as { errors?: Array<{ message?: string }> }
+  if (data.errors?.length) {
+    throw new Error(`删除失败：${data.errors[0].message ?? 'GitHub 拒绝了这次删除'}`)
+  }
+}
+
 /* ───────────── 图片：存 img 分支，走 jsDelivr 加速（与旧站约定一致） ─────────────
    上传要 Token；**浏览已存图片不需要 Token**（公开仓库直接读）。
    路径形如 2026/09/<随机>.png，对外 URL 是
@@ -312,7 +348,7 @@ export async function listImages(options: { force?: boolean } = {}): Promise<Sto
     }
   }
 
-  const response = await fetch(TREE_API, { headers: readHeaders() })
+  const response = await fetchRead(TREE_API)
   if (!response.ok) throw new Error(await readError(response))
 
   const data = (await response.json()) as { tree?: Array<{ path?: string; type?: string }> }
