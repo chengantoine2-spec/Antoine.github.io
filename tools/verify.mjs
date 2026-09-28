@@ -187,7 +187,40 @@ async function run() {
     `${detail.path}｜标题「${detail.title}」`,
   )
 
-  // 10 博客窗口（数据来自 GitHub Issues；限流时显示缓存或提示，都算通过）
+  // 10 写作窗口（没有 PAT 时只显示凭据表单）
+  await p.click(`${DOCK} button[aria-label="写作"]`)
+  await p.waitForTimeout(700)
+  const write = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="写作 窗口"]')
+    if (!win) return null
+    const text = win.textContent ?? ''
+    return {
+      hasTokenField: !!win.querySelector('input[type="password"]'),
+      asksToken: text.includes('填入 Token'),
+      path: location.pathname,
+    }
+  })
+  check(
+    '点「写作」→ 窗口打开并要 Token',
+    write?.path === '/write' && write.hasTokenField && write.asksToken,
+    JSON.stringify(write),
+  )
+
+  // 10b 假 Token 要被明确拒绝（真打一次 GitHub API，但不产生任何写入）
+  await p.fill('[aria-label="写作 窗口"] input[type="password"]', 'ghp_this_token_is_fake_for_test')
+  await p.click('[aria-label="写作 窗口"] button:has-text("保存")')
+  await p.click('[aria-label="写作 窗口"] button:has-text("验证")')
+  await p.waitForTimeout(3000)
+  const tokenText = await p.evaluate(
+    () => document.querySelector('[aria-label="写作 窗口"]')?.textContent ?? '',
+  )
+  check(
+    '假 Token 被明确拒绝（错误信息是中文可读的）',
+    /Token 无效|401|权限/.test(tokenText),
+    (tokenText.match(/Token 无效[^（]*（401）|Token 权限不足[^（]*（403）/) ?? ['未出现'])[0],
+  )
+
+  // 11 博客窗口（数据来自 GitHub Issues；限流时显示缓存或提示，都算通过）
   await p.click(`${DOCK} button[aria-label="博客"]`)
   await p.waitForTimeout(2500)
   const blog = await p.evaluate(() => {
@@ -198,7 +231,7 @@ async function run() {
   })
   check('点「博客」→ 窗口渲染出列表或提示', !!blog && blog.len > 0, blog ? blog.head : '窗口未出现')
 
-  // 11 页面无运行时错误
+  // 12 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

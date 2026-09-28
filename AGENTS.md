@@ -4,8 +4,9 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**、**项目**、**博客**
-- 其余 4 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**写作**
+- 其余 3 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
+- **写作**窗口用本机 PAT 直接增改 GitHub Issues（= 博客文章）；没有 PAT 的访客拿不到写入能力
 
 ## 技术栈
 
@@ -88,10 +89,11 @@ rounded-window / rounded-dock    圆角
 | `desktop.dock` | `{ position, length, thickness, iconSize, dockApps }` |
 | `desktop.windows` | 窗口几何记忆；**关闭窗口不清除**，下次打开回到原处 |
 | `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
+| `desktop.ghToken` | **写作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
-## 两个已经踩过的坑（别再踩）
+## 三个已经踩过的坑（别再踩）
 
 **坑 1 · 自定义 CSS 不要放进 `@layer components`。**
 Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不到"的规则，而运行时拼出来的类名
@@ -102,6 +104,12 @@ Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不�
 指针一旦被容器捕获，`pointerup` 会改派到容器，里面按钮的 `click` 永远不触发 —— 表现是"按钮点不动"。
 要等拖动位移超过阈值（现在用 4px）再抓指针。
 
+**坑 3 · 懒加载组件 + 同步更新 = 整页变错误界面。**
+markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navigate` 里让它第一次挂载，React 18 会抛
+`A component suspended while responding to synchronous input`，React Router 直接把整页替换成错误页。
+对策（两招一起用）：`startTransition(() => navigate/setState(...))`，并在窗口挂载时 `void import('./Markdown')` 预热。
+以后再加 lazy 组件，照这个模式来。
+
 ## 验证
 
 - 手动：`npm run dev` → http://localhost:5173
@@ -109,8 +117,15 @@ Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不�
   需要换位置就设 `PLAYWRIGHT_PKG`）
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
 
-## 部署（已备好，未启用）
+## 工作流约定（重要）
+
+- **新功能一律先在本地验证**，`git commit` 只落在本地；**推送远端要等明确指令**。
+- 本仓库 `origin` 指向 `chengantoine2-spec/Antoine.github.io`（就是线上站点）。
+  `main` 已启用 push 触发 → **一推就上线**，所以别顺手 push。
+- 旧站（WinXP 桌面那版）备份在远端分支 `legacy-xp-desktop` 与本机 `网页任务` 克隆里。
+
+## 部署
 
 - `.github/workflows/deploy.yml`：推到 `main` 或手动触发，构建时用 `VITE_BASE` 注入子路径
 - 项目站深链靠 `build:pages` 生成的 `dist/404.html` 兜底，路由 `basename` 取自 `import.meta.env.BASE_URL`
-- **首次启用前**：到仓库 Settings → Pages 把 Source 设为 "GitHub Actions"
+- Pages 的 Source 必须设为 "GitHub Actions"（仓库 Settings → Pages）

@@ -8,6 +8,7 @@ import { BlogWindow } from './components/program/BlogWindow'
 import { ProjectDetailWindow } from './components/program/ProjectDetailWindow'
 import { ProjectsWindow } from './components/program/ProjectsWindow'
 import { SettingsWindow } from './components/program/SettingsWindow'
+import { WriteWindow } from './components/program/WriteWindow'
 import { APPS } from './lib/apps'
 import type { AppId } from './types/desktop'
 
@@ -17,6 +18,7 @@ const WINDOWS: Partial<Record<AppId, ReactElement>> = {
   blog: <BlogWindow />,
   projects: <ProjectsWindow />,
   settings: <SettingsWindow />,
+  write: <WriteWindow />,
 }
 
 /** GitHub Pages 项目站的 base（如 /my-repo/）由 vite 注入；本地是 '/' */

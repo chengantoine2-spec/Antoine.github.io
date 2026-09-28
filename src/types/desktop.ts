@@ -14,6 +14,7 @@ export type IconName =
   | 'about'
   | 'projects'
   | 'blog'
+  | 'write'
   | 'skills'
   | 'contact'
   | 'terminal'

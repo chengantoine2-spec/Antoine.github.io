@@ -62,6 +62,13 @@ export function AppIcon({ name, className = 'h-6 w-6' }: { name: IconName; class
           <path d="M3.5 8.5v7l8.5 4 8.5-4v-7" />
         </svg>
       )
+    case 'write':
+      return (
+        <svg {...base}>
+          <path d="M4 20l4-.9L19.2 7.9a1.9 1.9 0 0 0 0-2.7l-.4-.4a1.9 1.9 0 0 0-2.7 0L4.9 16z" />
+          <path d="M14.5 6.5l3 3" />
+        </svg>
+      )
     case 'settings':
       return (
         <svg {...base}>

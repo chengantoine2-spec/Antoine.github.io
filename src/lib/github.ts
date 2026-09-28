@@ -164,3 +164,102 @@ export function formatDate(iso: string): string {
   if (Number.isNaN(date.getTime())) return iso
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
+
+/* ───────────── 写入：需要你自己在本机填一个 PAT ─────────────
+   安全边界说清楚：
+   - Token 只写进这台浏览器的 localStorage（键 desktop.ghToken），**不会进仓库、不会进代码**；
+     但它对同源的任何脚本都可读，所以别在公共电脑上填，用完可以「清除」。
+   - 写操作是浏览器直连 api.github.com 并带上这个 Token；需要一个能写 Issues 的
+     fine-grained token（Issues: Read and write）或 classic token（scope: public_repo / repo）。
+   - 任何访客都能打开「写作」窗口，但没有 Token 就什么都写不了。 */
+
+const TOKEN_KEY = 'desktop.ghToken'
+
+export function readToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveToken(token: string): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    /* 写不进去也不影响 */
+  }
+}
+
+export interface IssueDraft {
+  title: string
+  body: string
+  labels: string[]
+}
+
+function writeHeaders(token: string) {
+  return {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
+}
+
+async function readError(response: Response): Promise<string> {
+  if (response.status === 401) return 'Token 无效或已过期（401）'
+  if (response.status === 403) return 'Token 权限不足（403）：需要 Issues 读写权限'
+  if (response.status === 404) return '找不到仓库，或这个 Token 没有该仓库权限（404）'
+  if (response.status === 422) return 'GitHub 拒绝了这次提交（422）：标题不能为空，或字段不合法'
+  try {
+    const data = (await response.json()) as { message?: string }
+    return data.message ?? `GitHub 返回 ${response.status}`
+  } catch {
+    return `GitHub 返回 ${response.status}`
+  }
+}
+
+/** 验证 Token 并返回登录名；失败抛中文错误 */
+export async function verifyToken(token: string): Promise<string> {
+  const response = await fetch('https://api.github.com/user', { headers: writeHeaders(token) })
+  if (!response.ok) throw new Error(await readError(response))
+  const user = (await response.json()) as { login?: string }
+  return user.login ?? '(未知账号)'
+}
+
+export async function createIssue(token: string, draft: IssueDraft): Promise<number> {
+  const response = await fetch(API, {
+    method: 'POST',
+    headers: writeHeaders(token),
+    body: JSON.stringify(draft),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+  const issue = (await response.json()) as { number: number }
+  return issue.number
+}
+
+export async function updateIssue(
+  token: string,
+  issueNumber: number,
+  draft: IssueDraft,
+): Promise<void> {
+  const response = await fetch(`${API}/${issueNumber}`, {
+    method: 'PATCH',
+    headers: writeHeaders(token),
+    body: JSON.stringify(draft),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+}
+
+export async function setIssueState(
+  token: string,
+  issueNumber: number,
+  state: 'open' | 'closed',
+): Promise<void> {
+  const response = await fetch(`${API}/${issueNumber}`, {
+    method: 'PATCH',
+    headers: writeHeaders(token),
+    body: JSON.stringify({ state }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+}
