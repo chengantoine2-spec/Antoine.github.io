@@ -148,7 +148,11 @@ async function fetchRead(url: string): Promise<Response> {
 export async function loadPosts(options: { force?: boolean } = {}): Promise<BlogFeed> {
   const cached = readCache()
 
-  if (!options.force && cached && Date.now() - cached.fetchedAt < TTL_MS) {
+  /* 有 Token 时额度是 5000 次/小时，缓存缩短到 1 分钟：
+     刚发布/删掉的文章马上就能看到，不会因为 10 分钟缓存以为"文章不见了" */
+  const ttl = readToken() ? 60 * 1000 : TTL_MS
+
+  if (!options.force && cached && Date.now() - cached.fetchedAt < ttl) {
     return { posts: cached.posts, fetchedAt: cached.fetchedAt, stale: false, notice: null }
   }
 
