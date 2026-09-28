@@ -1,21 +1,21 @@
 /**
- * 站点内容集中在这里：以后改「关于」窗口只动这个文件，不用碰组件。
- * 带「待填」的都是占位，替换成你自己的信息即可。
+ * 站点内容集中在这里：改「关于」窗口只动这个文件，不用碰组件。
+ * 链接一律用完整 URL（站内相对路径在 GitHub Pages 子路径下会指错）。
  */
 export const SITE = {
   name: '焦糖布丁',
-  tagline: '（待填）一句话介绍自己',
+  tagline: '一个把日常慢慢熬出味道的地方',
   intro: [
-    '（待填）第一段：我是谁、在做什么。',
-    '（待填）第二段：现在关注什么、平时写些什么。',
+    '这里是我的个人站。所有内容都放在一个「桌面」里：桌面背景、任务栏、窗口，博客只是其中一个窗口。',
+    '主要记录日常、做过的东西，以及过程中的一些判断。写得不算快，但都是自己用过、想清楚了的。',
   ],
   facts: [
-    { label: '在做', value: '（待填）' },
-    { label: '在用', value: '（待填）' },
-    { label: '坐标', value: '（待填）' },
+    { label: '在做', value: '把这个桌面式的个人站一点点补完' },
+    { label: '在用', value: 'Vite · React · TypeScript · Tailwind' },
+    { label: '喜欢', value: '焦糖布丁，安静的下午，把东西做顺手' },
   ],
   links: [
-    { label: 'GitHub', href: 'https://github.com/' },
-    { label: '邮箱', href: 'mailto:' },
+    { label: 'GitHub', href: 'https://github.com/chengantoine2-spec' },
+    { label: '本站仓库', href: 'https://github.com/chengantoine2-spec/Antoine.github.io' },
   ],
 }
