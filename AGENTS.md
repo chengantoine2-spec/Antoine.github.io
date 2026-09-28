@@ -4,9 +4,10 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**写作**
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**
 - 其余 3 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
-- **写作**窗口用本机 PAT 直接增改 GitHub Issues（= 博客文章）；没有 PAT 的访客拿不到写入能力
+- **博客创作**窗口用本机 PAT 直接增改 GitHub Issues（= 博客文章），并上传/浏览 img 分支里的图片；
+  没有 PAT 的访客只能浏览图片，写入能力拿不到
 
 ## 技术栈
 
@@ -51,7 +52,7 @@ npm run typecheck    # 只做类型检查
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`） |
-| `src/lib/github.ts` | 博客数据源：GitHub Issues + 缓存 + 限流回退 |
+| `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
 | `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底） |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
@@ -89,9 +90,19 @@ rounded-window / rounded-dock    圆角
 | `desktop.dock` | `{ position, length, thickness, iconSize, dockApps }` |
 | `desktop.windows` | 窗口几何记忆；**关闭窗口不清除**，下次打开回到原处 |
 | `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
-| `desktop.ghToken` | **写作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
+| `desktop.ghToken` | **博客创作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
+| `desktop.imgTree` | img 分支图片清单缓存，TTL 10 分钟（浏览图库不需要 Token） |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
+
+## 数据约定（GitHub 仓库即后端）
+
+- **文章 = Issues**：分类用 `daily` / `project` 标签，其余标签当 tag；封面取正文里第一张图。
+- **图片 = `img` 分支**：路径 `YYYY/MM/<随机16位>.<ext>`，对外地址
+  `https://cdn.jsdelivr.net/gh/chengantoine2-spec/Antoine.github.io@img/<路径>`（jsDelivr 加速）。
+  上传走 Contents API（`PUT /contents/<path>` + `branch: 'img'`），需要 Token；
+  **浏览图库是公开读取，不需要 Token**。
+- 写操作一律浏览器直连 `api.github.com`，Token 只在本机 localStorage。
 
 ## 三个已经踩过的坑（别再踩）
 

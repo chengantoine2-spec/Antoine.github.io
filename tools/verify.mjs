@@ -187,11 +187,11 @@ async function run() {
     `${detail.path}｜标题「${detail.title}」`,
   )
 
-  // 10 写作窗口（没有 PAT 时只显示凭据表单）
-  await p.click(`${DOCK} button[aria-label="写作"]`)
+  // 10 博客创作窗口（没有 PAT 时只显示凭据表单）
+  await p.click(`${DOCK} button[aria-label="博客创作"]`)
   await p.waitForTimeout(700)
   const write = await p.evaluate(() => {
-    const win = document.querySelector('[aria-label="写作 窗口"]')
+    const win = document.querySelector('[aria-label="博客创作 窗口"]')
     if (!win) return null
     const text = win.textContent ?? ''
     return {
@@ -201,18 +201,37 @@ async function run() {
     }
   })
   check(
-    '点「写作」→ 窗口打开并要 Token',
+    '点「博客创作」→ 窗口打开并要 Token',
     write?.path === '/write' && write.hasTokenField && write.asksToken,
     JSON.stringify(write),
   )
 
+  // 10c 图片区：不需要 Token 也能列出 img 分支里的图；悬停任务栏图标要显示名字
+  const writeText = await p.evaluate(
+    () => document.querySelector('[aria-label="博客创作 窗口"]')?.textContent ?? '',
+  )
+  check('博客创作窗口带图片区（img 分支）', writeText.includes('图片（img 分支）'))
+
+  const dockTarget = await p.evaluate((sel) => {
+    const el = document.querySelector(`${sel} button[aria-label="博客"]`)
+    const rect = el.getBoundingClientRect()
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  }, DOCK)
+  await p.mouse.move(dockTarget.x, dockTarget.y)
+  await p.waitForTimeout(500)
+  const tooltip = await p.evaluate(
+    (sel) => document.querySelector(`${sel} [role="tooltip"]`)?.textContent?.trim() ?? null,
+    DOCK,
+  )
+  check('鼠标悬停任务栏图标显示名字', tooltip === '博客', `tooltip=${tooltip}`)
+
   // 10b 假 Token 要被明确拒绝（真打一次 GitHub API，但不产生任何写入）
-  await p.fill('[aria-label="写作 窗口"] input[type="password"]', 'ghp_this_token_is_fake_for_test')
-  await p.click('[aria-label="写作 窗口"] button:has-text("保存")')
-  await p.click('[aria-label="写作 窗口"] button:has-text("验证")')
+  await p.fill('[aria-label="博客创作 窗口"] input[type="password"]', 'ghp_this_token_is_fake_for_test')
+  await p.click('[aria-label="博客创作 窗口"] button:has-text("保存")')
+  await p.click('[aria-label="博客创作 窗口"] button:has-text("验证")')
   await p.waitForTimeout(3000)
   const tokenText = await p.evaluate(
-    () => document.querySelector('[aria-label="写作 窗口"]')?.textContent ?? '',
+    () => document.querySelector('[aria-label="博客创作 窗口"]')?.textContent ?? '',
   )
   check(
     '假 Token 被明确拒绝（错误信息是中文可读的）',

@@ -263,3 +263,107 @@ export async function setIssueState(
   })
   if (!response.ok) throw new Error(await readError(response))
 }
+
+/* ───────────── 图片：存 img 分支，走 jsDelivr 加速（与旧站约定一致） ─────────────
+   上传要 Token；**浏览已存图片不需要 Token**（公开仓库直接读）。
+   路径形如 2026/09/<随机>.png，对外 URL 是
+   https://cdn.jsdelivr.net/gh/<owner>/<repo>@img/<路径> */
+
+const IMG_BRANCH = 'img'
+const CONTENTS_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents`
+const TREE_API = `https://api.github.com/repos/${OWNER}/${REPO}/git/trees/${IMG_BRANCH}?recursive=1`
+const CDN = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@${IMG_BRANCH}`
+
+const IMG_CACHE_KEY = 'desktop.imgTree'
+const IMG_TTL_MS = 10 * 60 * 1000
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i
+
+export interface StoredImage {
+  path: string
+  url: string
+  name: string
+}
+
+function toStoredImage(path: string): StoredImage {
+  return { path, url: `${CDN}/${path}`, name: path.split('/').pop() ?? path }
+}
+
+/** 列出 img 分支里已有的图片（不需要 Token；结果缓存 10 分钟） */
+export async function listImages(options: { force?: boolean } = {}): Promise<StoredImage[]> {
+  if (!options.force) {
+    try {
+      const raw = localStorage.getItem(IMG_CACHE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { images?: StoredImage[]; fetchedAt?: number }
+        if (Array.isArray(parsed.images) && Date.now() - (parsed.fetchedAt ?? 0) < IMG_TTL_MS) {
+          return parsed.images
+        }
+      }
+    } catch {
+      /* 缓存坏了就当没有 */
+    }
+  }
+
+  const response = await fetch(TREE_API, { headers: { Accept: 'application/vnd.github+json' } })
+  if (!response.ok) throw new Error(await readError(response))
+
+  const data = (await response.json()) as { tree?: Array<{ path?: string; type?: string }> }
+  const images = (data.tree ?? [])
+    .filter((node) => node.type === 'blob' && node.path && IMAGE_RE.test(node.path))
+    .map((node) => toStoredImage(node.path as string))
+    /* 路径带年月，倒序即最新的在前 */
+    .sort((a, b) => (a.path < b.path ? 1 : -1))
+
+  try {
+    localStorage.setItem(IMG_CACHE_KEY, JSON.stringify({ images, fetchedAt: Date.now() }))
+  } catch {
+    /* 写不进去不影响浏览 */
+  }
+  return images
+}
+
+export function clearImageCache(): void {
+  try {
+    localStorage.removeItem(IMG_CACHE_KEY)
+  } catch {
+    /* 同上 */
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk))
+  }
+  return btoa(binary)
+}
+
+function randomId(): string {
+  const bytes = new Uint8Array(8)
+  crypto.getRandomValues(bytes)
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** 上传一张图到 img 分支，返回可直接写进正文的 jsDelivr URL */
+export async function uploadImage(token: string, file: File): Promise<StoredImage> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const now = new Date()
+  const dir = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`
+  const ext = (file.name.split('.').pop() ?? 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+  const path = `${dir}/${randomId()}.${ext}`
+
+  const response = await fetch(`${CONTENTS_API}/${path}`, {
+    method: 'PUT',
+    headers: writeHeaders(token),
+    body: JSON.stringify({
+      message: `upload ${path}`,
+      content: bytesToBase64(bytes),
+      branch: IMG_BRANCH,
+    }),
+  })
+  if (!response.ok) throw new Error(await readError(response))
+
+  clearImageCache()
+  return toStoredImage(path)
+}

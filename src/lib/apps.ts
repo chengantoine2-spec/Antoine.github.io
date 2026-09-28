@@ -5,11 +5,11 @@ export const APPS: AppDef[] = [
   { id: 'about', name: '关于', path: '/about', source: '本地静态配置', icon: 'about' },
   {
     id: 'write',
-    name: '写作',
+    name: '博客创作',
     path: '/write',
-    source: 'GitHub Issues 写入（需要本机 PAT，只存 localStorage）',
+    source: 'GitHub Issues 写入 + 图片上传（需要本机 PAT，只存 localStorage）',
     icon: 'write',
-    defaultSize: { w: 900, h: 660 },
+    defaultSize: { w: 960, h: 700 },
   },
   {
     id: 'projects',

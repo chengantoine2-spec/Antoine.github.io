@@ -1,14 +1,26 @@
-import { Suspense, lazy, startTransition, useEffect, useState } from 'react'
+import {
+  Suspense,
+  lazy,
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
 import {
   clearBlogCache,
+  clearImageCache,
   createIssue,
+  listImages,
   readToken,
   saveToken,
   setIssueState,
   updateIssue,
+  uploadImage,
   verifyToken,
   type BlogPost,
+  type StoredImage,
 } from '../../lib/github'
 
 /* markdown 是懒加载的；提前预热 + startTransition 切换，避免"同步更新里挂起"那个 React 报错 */
@@ -38,20 +50,46 @@ function draftFromPost(post: BlogPost): Draft {
 const inputCls =
   'w-full rounded border border-edge bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-dim'
 
-/** 「写作」窗口：用本机 PAT 直接增改 GitHub Issues（= 博客文章） */
+const smallBtnCls =
+  'rounded border border-edge px-2.5 py-1 text-xs text-ink hover:bg-hover disabled:opacity-50'
+
+/** 「博客创作」窗口：用本机 PAT 增改 GitHub Issues（= 文章），并管理 img 分支里的图片 */
 export function WriteWindow() {
   const { feed, loading, refresh } = useBlogFeed()
   const [token, setToken] = useState(readToken)
   const [tokenInput, setTokenInput] = useState(readToken)
   const [who, setWho] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [preview, setPreview] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [images, setImages] = useState<StoredImage[]>([])
+  const [imgLoading, setImgLoading] = useState(true)
+  const [imgError, setImgError] = useState<string | null>(null)
+
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     void import('./Markdown')
   }, [])
+
+  const loadImages = useCallback(async (force = false) => {
+    setImgLoading(true)
+    setImgError(null)
+    try {
+      setImages(await listImages({ force }))
+    } catch (error) {
+      setImgError(error instanceof Error ? error.message : '读取图片失败')
+    } finally {
+      setImgLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadImages()
+  }, [loadImages])
 
   const posts = feed?.posts ?? []
 
@@ -75,6 +113,46 @@ export function WriteWindow() {
       setNotice({ kind: 'err', text: error instanceof Error ? error.message : '验证失败' })
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** 把 markdown 插到正文光标处（没开编辑器就提示） */
+  function insertIntoBody(markdown: string) {
+    if (!draft) {
+      setNotice({ kind: 'err', text: '先点「新建文章」或「编辑」，图片就会插到正文光标处' })
+      return
+    }
+    const el = bodyRef.current
+    const at = el ? el.selectionStart : draft.body.length
+    const end = el ? el.selectionEnd : draft.body.length
+    const next = draft.body.slice(0, at) + markdown + draft.body.slice(end)
+    setDraft({ ...draft, body: next })
+    requestAnimationFrame(() => {
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(at + markdown.length, at + markdown.length)
+    })
+  }
+
+  async function onPickFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!token) {
+      setNotice({ kind: 'err', text: '先填 Token 才能上传图片' })
+      return
+    }
+    setUploading(true)
+    setNotice(null)
+    try {
+      const image = await uploadImage(token, file)
+      setNotice({ kind: 'ok', text: `已上传 ${image.name}` })
+      insertIntoBody(`\n![${image.name}](${image.url})\n`)
+      await loadImages(true)
+    } catch (error) {
+      setNotice({ kind: 'err', text: error instanceof Error ? error.message : '上传失败' })
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -126,7 +204,10 @@ export function WriteWindow() {
     setNotice(null)
     try {
       await setIssueState(token, post.id, state)
-      setNotice({ kind: 'ok', text: state === 'closed' ? `已把 #${post.id} 下架` : `已把 #${post.id} 重新显示` })
+      setNotice({
+        kind: 'ok',
+        text: state === 'closed' ? `已把 #${post.id} 下架` : `已把 #${post.id} 重新显示`,
+      })
       clearBlogCache()
       refresh()
     } catch (error) {
@@ -145,22 +226,18 @@ export function WriteWindow() {
             type="password"
             value={tokenInput}
             onChange={(event) => setTokenInput(event.target.value)}
-            placeholder="粘贴 PAT（需要 Issues 读写权限）"
+            placeholder="粘贴 PAT（Issues 读写 + Contents 写入）"
             aria-label="GitHub Token"
             className={`${inputCls} max-w-md flex-1`}
           />
-          <button
-            type="button"
-            onClick={() => applyToken(tokenInput)}
-            className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover"
-          >
+          <button type="button" onClick={() => applyToken(tokenInput)} className={smallBtnCls}>
             保存
           </button>
           <button
             type="button"
             onClick={checkToken}
             disabled={!token || busy}
-            className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover disabled:opacity-50"
+            className={smallBtnCls}
           >
             验证
           </button>
@@ -170,15 +247,15 @@ export function WriteWindow() {
               setTokenInput('')
               applyToken('')
             }}
-            className="rounded border border-edge px-3 py-1.5 text-xs text-dim hover:bg-hover"
+            className={`${smallBtnCls} text-dim`}
           >
             清除
           </button>
         </div>
         <p className="text-[11px] leading-relaxed text-dim">
           Token 只存在这台浏览器的 localStorage，不会进仓库、不会进代码；但同源脚本能读到它，
-          所以别在公共电脑上填。需要 fine-grained token 的「Issues: Read and write」权限，
-          或 classic token 的 <code>public_repo</code> / <code>repo</code> 范围。
+          所以别在公共电脑上填。需要 fine-grained token 的「Issues: Read and write」+「Contents: Read and
+          write」权限，或 classic token 的 <code>public_repo</code> / <code>repo</code> 范围。
           {who ? ` 当前登录：${who}` : ''}
         </p>
       </section>
@@ -194,7 +271,7 @@ export function WriteWindow() {
       ) : null}
 
       {!token ? (
-        <p className="text-sm text-dim">填入 Token 之后才能新建或修改文章。</p>
+        <p className="text-sm text-dim">填入 Token 之后才能新建或修改文章（图片可以浏览，不能上传）。</p>
       ) : draft ? (
         <section className="space-y-3">
           <header className="flex items-center justify-between gap-2">
@@ -205,7 +282,7 @@ export function WriteWindow() {
               <button
                 type="button"
                 onClick={() => startTransition(() => setPreview((value) => !value))}
-                className="rounded border border-edge px-2.5 py-1 text-xs text-ink hover:bg-hover"
+                className={smallBtnCls}
               >
                 {preview ? '继续编辑' : '预览'}
               </button>
@@ -215,7 +292,7 @@ export function WriteWindow() {
                   setDraft(null)
                   setPreview(false)
                 }}
-                className="rounded border border-edge px-2.5 py-1 text-xs text-dim hover:bg-hover"
+                className={`${smallBtnCls} text-dim`}
               >
                 取消
               </button>
@@ -272,11 +349,12 @@ export function WriteWindow() {
             </div>
           ) : (
             <textarea
+              ref={bodyRef}
               value={draft.body}
               onChange={(event) => setDraft({ ...draft, body: event.target.value })}
-              placeholder="正文（支持 markdown：标题、列表、代码块、表格、图片）"
+              placeholder="正文（markdown；下面点一张图就会插到光标处）"
               aria-label="正文"
-              rows={14}
+              rows={12}
               className={`${inputCls} resize-y font-mono text-[13px] leading-relaxed`}
             />
           )}
@@ -298,7 +376,7 @@ export function WriteWindow() {
                 refresh()
               }}
               disabled={loading}
-              className="rounded border border-edge px-3 py-1.5 text-xs text-dim hover:bg-hover disabled:opacity-50"
+              className={`${smallBtnCls} text-dim`}
             >
               {loading ? '读取中…' : '刷新列表'}
             </button>
@@ -341,6 +419,63 @@ export function WriteWindow() {
           ) : null}
         </section>
       )}
+
+      {/* 图片：上传到 img 分支（需要 Token），浏览已存图片不需要 Token */}
+      <section className="space-y-2 rounded-lg border border-edge bg-surface-2 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-xs font-semibold tracking-wide text-dim">图片（img 分支）</h3>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onPickFile}
+            aria-label="选择图片文件"
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className={smallBtnCls}
+          >
+            {uploading ? '上传中…' : '上传图片'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearImageCache()
+              void loadImages(true)
+            }}
+            disabled={imgLoading}
+            className={`${smallBtnCls} text-dim`}
+          >
+            {imgLoading ? '读取中…' : '刷新图库'}
+          </button>
+          <span className="text-[11px] text-dim">点一张图 → 插到正文光标处（会自动带上 jsDelivr 地址）</span>
+        </div>
+
+        {imgError ? <p className="text-xs text-accent">{imgError}</p> : null}
+
+        {images.length === 0 && !imgLoading && !imgError ? (
+          <p className="text-xs text-dim">img 分支里还没有图片。</p>
+        ) : null}
+
+        <ul className="flex flex-wrap gap-2">
+          {images.map((image) => (
+            <li key={image.path}>
+              <button
+                type="button"
+                title={`${image.name}\n${image.url}`}
+                onClick={() => insertIntoBody(`![${image.name}](${image.url})`)}
+                className="block h-20 w-28 overflow-hidden rounded border border-edge bg-cover bg-center hover:border-accent"
+                style={{ backgroundImage: `url("${image.url}")` }}
+              >
+                <span className="sr-only">{image.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   )
 }
