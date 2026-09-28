@@ -8,6 +8,9 @@
 - 其余 3 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
 - **博客创作**窗口用本机 PAT 直接增改 GitHub Issues（= 博客文章），并上传/浏览 img 分支里的图片；
   没有 PAT 的访客只能浏览图片，写入能力拿不到
+- 编辑器能力：**分屏实时预览**（编辑 / 分屏 / 预览三档）、markdown 工具栏
+  （标题、加粗、斜体、删除线、行内代码、代码块、引用、列表、表格、链接）、
+  快捷键 Ctrl+B / Ctrl+I / Ctrl+K / **Ctrl+S 保存**、草稿自动保存、图库点图即插入光标处
 
 ## 技术栈
 
@@ -92,6 +95,7 @@ rounded-window / rounded-dock    圆角
 | `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
 | `desktop.ghToken` | **博客创作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
 | `desktop.imgTree` | img 分支图片清单缓存，TTL 10 分钟（浏览图库不需要 Token） |
+| `desktop.draft` | 编辑中的草稿（自动保存，发布/取消后清除），防止误关窗口丢内容 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -103,6 +107,10 @@ rounded-window / rounded-dock    圆角
   上传走 Contents API（`PUT /contents/<path>` + `branch: 'img'`），需要 Token；
   **浏览图库是公开读取，不需要 Token**。
 - 写操作一律浏览器直连 `api.github.com`，Token 只在本机 localStorage。
+
+> ⚠️ **测试期标注（2026-09）**：验证时用过一次真实 PAT，该 Token 已出现在会话记录里。
+> 现在按"测试阶段、暂不处理安全"处理，**正式上线前必须撤销并重建**。
+> 影响范围：`desktop.ghToken` 泄露 = 该仓库的 Issues 与 Contents 写入权限。
 
 ## 三个已经踩过的坑（别再踩）
 
