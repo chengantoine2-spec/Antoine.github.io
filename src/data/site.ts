@@ -4,6 +4,11 @@
  */
 export const SITE = {
   name: '焦糖布丁',
+  /**
+   * 站标（出处 public/logo.svg）。**必须自己拼 BASE_URL**：
+   * src 里的字符串 Vite 不会改写，写死 '/logo.svg' 在子路径部署下会指到域名根目录而 404。
+   */
+  logo: `${import.meta.env.BASE_URL}logo.svg`,
   tagline: '一个把日常慢慢熬出味道的地方',
   intro: [
     '这里是我的个人站。所有内容都放在一个「桌面」里：桌面背景、任务栏、窗口，博客只是其中一个窗口。',

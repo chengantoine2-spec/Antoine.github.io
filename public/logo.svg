@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="焦糖布丁">
+  <title>焦糖布丁</title>
+  <!-- 个人站 logo：一盘浇了焦糖的布丁。
+       配色取自 src/styles/tokens.css 的 caramel 色板（caramel-50 #FFF8F0 → caramel-900 #3D2B1F）。
+       public/logo.png 由 tools/make-logo.mjs 从本文件渲染；改这里，再跑一次脚本即可。
+       形状都画在"自然坐标"里，最后整组缩放居中——调构图只动最后那个 transform。 -->
+  <defs>
+    <linearGradient id="tile" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#c58a5b" />
+      <stop offset="0.5" stop-color="#9c6539" />
+      <stop offset="1" stop-color="#5e3519" />
+    </linearGradient>
+    <linearGradient id="tileGloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff8f0" stop-opacity="0.3" />
+      <stop offset="0.6" stop-color="#fff8f0" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="custard" gradientUnits="userSpaceOnUse" x1="176" y1="200" x2="344" y2="372">
+      <stop offset="0" stop-color="#fdf3dc" />
+      <stop offset="0.42" stop-color="#f7d795" />
+      <stop offset="1" stop-color="#cd8f3f" />
+    </linearGradient>
+    <linearGradient id="caramel" gradientUnits="userSpaceOnUse" x1="256" y1="172" x2="256" y2="372">
+      <stop offset="0" stop-color="#eab26c" />
+      <stop offset="0.28" stop-color="#bd6f28" />
+      <stop offset="1" stop-color="#7d4114" />
+    </linearGradient>
+    <linearGradient id="pool" gradientUnits="userSpaceOnUse" x1="256" y1="358" x2="256" y2="390">
+      <stop offset="0" stop-color="#cf8b3c" />
+      <stop offset="1" stop-color="#8a4a18" />
+    </linearGradient>
+    <linearGradient id="plate" gradientUnits="userSpaceOnUse" x1="256" y1="356" x2="256" y2="418">
+      <stop offset="0" stop-color="#f8eeda" />
+      <stop offset="1" stop-color="#cfb28e" />
+    </linearGradient>
+
+    <clipPath id="tileClip"><rect width="512" height="512" rx="116" /></clipPath>
+    <clipPath id="bodyClip">
+      <path d="M194 204 C186 254 172 328 166 356 Q163 372 180 372 L332 372 Q349 372 346 356 C340 328 326 254 318 204 Z" />
+    </clipPath>
+
+    <filter id="blur14" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14" /></filter>
+    <filter id="blur9" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9" /></filter>
+    <filter id="blur6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" /></filter>
+  </defs>
+
+  <!-- 圆角方底 -->
+  <g clip-path="url(#tileClip)">
+    <rect width="512" height="512" fill="url(#tile)" />
+    <rect width="512" height="512" fill="url(#tileGloss)" />
+    <ellipse cx="256" cy="504" rx="260" ry="88" fill="#42250f" opacity="0.22" filter="url(#blur14)" />
+  </g>
+
+  <g transform="translate(0 -54) translate(256 256) scale(1.44) translate(-256 -256)">
+    <!-- 盘底贴着的一圈接触阴影 -->
+    <ellipse cx="256" cy="392" rx="120" ry="15" fill="#3d2b1f" opacity="0.28" filter="url(#blur9)" />
+
+    <!-- 盘子：先底面厚度，再盖盘面 -->
+    <ellipse cx="256" cy="392" rx="134" ry="27" fill="#cbb08a" />
+    <ellipse cx="256" cy="385" rx="134" ry="27" fill="url(#plate)" />
+    <ellipse cx="256" cy="383" rx="117" ry="22" fill="none" stroke="#fff8f0" stroke-opacity="0.5" stroke-width="3" />
+    <ellipse cx="256" cy="382" rx="98" ry="17" fill="#efdabd" opacity="0.75" />
+
+    <!-- 盘上积着的焦糖：亮顶面 + 前缘一道反光 -->
+    <ellipse cx="256" cy="370" rx="107" ry="18" fill="url(#pool)" />
+    <path d="M167 375 C198 388 314 388 345 373" fill="none" stroke="#f0b169" stroke-opacity="0.4" stroke-width="4.5" stroke-linecap="round" />
+    <ellipse cx="228" cy="365" rx="50" ry="7" fill="#dd9a55" opacity="0.35" filter="url(#blur6)" />
+
+    <!-- 布丁坯 -->
+    <path d="M194 204 C186 254 172 328 166 356 Q163 372 180 372 L332 372 Q349 372 346 356 C340 328 326 254 318 204 Z" fill="url(#custard)" />
+
+    <g clip-path="url(#bodyClip)">
+      <!-- 褶：三高光 + 四暗线（少了才不糊），按锥形上下收拢 -->
+      <g fill="none" stroke-linecap="round" stroke-width="10">
+        <g stroke="#fffdf7" stroke-opacity="0.15">
+          <path d="M220 206 C215 274 209 322 204 372" />
+          <path d="M256 206 C256 274 256 322 256 372" />
+          <path d="M292 206 C297 274 303 322 308 372" />
+        </g>
+        <g stroke="#96602a" stroke-opacity="0.1">
+          <path d="M202 206 C194 274 186 322 178 372" />
+          <path d="M238 206 C235 274 233 322 230 372" />
+          <path d="M274 206 C277 274 279 322 282 372" />
+          <path d="M310 206 C318 274 326 322 334 372" />
+        </g>
+      </g>
+      <!-- 左受光、右背光，底部再压一层贴着盘口的暗部 -->
+      <ellipse cx="208" cy="286" rx="30" ry="96" fill="#fffdf7" opacity="0.32" filter="url(#blur9)" />
+      <ellipse cx="322" cy="300" rx="30" ry="84" fill="#8a5a2b" opacity="0.26" filter="url(#blur9)" />
+      <ellipse cx="256" cy="371" rx="120" ry="20" fill="#7d4420" opacity="0.36" filter="url(#blur9)" />
+    </g>
+
+    <!-- 焦糖顶盖：圆顶 + 一圈往下淌的裙边，边缘才是曲的 -->
+    <path d="M194 204 C194 168 318 168 318 204 Z" fill="url(#caramel)" />
+    <path d="M194 200 C194 206 198 216 204 214 C212 211 216 206 222 210 C228 214 232 218 238 213 C244 208 250 206 256 211 C262 216 268 218 274 212 C280 207 286 206 292 211 C298 216 306 216 312 210 C316 206 318 202 318 198 Z" fill="url(#caramel)" />
+    <!-- 挂边：五条长短不一的焦糖舌，比顶盖窄一点，别糊成一坨 -->
+    <g fill="url(#caramel)">
+      <path d="M194 204 C192 250 191 298 197 312 C201 324 207 323 210 310 C211 282 210 240 210 206 Z" />
+      <path d="M220 204 C218 242 217 244 223 256 C227 268 233 267 236 254 C237 226 236 232 236 206 Z" />
+      <path d="M246 204 C245 250 244 276 250 286 C254 296 260 295 262 282 C263 258 262 234 262 206 Z" />
+      <path d="M272 204 C271 236 270 238 276 248 C280 260 286 259 288 246 C289 222 288 226 288 206 Z" />
+      <path d="M298 204 C297 248 296 288 302 300 C306 312 312 311 314 298 C315 274 314 236 314 206 Z" />
+    </g>
+    <!-- 焦糖的光泽：顶盖上一道柔光 + 一个亮点，两端挂边上各一道竖光 -->
+    <ellipse cx="226" cy="186" rx="30" ry="7" fill="#ffd79a" opacity="0.5" filter="url(#blur6)" transform="rotate(-8 226 186)" />
+    <ellipse cx="219" cy="184" rx="13" ry="3.5" fill="#fff4e0" opacity="0.5" transform="rotate(-8 219 184)" />
+    <path d="M199 222 C197 254 196 288 199 306" fill="none" stroke="#ffe7c2" stroke-opacity="0.26" stroke-width="4" stroke-linecap="round" />
+    <path d="M305 222 C303 252 302 284 305 300" fill="none" stroke="#ffe7c2" stroke-opacity="0.2" stroke-width="4" stroke-linecap="round" />
+  </g>
+</svg>
