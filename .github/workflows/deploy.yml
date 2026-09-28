@@ -1,14 +1,14 @@
 name: Deploy to GitHub Pages
 
-# 现在是**手动触发**，不会因为 push 自动上线：
-# 这个仓库（chengantoine2-spec/Antoine.github.io）当前正托管着旧站点，
-# 一旦 push 触发就会把它覆盖掉。等确认要换站时，把下面 push 那两行取消注释即可。
+# 已启用 push 触发：推到 main 就会构建并发布。
+# 旧站已备份在远端分支 legacy-xp-desktop，需要时可以从那里恢复。
+# 想改回手动发布：把 push 那两行注释掉即可。
 #
-# 首次启用前：仓库 Settings → Pages，把 Source 设为 "GitHub Actions"。
+# Pages 的 Source 必须是 "GitHub Actions"（仓库 Settings → Pages）。
 
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
