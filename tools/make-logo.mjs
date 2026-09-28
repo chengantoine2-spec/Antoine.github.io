@@ -64,7 +64,7 @@ try {
   const page = await browser.newPage({ viewport: { width: size, height: size } })
   await page.setContent(html, { waitUntil: 'load' })
   const el = await page.$('svg')
-  // omitBackground：圆角外留透明，PNG 贴到浅色/深色背景上都不出白框
+  // omitBackground：背景整体保持透明，PNG 贴到浅色/深色背景上都不出色块
   await el.screenshot({ path: outPath, omitBackground: true })
 } finally {
   await browser.close()

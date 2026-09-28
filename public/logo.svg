@@ -1,19 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="焦糖布丁">
   <title>焦糖布丁</title>
-  <!-- 个人站 logo：一盘浇了焦糖的布丁。
+  <!-- 个人站 logo：一盘浇了焦糖的布丁，**背景透明**（没有底板色块），
+       放到浅色、深色或图片背景上都不出错。
        配色取自 src/styles/tokens.css 的 caramel 色板（caramel-50 #FFF8F0 → caramel-900 #3D2B1F）。
        public/logo.png 由 tools/make-logo.mjs 从本文件渲染；改这里，再跑一次脚本即可。
-       形状都画在"自然坐标"里，最后整组缩放居中——调构图只动最后那个 transform。 -->
+       形状都画在"自然坐标"里（该组的中心在 256 294），最后整组以自身中心缩放居中——
+       调构图只动最后那个 transform，scale 越大留白越少。 -->
   <defs>
-    <linearGradient id="tile" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#c58a5b" />
-      <stop offset="0.5" stop-color="#9c6539" />
-      <stop offset="1" stop-color="#5e3519" />
-    </linearGradient>
-    <linearGradient id="tileGloss" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fff8f0" stop-opacity="0.3" />
-      <stop offset="0.6" stop-color="#fff8f0" stop-opacity="0" />
-    </linearGradient>
     <linearGradient id="custard" gradientUnits="userSpaceOnUse" x1="176" y1="200" x2="344" y2="372">
       <stop offset="0" stop-color="#fdf3dc" />
       <stop offset="0.42" stop-color="#f7d795" />
@@ -33,25 +26,17 @@
       <stop offset="1" stop-color="#cfb28e" />
     </linearGradient>
 
-    <clipPath id="tileClip"><rect width="512" height="512" rx="116" /></clipPath>
     <clipPath id="bodyClip">
       <path d="M194 204 C186 254 172 328 166 356 Q163 372 180 372 L332 372 Q349 372 346 356 C340 328 326 254 318 204 Z" />
     </clipPath>
 
-    <filter id="blur14" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14" /></filter>
     <filter id="blur9" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9" /></filter>
     <filter id="blur6" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" /></filter>
   </defs>
 
-  <!-- 圆角方底 -->
-  <g clip-path="url(#tileClip)">
-    <rect width="512" height="512" fill="url(#tile)" />
-    <rect width="512" height="512" fill="url(#tileGloss)" />
-    <ellipse cx="256" cy="504" rx="260" ry="88" fill="#42250f" opacity="0.22" filter="url(#blur14)" />
-  </g>
-
-  <g transform="translate(0 -54) translate(256 256) scale(1.44) translate(-256 -256)">
-    <!-- 盘底贴着的一圈接触阴影 -->
+  <!-- 没有底板，图形就是整个画面；1.55 时四周留白约 9%，16px 标签页下也够认 -->
+  <g transform="translate(256 256) scale(1.55) translate(-256 -294)">
+    <!-- 盘底贴着的一圈接触阴影（透明背景下靠它把盘子"放"在平面上） -->
     <ellipse cx="256" cy="392" rx="120" ry="15" fill="#3d2b1f" opacity="0.28" filter="url(#blur9)" />
 
     <!-- 盘子：先底面厚度，再盖盘面 -->
