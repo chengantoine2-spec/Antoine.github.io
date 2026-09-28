@@ -116,12 +116,9 @@ export function WriteWindow() {
     }
   }
 
-  /** 把 markdown 插到正文光标处（没开编辑器就提示） */
-  function insertIntoBody(markdown: string) {
-    if (!draft) {
-      setNotice({ kind: 'err', text: '先点「新建文章」或「编辑」，图片就会插到正文光标处' })
-      return
-    }
+  /** 把 markdown 插到正文光标处；返回是否真的插进去了（没开编辑器就返回 false） */
+  function insertIntoBody(markdown: string): boolean {
+    if (!draft) return false
     const el = bodyRef.current
     const at = el ? el.selectionStart : draft.body.length
     const end = el ? el.selectionEnd : draft.body.length
@@ -132,6 +129,7 @@ export function WriteWindow() {
       el.focus()
       el.setSelectionRange(at + markdown.length, at + markdown.length)
     })
+    return true
   }
 
   async function onPickFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -146,8 +144,14 @@ export function WriteWindow() {
     setNotice(null)
     try {
       const image = await uploadImage(token, file)
-      setNotice({ kind: 'ok', text: `已上传 ${image.name}` })
-      insertIntoBody(`\n![${image.name}](${image.url})\n`)
+      /* 先插入再报结果：没开编辑器时不要让提示把"已上传"顶掉 */
+      const inserted = insertIntoBody(`\n![${image.name}](${image.url})\n`)
+      setNotice({
+        kind: 'ok',
+        text: inserted
+          ? `已上传 ${image.name}，并插入到正文光标处`
+          : `已上传 ${image.name}；点「新建文章」或「编辑」后就能插进正文`,
+      })
       await loadImages(true)
     } catch (error) {
       setNotice({ kind: 'err', text: error instanceof Error ? error.message : '上传失败' })
@@ -230,7 +234,12 @@ export function WriteWindow() {
             aria-label="GitHub Token"
             className={`${inputCls} max-w-md flex-1`}
           />
-          <button type="button" onClick={() => applyToken(tokenInput)} className={smallBtnCls}>
+          <button
+            type="button"
+            aria-label="保存 Token"
+            onClick={() => applyToken(tokenInput)}
+            className={smallBtnCls}
+          >
             保存
           </button>
           <button
@@ -298,6 +307,7 @@ export function WriteWindow() {
               </button>
               <button
                 type="button"
+                aria-label={draft.number === null ? '发布文章' : '保存文章'}
                 onClick={submit}
                 disabled={busy}
                 className="rounded border border-accent bg-accent px-2.5 py-1 text-xs text-accent-ink hover:opacity-90 disabled:opacity-50"
@@ -466,7 +476,14 @@ export function WriteWindow() {
               <button
                 type="button"
                 title={`${image.name}\n${image.url}`}
-                onClick={() => insertIntoBody(`![${image.name}](${image.url})`)}
+                onClick={() => {
+                  if (!insertIntoBody(`![${image.name}](${image.url})`)) {
+                    setNotice({
+                      kind: 'err',
+                      text: '先点「新建文章」或「编辑」，图片会插到正文光标处',
+                    })
+                  }
+                }}
                 className="block h-20 w-28 overflow-hidden rounded border border-edge bg-cover bg-center hover:border-accent"
                 style={{ backgroundImage: `url("${image.url}")` }}
               >

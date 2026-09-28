@@ -116,6 +116,14 @@ export function clearBlogCache(): void {
   }
 }
 
+/** 读取用的头：本机有 Token 就带上（未认证 60 次/小时 → 认证后 5000 次/小时） */
+function readHeaders(): HeadersInit {
+  const token = readToken()
+  return token
+    ? { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` }
+    : { Accept: 'application/vnd.github+json' }
+}
+
 export async function loadPosts(options: { force?: boolean } = {}): Promise<BlogFeed> {
   const cached = readCache()
 
@@ -125,7 +133,7 @@ export async function loadPosts(options: { force?: boolean } = {}): Promise<Blog
 
   try {
     const response = await fetch(`${API}?state=all&per_page=50&sort=created&direction=desc`, {
-      headers: { Accept: 'application/vnd.github+json' },
+      headers: readHeaders(),
     })
 
     if (!response.ok) {
@@ -304,7 +312,7 @@ export async function listImages(options: { force?: boolean } = {}): Promise<Sto
     }
   }
 
-  const response = await fetch(TREE_API, { headers: { Accept: 'application/vnd.github+json' } })
+  const response = await fetch(TREE_API, { headers: readHeaders() })
   if (!response.ok) throw new Error(await readError(response))
 
   const data = (await response.json()) as { tree?: Array<{ path?: string; type?: string }> }
