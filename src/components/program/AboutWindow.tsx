@@ -11,7 +11,7 @@ export function AboutWindow() {
       <div className="reading__inner space-y-5">
       {/* 站标自带圆角和外圈透明，别再套 rounded——会圆角叠圆角 */}
       <header className="flex items-center gap-3">
-        <img src={SITE.logo} alt="" width={48} height={48} className="h-12 w-12 shrink-0" />
+        <img src={SITE.logo} alt="" width={48} height={48} className="logo-mark h-12 w-12 shrink-0" />
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-ink">{SITE.name}</h2>
           <p className="text-sm text-dim">{SITE.tagline}</p>

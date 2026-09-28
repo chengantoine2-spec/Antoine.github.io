@@ -44,7 +44,7 @@ export function StartMenu({ open, position, onClose }: StartMenuProps) {
         }`}
       >
         <p className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-dim">
-          <img src={SITE.logo} alt="" width={20} height={20} className="h-5 w-5 shrink-0" />
+          <img src={SITE.logo} alt="" width={20} height={20} className="logo-mark h-5 w-5 shrink-0" />
           所有项目
         </p>
         <ul className="grid grid-cols-2 gap-1">

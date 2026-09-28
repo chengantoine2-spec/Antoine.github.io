@@ -184,6 +184,14 @@
   cursor: nwse-resize;
 }
 
+/* ── 站标：透明底图形在小尺寸（标签页 16px、开始菜单 20px）下分量偏轻，
+      用一层很轻的投影把轮廓托住 ──
+      必须是 filter: drop-shadow 而不是 box-shadow —— 后者画的是矩形，等于又把背景加回来了；
+      drop-shadow 跟着图形自身的 alpha 走，且深浅由主题令牌给（图形是彩色的，只能用中性色）。 */
+.logo-mark {
+  filter: var(--logo-shadow);
+}
+
 /* ── markdown 渲染（.md）：颜色全部取主题令牌，三套主题下都正确 ── */
 .md {
   color: var(--c-text);

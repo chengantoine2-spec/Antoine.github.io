@@ -16,6 +16,8 @@
   --c-accent: #a96f44;
   --c-accent-fg: #fff8f0;
   --c-hover: rgba(255, 248, 240, 0.18);
+  /* 站标的投影：透明底图形在浅色面上靠它把轮廓托出来（.logo-mark 只读这个变量） */
+  --logo-shadow: drop-shadow(0 1px 1.5px rgba(61, 43, 31, 0.38));
 
   --r-window: 12px;
   --r-dock: 16px;
@@ -33,6 +35,7 @@
   --c-accent: #8a6a45;
   --c-accent-fg: #fbf7ee;
   --c-hover: rgba(120, 100, 75, 0.18);
+  --logo-shadow: drop-shadow(0 1px 1.5px rgba(58, 50, 38, 0.35));
 
   --r-window: 10px;
   --r-dock: 14px;
@@ -50,6 +53,8 @@
   --c-accent: #c68a5b;
   --c-accent-fg: #1b1d22;
   --c-hover: rgba(255, 255, 255, 0.1);
+  /* 深色面上阴影几乎看不见，但还是给一点，让布丁和盘子的边缘有厚度 */
+  --logo-shadow: drop-shadow(0 1.5px 2px rgba(0, 0, 0, 0.5));
 
   --r-window: 12px;
   --r-dock: 16px;

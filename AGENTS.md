@@ -78,10 +78,12 @@ text-ink / text-dim              正文 / 次要文字
 bg-accent / text-accent-ink      强调（当前项、主按钮）
 bg-hover                         悬停底色
 rounded-window / rounded-dock    圆角
+logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
 ```
 
 **禁止写死颜色**（`#fff`、`rgb(...)`、`bg-white` 这类字面量一律不许出现在组件里）。
 要加主题就在 `tokens.css` 里加一组变量块 —— 组件一行都不用改。
+站标的投影同理：三套主题各有一个 `--logo-shadow`，加主题时别忘了补上它。
 
 ## localStorage 键
 
