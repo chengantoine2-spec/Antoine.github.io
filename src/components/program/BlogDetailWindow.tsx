@@ -35,7 +35,8 @@ export function BlogDetailWindow() {
   }
 
   return (
-    <article className="mx-auto max-w-[72ch] space-y-4">
+    <article className="reading">
+      <div className="reading__inner space-y-4">
       <button
         type="button"
         onClick={() => navigate('/blog')}
@@ -70,6 +71,7 @@ export function BlogDetailWindow() {
           在 GitHub 上看原文 ↗
         </a>
       </footer>
+      </div>
     </article>
   )
 }

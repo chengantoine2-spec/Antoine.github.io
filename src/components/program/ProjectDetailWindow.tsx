@@ -26,7 +26,8 @@ export function ProjectDetailWindow() {
   }
 
   return (
-    <article className="mx-auto max-w-[68ch] space-y-5">
+    <article className="reading">
+      <div className="reading__inner space-y-5">
       <button
         type="button"
         onClick={() => navigate('/projects')}
@@ -94,6 +95,7 @@ export function ProjectDetailWindow() {
           ))}
         </ul>
       ) : null}
+      </div>
     </article>
   )
 }

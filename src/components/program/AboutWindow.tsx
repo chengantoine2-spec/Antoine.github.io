@@ -7,7 +7,8 @@ import { SITE } from '../../data/site'
  */
 export function AboutWindow() {
   return (
-    <article className="mx-auto max-w-[68ch] space-y-5">
+    <article className="reading">
+      <div className="reading__inner space-y-5">
       <header className="space-y-1">
         <h2 className="text-lg font-semibold text-ink">{SITE.name}</h2>
         <p className="text-sm text-dim">{SITE.tagline}</p>
@@ -42,6 +43,7 @@ export function AboutWindow() {
           </li>
         ))}
       </ul>
+      </div>
     </article>
   )
 }

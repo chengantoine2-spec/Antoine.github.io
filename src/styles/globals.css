@@ -101,6 +101,66 @@
   z-index: 10;
 }
 
+/* ── 阅读区：跟着「窗口」宽度自适应（容器查询，看的是窗口宽度而不是视口） ──
+   .reading 建立容器，.reading__inner 是真正的正文列；窄窗缩字号与间距，宽窗放大并放宽列宽 */
+.reading {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.reading__inner {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72ch;
+}
+
+@container (max-width: 460px) {
+  .reading__inner {
+    max-width: 100%;
+  }
+  .reading .md {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .reading .md h1 {
+    font-size: 1.05rem;
+  }
+  .reading .md h2 {
+    font-size: 1rem;
+  }
+  .reading .md pre {
+    padding: 0.6em 0.7em;
+  }
+}
+
+@container (min-width: 760px) {
+  .reading__inner {
+    max-width: 76ch;
+  }
+  .reading .md {
+    font-size: 15px;
+    line-height: 1.85;
+  }
+  .reading .md h1 {
+    font-size: 1.35rem;
+  }
+  .reading .md h2 {
+    font-size: 1.18rem;
+  }
+}
+
+@container (min-width: 1040px) {
+  .reading .md {
+    font-size: 16px;
+  }
+}
+
+/* 表格外面的滚动壳：窄窗里表格自己横滚，正文不被撑破 */
+.md-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* 一期唯一动画：窗口打开 */
 .window {
   animation: win-in 130ms ease-out both;
