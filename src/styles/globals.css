@@ -94,11 +94,16 @@
   pointer-events: none;
 }
 
-/* 窗口层：躲开任务栏，独立层叠上下文，窗口 z 不会盖过外壳 */
+/* 窗口层：平时躲开任务栏（靠 inset），并自成层叠上下文，窗口之间只比各自的 z 就行 */
 .desktop__layer {
   position: absolute;
   inset: var(--inset-top) var(--inset-right) var(--inset-bottom) var(--inset-left);
   z-index: 10;
+}
+
+/* 只在有窗口最大化时提级：任务栏是 z-50，不提级的话窗口就算铺满了也还是被任务栏压住 */
+.desktop__layer--over {
+  z-index: 60;
 }
 
 /* ── 阅读区：跟着「窗口」宽度自适应（容器查询，看的是窗口宽度而不是视口） ──
@@ -270,8 +275,12 @@
   animation: win-in 130ms ease-out both;
 }
 
-/* 最大化用 !important 压过组件上的内联几何值 */
+/* 最大化：铺满**整个视口**，连任务栏那块一起盖住。
+   所以必须用 fixed —— 窗口层的 inset 本来就给任务栏让了位，在里面用绝对定位
+   只能铺满"让位之后"的那块区域（表现就是底部留一条任务栏）。
+   fixed 的包含块是视口，不受窗口层 inset 影响；width/height 的 100% 也就是视口尺寸。 */
 .window--max {
+  position: fixed;
   left: 0 !important;
   top: 0 !important;
   width: 100% !important;

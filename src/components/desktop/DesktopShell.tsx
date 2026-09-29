@@ -77,7 +77,13 @@ export function DesktopShell() {
         />
       ) : null}
 
-      <div className="desktop__layer" ref={layerRef}>
+      {/* 有窗口最大化时给窗口层提级：任务栏是 z-50，不压过它就还是会盖在窗口上面 */}
+      <div
+        className={`desktop__layer${
+          win && !win.minimized && win.maximized ? ' desktop__layer--over' : ''
+        }`}
+        ref={layerRef}
+      >
         {win && !win.minimized ? (
           <Window key={win.id} win={win} onClose={() => navigate('/')}>
             <Outlet />

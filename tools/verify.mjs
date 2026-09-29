@@ -257,17 +257,31 @@ async function run() {
   const maxed = await p.evaluate(() => {
     const win = document.querySelector('[aria-label="博客 窗口"]')
     const btn = win?.querySelector('header button[aria-pressed]')
+    const dock = document.querySelector('[aria-label="任务栏"]')
+    const w = win?.getBoundingClientRect()
+    const d = dock?.getBoundingClientRect()
+    /* 命中测试：任务栏中心点上最顶层的元素若不属于任务栏，说明窗口真的把它盖住了 */
+    const hit = d ? document.elementFromPoint(d.left + d.width / 2, d.top + d.height / 2) : null
     return {
       label: btn?.getAttribute('aria-label') ?? '',
       pressed: btn?.getAttribute('aria-pressed') === 'true',
       isMax: (win?.className ?? '').includes('window--max'),
       shapes: btn ? btn.querySelectorAll('svg rect, svg path').length : 0,
+      fillsViewport:
+        !!w && Math.round(w.width) === window.innerWidth && Math.round(w.height) === window.innerHeight,
+      coversDock: !!w && !!d && w.top <= d.top && w.bottom >= d.bottom && w.left <= d.left && w.right >= d.right,
+      dockOnTop: !!dock && !!hit && dock.contains(hit),
     }
   })
   check(
     '最大化后标题栏按钮变成「还原」（图标换成两个方块）',
     maxed.label === '还原' && maxed.pressed && maxed.isMax && maxed.shapes === 2,
-    JSON.stringify(maxed),
+    JSON.stringify({ label: maxed.label, pressed: maxed.pressed, isMax: maxed.isMax, shapes: maxed.shapes }),
+  )
+  check(
+    '最大化后铺满视口并盖住任务栏',
+    maxed.fillsViewport && maxed.coversDock && !maxed.dockOnTop,
+    JSON.stringify({ fillsViewport: maxed.fillsViewport, coversDock: maxed.coversDock, dockOnTop: maxed.dockOnTop }),
   )
 
   // 再点一次还回去，别把窗口留在最大化状态给后面的检查添乱
