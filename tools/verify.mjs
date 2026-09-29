@@ -321,6 +321,22 @@ async function run() {
   await p.click(MAX_BTN)
   await p.waitForTimeout(200)
 
+  /* 默认窗口尺寸（1000 宽 → 容器 958）下右栏也必须出来：
+     断点曾写成 960，比容器宽 2px，于是默认尺寸下永远是单列 */
+  const defaultRail = await p.evaluate(() => {
+    const win = document.querySelector('.window')
+    const rail = document.querySelector('.article__rail--right')
+    return {
+      windowWidth: win ? Math.round(win.getBoundingClientRect().width) : 0,
+      right: !!rail && getComputedStyle(rail).display !== 'none' && rail.getBoundingClientRect().width > 0,
+    }
+  })
+  check(
+    '默认窗口宽度下文章右栏就出现（断点别卡在窗口内边距上）',
+    defaultRail.right === true,
+    JSON.stringify(defaultRail),
+  )
+
   // 11d 任务栏上固定的「全屏」按钮：走 Fullscreen API，要真的进全屏（连浏览器窗口一起盖住），
   //     按钮自己也要跟着状态变 —— 和"窗口最大化"不是一回事。
   //     标题栏已经没有全屏按钮了（挪到任务栏 + 设置里），这里顺手断言它不在

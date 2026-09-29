@@ -190,8 +190,9 @@
   grid-area: right;
 }
 
-/* ≥960px 才放得下「正文 + 一条窄栏」 */
-@container (min-width: 960px) {
+/* ≥940px 才放得下「正文 + 一条窄栏」。注意别写成 960 —— 博客窗口默认 1000 宽，
+   扣掉窗口内边距只剩 958，卡在 960 上就永远看不到右栏了 */
+@container (min-width: 940px) {
   .article__grid {
     grid-template-columns: minmax(0, 88ch) 208px;
     grid-template-areas: 'main right';
