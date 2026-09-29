@@ -2,8 +2,22 @@ import type { DockPosition } from '../types/desktop'
 
 /** 任务栏默认厚度：图标 40 + 内边距 12 + 边框 2 */
 export const DOCK_THICKNESS = 54
-/** 厚度下限（再薄就装不下按钮） */
+/** 厚度下限（再薄就装不下默认尺寸的按钮） */
 export const DOCK_MIN_THICKNESS = 48
+
+/* 任务栏内部几何：Dock 组件与下面的厚度下限共用，改一处即可 */
+export const DOCK_GAP = 4
+export const DOCK_PAD = 6
+export const DOCK_BORDER = 1
+
+/**
+ * 厚度下限：手动定了**固定图标尺寸**时，任务栏至少要装得下那个图标 + 内边距与边框。
+ * 否则把厚度拖到最小时图标会被裁掉一截（`DOCK_MIN_THICKNESS` 只按默认图标算，不够用）。
+ */
+export function minDockThickness(iconSize: number | null): number {
+  if (iconSize === null) return DOCK_MIN_THICKNESS
+  return Math.max(DOCK_MIN_THICKNESS, iconSize + (DOCK_PAD + DOCK_BORDER) * 2)
+}
 /** 长度下限 */
 export const DOCK_MIN_LENGTH = 140
 /** 任务栏与屏幕边缘的间距 */

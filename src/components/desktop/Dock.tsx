@@ -4,9 +4,11 @@ import { getApp } from '../../lib/apps'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import {
+  DOCK_BORDER as BORDER,
+  DOCK_GAP as GAP,
   DOCK_MARGIN,
   DOCK_MIN_LENGTH,
-  DOCK_MIN_THICKNESS,
+  DOCK_PAD as PAD,
   DOCK_THICKNESS,
   isVertical,
   maxDockLength,
@@ -22,10 +24,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
-/* 任务栏内部几何：gap-1 / p-1.5 / border，以及按钮边长上限 */
-const GAP = 4
-const PAD = 6
-const BORDER = 1
+/* 任务栏内部几何 GAP / PAD / BORDER 现在从 lib/dock 来 —— 厚度下限要用同一套数，
+   这里只留按钮边长上限 */
 /** 按钮最大边长：再厚就去多排一行，而不是把图标撑大（设置里手选最大能到 64） */
 const BTN_MAX = 64
 const MAX_LINES = 3
@@ -98,6 +98,7 @@ export function Dock() {
     position,
     length: rawLength,
     thickness,
+    minThickness,
     iconSize,
     dockApps,
     setPosition,
@@ -288,7 +289,8 @@ export function Dock() {
       if (axis.dim === 't') {
         /* 厚度这一维贴边固定，拖多少就变多少 */
         setThickness(
-          clamp(startT + delta * axis.sign, DOCK_MIN_THICKNESS, maxDockThickness(position, viewport)),
+          /* 下限跟着固定图标尺寸走，别让人拖到把图标裁掉 */
+          clamp(startT + delta * axis.sign, minThickness, maxDockThickness(position, viewport)),
         )
       } else {
         /* 长度这一维是居中的，两边各长一半，所以被拖的那条边正好跟手 */

@@ -15,11 +15,13 @@ export function DesktopShell() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { wallpaper, wallpaperFit, wallpaperDim } = useAppearance()
-  const { position, thickness } = useDock()
+  /* effectiveThickness = 厚度与「按固定图标尺寸算出的下限」取大者。
+     必须和任务栏渲染用同一个值，否则任务栏被图标撑高后窗口层还按旧厚度让位，窗口会被压住一截 */
+  const { position, effectiveThickness } = useDock()
   const { windows, dispatch, geometryOf } = useWindows()
 
   /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层 */
-  const insets = dockInsets(position, thickness ?? undefined)
+  const insets = dockInsets(position, effectiveThickness)
   const insetVars = {
     '--inset-top': `${insets.top}px`,
     '--inset-right': `${insets.right}px`,

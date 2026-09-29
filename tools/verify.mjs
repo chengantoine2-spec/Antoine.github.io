@@ -565,6 +565,56 @@ async function run() {
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(700)
 
+  // 14c 固定图标尺寸时，厚度下限要跟着图标走。
+  //     曾经是写死的 48：选了 64 的图标再把厚度拖薄，10 个图标会全被裁掉一截
+  const iconBefore = await p.evaluate(() => {
+    const raw = localStorage.getItem('desktop.dock')
+    const dock = raw ? JSON.parse(raw) : {}
+    dock.position = 'bottom'
+    dock.length = null
+    dock.thickness = 48
+    dock.iconSize = 64
+    localStorage.setItem('desktop.dock', JSON.stringify(dock))
+    return raw
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(800)
+  const iconFit = await p.evaluate(() => {
+    const bar = document.querySelector('nav[aria-label="任务栏"]')
+    const inner = bar?.querySelector('.no-scrollbar')
+    if (!bar || !inner) return null
+    const barBox = bar.getBoundingClientRect()
+    const innerBox = inner.getBoundingClientRect()
+    const icons = [...inner.querySelectorAll('button[aria-label]')]
+    const outside = (box) =>
+      icons.filter((b) => {
+        const r = b.getBoundingClientRect()
+        return r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5
+      }).length
+    return {
+      barHeight: Math.round(barBox.height),
+      iconSize: Math.round(icons[0]?.getBoundingClientRect().height ?? 0),
+      outsideBar: outside(barBox),
+      clippedByScroll: outside(innerBox),
+    }
+  })
+  check(
+    '固定图标尺寸时厚度下限跟着图标走（图标不被裁）',
+    !!iconFit &&
+      iconFit.iconSize === 64 &&
+      iconFit.barHeight >= 78 &&
+      iconFit.outsideBar === 0 &&
+      iconFit.clippedByScroll === 0,
+    JSON.stringify(iconFit),
+  )
+  /* 还原并重新加载 */
+  await p.evaluate((raw) => {
+    if (raw === null) localStorage.removeItem('desktop.dock')
+    else localStorage.setItem('desktop.dock', raw)
+  }, iconBefore)
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(700)
+
   // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 

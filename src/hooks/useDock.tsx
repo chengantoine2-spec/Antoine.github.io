@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { APPS } from '../lib/apps'
-import { DOCK_ORDER, isVertical } from '../lib/dock'
+import { DOCK_ORDER, DOCK_THICKNESS, isVertical, minDockThickness } from '../lib/dock'
 import type { AppId, DockPosition } from '../types/desktop'
 
 const STORAGE_KEY = 'desktop.dock'
@@ -62,7 +62,12 @@ function readStored(): Stored {
 interface DockContextValue {
   position: DockPosition
   length: number | null
+  /** 原始厚度；null = 按内容自适应。读出来时已被下限抬过，直接渲染即可 */
   thickness: number | null
+  /** 厚度下限：跟着固定图标尺寸走（图标装不下就会被裁） */
+  minThickness: number
+  /** 渲染与窗口「让位」都用它 = max(厚度, 下限) */
+  effectiveThickness: number
   iconSize: number | null
   dockApps: AppId[]
   setPosition: (position: DockPosition) => void
@@ -77,6 +82,12 @@ const DockContext = createContext<DockContextValue | null>(null)
 
 export function DockProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Stored>(readStored)
+
+  /* 厚度的下限跟着「固定图标尺寸」走：图标装不下的厚度会把图标裁掉。
+     收口在这里算，任务栏渲染与窗口「让位」都用同一个值，免得两边对不上。 */
+  const minThickness = minDockThickness(state.iconSize)
+  const thickness = state.thickness === null ? null : Math.max(state.thickness, minThickness)
+  const effectiveThickness = Math.max(thickness ?? DOCK_THICKNESS, minThickness)
 
   useEffect(() => {
     try {
@@ -127,7 +138,9 @@ export function DockProvider({ children }: { children: ReactNode }) {
       value={{
         position: state.position,
         length: state.length,
-        thickness: state.thickness,
+        thickness,
+        minThickness,
+        effectiveThickness,
         iconSize: state.iconSize,
         dockApps: state.dockApps,
         setPosition,
