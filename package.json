@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "term": "node tools/term-server.mjs",
     "build": "tsc --noEmit && vite build",
     "build:pages": "tsc --noEmit && vite build && node tools/pages-postbuild.mjs",
     "verify": "node tools/verify.mjs",

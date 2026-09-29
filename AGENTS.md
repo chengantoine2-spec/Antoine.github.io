@@ -4,8 +4,14 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**
-- 其余 4 个（技能 / 联系 / 终端 / 资产库）走 `AppPlaceholder` 占位
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**、**终端**
+- 其余 3 个（技能 / 联系 / 资产库）走 `AppPlaceholder` 占位
+- **终端**窗口跑的是**真命令**：浏览器只当屏幕，命令在本机执行。为此需要一个本地服务
+  `npm run term`（`tools/term-server.mjs`，只用 Node 内置模块，不引依赖）。
+  ⚠️ 它的安全面比那个 GitHub PAT 大得多 —— 等价于把本机 shell 开给这个页面，所以三条底线：
+  **必须带启动时打印的 token**、**只接受来自 localhost / 127.0.0.1 页面的请求**（Origin 白名单）、
+  **绝不放到公网**。部署到 GitHub Pages 上时它只会如实报「服务未运行」，这是设计如此
+- 编辑中/未完成的功能宁可写"待接入"，也不要给一个点了没反应的按钮（终端服务、全屏按钮都按这条办）
 - **博客创作**窗口用本机 PAT 直接增改 GitHub Issues（= 博客文章），并上传/浏览 img 分支里的图片；
   没有 PAT 的访客只能浏览图片，写入能力拿不到
 - 编辑器能力：**分屏实时预览**（编辑 / 分屏 / 预览三档）、markdown 工具栏
@@ -31,7 +37,8 @@
 ## 技术栈
 
 Vite 5 + React 18 + TypeScript + Tailwind 3 + react-router-dom 6。
-**无后端**：所有设置存浏览器 localStorage；博客正文来自 GitHub Issues。
+**站点本身没有后端**：所有设置存浏览器 localStorage；博客正文来自 GitHub Issues。
+唯一的服务端是**可选的本机终端服务**（`npm run term`），只监听 127.0.0.1、只服务本机页面。
 
 ## 依赖清单（**新增依赖必须记在这里，并在回复里当场提示用户**）
 
@@ -54,6 +61,7 @@ Vite 5 + React 18 + TypeScript + Tailwind 3 + react-router-dom 6。
 
 ```bash
 npm run dev          # 本地开发，默认 http://localhost:5173
+npm run term         # 本机终端服务（终端窗口用；只监听 127.0.0.1，启动时打印 token）
 npm run build        # tsc --noEmit + vite build
 npm run build:pages  # 追加生成 dist/404.html（GitHub Pages 深链兜底）
 npm run verify       # Playwright 冒烟验证（需要 dev 已在跑）
@@ -73,7 +81,7 @@ npm run typecheck    # 只做类型检查
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`） |
 | `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
-| `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG） |
+| `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
@@ -115,6 +123,8 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.ghToken` | **博客创作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
 | `desktop.imgTree` | img 分支图片清单缓存，TTL 10 分钟（浏览图库不需要 Token） |
 | `desktop.draft` | 编辑中的草稿（自动保存，发布/取消后清除），防止误关窗口丢内容 |
+| `desktop.termPort` | 终端服务端口，默认 5180 |
+| `desktop.termToken` | **终端服务的 token**（`npm run term` 启动时打印）。只存本机浏览器；有了它才能在网页里跑本机命令 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 

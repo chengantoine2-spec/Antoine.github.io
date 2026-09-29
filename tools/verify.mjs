@@ -404,7 +404,30 @@ async function run() {
   })
   check('再点一次能还原回「最大化」', backUp.label === '最大化' && !backUp.isMax, JSON.stringify(backUp))
 
-  // 13 页面无运行时错误
+  // 13 终端窗口：真命令要本机跑 tools/term-server.mjs，所以这里只保证 UI 在、
+  //    状态如实（服务在线 / 未运行）。走「所有项目」菜单打开 —— 任务栏里可能没勾选它
+  await p.click(`${DOCK} button[aria-label="所有项目"]`)
+  await p.waitForTimeout(250)
+  await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("终端")')
+  await p.waitForTimeout(1200)
+  const terminal = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="终端 窗口"]')
+    if (!win) return null
+    const text = win.textContent ?? ''
+    return {
+      hasInput: !!win.querySelector('input[aria-label="终端输入"]'),
+      hasToken: !!win.querySelector('input[aria-label="终端服务 token"]'),
+      hasPort: !!win.querySelector('input[aria-label="终端服务端口"]'),
+      status: /服务在线|服务未运行|检测中/.exec(text)?.[0] ?? '',
+    }
+  })
+  check(
+    '终端窗口有连接栏与输入行，并如实显示服务状态',
+    !!terminal && terminal.hasInput && terminal.hasToken && terminal.hasPort && terminal.status !== '',
+    JSON.stringify(terminal),
+  )
+
+  // 14 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

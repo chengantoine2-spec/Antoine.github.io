@@ -8,6 +8,7 @@ import { BlogWindow } from './components/program/BlogWindow'
 import { ProjectDetailWindow } from './components/program/ProjectDetailWindow'
 import { ProjectsWindow } from './components/program/ProjectsWindow'
 import { SettingsWindow } from './components/program/SettingsWindow'
+import { TerminalWindow } from './components/program/TerminalWindow'
 import { WriteWindow } from './components/program/WriteWindow'
 import { APPS } from './lib/apps'
 import type { AppId } from './types/desktop'
@@ -18,6 +19,7 @@ const WINDOWS: Partial<Record<AppId, ReactElement>> = {
   blog: <BlogWindow />,
   projects: <ProjectsWindow />,
   settings: <SettingsWindow />,
+  terminal: <TerminalWindow />,
   write: <WriteWindow />,
 }
 

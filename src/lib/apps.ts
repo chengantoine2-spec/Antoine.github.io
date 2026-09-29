@@ -31,7 +31,15 @@ export const APPS: AppDef[] = [
   },
   { id: 'skills', name: '技能', path: '/skills', source: '本地静态', icon: 'skills' },
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },
-  { id: 'terminal', name: '终端', path: '/terminal', source: '无（前端假命令）', icon: 'terminal' },
+  {
+    id: 'terminal',
+    name: '终端',
+    path: '/terminal',
+    source: '本机终端服务（tools/term-server.mjs，只监听 127.0.0.1）：浏览器只当屏幕，命令真在本机跑',
+    icon: 'terminal',
+    /* 输出行偏宽，默认给大一点 */
+    defaultSize: { w: 900, h: 620 },
+  },
   { id: 'assets', name: '资产库', path: '/assets', source: 'Supabase（待接入）', icon: 'assets' },
   {
     id: 'settings',
