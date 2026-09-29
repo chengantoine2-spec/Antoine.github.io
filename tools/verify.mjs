@@ -443,23 +443,71 @@ async function run() {
     JSON.stringify(terminal),
   )
 
-  // 14 任务栏对齐：拖长/加厚之后图标要居中，不是从左边排起
+  // 14 任务栏对齐：拖长/加厚之后图标要居中，但不是从左边排起、也不是靠滚动容器居中
   const dockAlign = await p.evaluate(() => {
     const dock = document.querySelector('nav[aria-label="任务栏"]')
     const scroller = dock?.querySelector('.no-scrollbar')
+    const inner = scroller?.firstElementChild
+    const innerStyle = inner ? getComputedStyle(inner) : null
     return {
       dockJustify: dock ? getComputedStyle(dock).justifyContent : '',
       scrollerJustify: scroller ? getComputedStyle(scroller).justifyContent : '',
-      scrollerAlign: scroller ? getComputedStyle(scroller).alignContent : '',
+      /* 用类名判断：auto 外边距的 computed 值会按有没有富余空间解析成 0px / 具体值 */
+      innerClass: inner ? String(inner.className) : '',
     }
   })
   check(
-    '任务栏与其图标区都居中（拖长 / 加厚后图标不贴边）',
+    '任务栏居中靠「内层 m-auto」（滚动容器上写 justify-center 会让两端滚不到）',
     dockAlign.dockJustify === 'center' &&
-      dockAlign.scrollerJustify === 'center' &&
-      dockAlign.scrollerAlign === 'center',
+      dockAlign.scrollerJustify !== 'center' &&
+      dockAlign.innerClass.includes('m-auto'),
     JSON.stringify(dockAlign),
   )
+
+  // 14b 小任务栏时两端都必须滚得到。
+  //     曾经把 justify-center 写在滚动容器上：内容一超出，超出的那一侧会落到滚动原点之外，
+  //     滚轮和拖动都永远够不到（最左 / 最上的图标就这么丢了）—— 这里真把任务栏压小来验
+  const dockBefore = await p.evaluate(() => {
+    const raw = localStorage.getItem('desktop.dock')
+    const dock = raw ? JSON.parse(raw) : {}
+    dock.position = 'bottom'
+    dock.length = 240
+    localStorage.setItem('desktop.dock', JSON.stringify(dock))
+    return raw
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
+  const reach = await p.evaluate(() => {
+    const scroller = document.querySelector('nav[aria-label="任务栏"] .no-scrollbar')
+    if (!scroller) return null
+    const icons = [...scroller.querySelectorAll('button[aria-label]')]
+    const box = scroller.getBoundingClientRect()
+    const firstAtStart = icons[0].getBoundingClientRect().left - box.left
+    scroller.scrollLeft = 99999
+    const maxScroll = Math.round(scroller.scrollLeft)
+    const lastAtEnd = icons[icons.length - 1].getBoundingClientRect().right - box.left
+    scroller.scrollLeft = 0
+    return {
+      scrollable: maxScroll > 0,
+      firstReachable: firstAtStart >= -1,
+      lastReachable: lastAtEnd <= box.width + 1,
+      viewport: Math.round(box.width),
+      content: scroller.scrollWidth,
+      maxScroll,
+    }
+  })
+  check(
+    '小任务栏时最左与最右的图标都滚得到',
+    !!reach && reach.scrollable && reach.firstReachable && reach.lastReachable,
+    JSON.stringify(reach),
+  )
+  /* 还原任务栏设置并重新加载，别影响后面的检查 */
+  await p.evaluate((raw) => {
+    if (raw === null) localStorage.removeItem('desktop.dock')
+    else localStorage.setItem('desktop.dock', raw)
+  }, dockBefore)
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(700)
 
   // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))

@@ -30,8 +30,8 @@
 - 窗口标题栏是 `– □ ×`：最小化 / 最大化（铺满视口，含任务栏）/ 关闭
 - 任务栏图标边长：设置里 6 档（跟随厚度 / 32 / 40 / 48 / 56 / 64）。「跟随厚度」时自动值上限 64
   （`Dock.tsx` 的 `BTN_MAX`），再厚就折成最多 3 行；手选的档位会被 clamp 到 32~64。
-  **拖长或加厚之后图标组必须居中**，不是从左边排起 —— bar 与滚动区都 `justify-center`，
-  且 `length` 有值时滚动区加 `flex-1` 吃掉富余空间，图标才会落在两端按钮之间
+  **拖长或加厚之后图标组必须居中**：bar 用 `justify-center`；滚动视口里再套一层用 `m-auto`
+  （居中**不能**写在滚动容器上，见坑 5），装不下时两端都要滚得到
 - **浏览器级全屏**（连浏览器自己的窗口一起盖住，和"窗口最大化"不是一回事）**不在标题栏**，
   而是两处：任务栏右边固定的 ⛶、设置窗口里的「进入全屏」。两处共用
   `hooks/useFullscreen.ts` 与 `components/desktop/FullscreenButton.tsx`。
@@ -149,7 +149,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 > 现在按"测试阶段、暂不处理安全"处理，**正式上线前必须撤销并重建**。
 > 影响范围：`desktop.ghToken` 泄露 = 该仓库的 Issues 与 Contents 写入权限。
 
-## 四个已经踩过的坑（别再踩）
+## 五个已经踩过的坑（别再踩）
 
 **坑 1 · 自定义 CSS 不要放进 `@layer components`。**
 Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不到"的规则，而运行时拼出来的类名
@@ -170,6 +170,13 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 改了某个模块的导出（例如给 `lib/github.ts` 加 `deleteIssue`）后，浏览器可能报
 `The requested module '…' does not provide an export named 'X'`，而 `tsc --noEmit` 和 `vite build` 都是通过的。
 **重启 dev server 即可**（别去改源码，源码没错）。
+
+**坑 5 · 别在可滚动容器上写 `justify-content: center`。**
+内容一旦超出，超出的那一侧会落到**滚动原点之外** —— 滚轮和拖动都永远够不到。
+任务栏小的时候"最左 / 最上的图标怎么滚都看不见"就是这个：滚动区 94px、内容 243px 时，
+最左图标在 `scrollLeft = 0` 处的偏移是 **−149**，滚到头还是 −298。
+正确做法是让**内层**用 `margin: auto`：有富余空间时它居中，真超出时自动解析成 0，
+内容从滚动原点开始，两端都够得到（Dock 的 `.no-scrollbar` 视口 + 内层 `m-auto` 就是这个模式）。
 
 ## 验证
 

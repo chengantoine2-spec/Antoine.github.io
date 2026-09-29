@@ -379,53 +379,59 @@ export function Dock() {
       {/* 只显示放得下的按钮，其余靠拖动/滚轮查看 */}
       <div
         ref={scroller}
-        style={scrollerStyle}
         onPointerDown={startDrag}
         onPointerMove={onDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onWheel={onWheel}
-        /* max-h/max-w 卡住交叉轴：装不下就在容器内滚，绝不顶出任务栏；
-           只有厚度真放得下多行时才允许折行，否则一条打横滚。
-           拖长任务栏后（length 有值）让滚动区吃掉富余空间，图标才会在两端按钮之间居中 */
-        className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full content-center justify-center gap-1 ${
+        /* 视口本身不设 justify/align —— 居中交给里面那层用 m-auto。
+           滚动容器上直接写 justify-center 时，内容一旦超出，超出的那一侧会落到
+           滚动原点之外：滚轮和拖动都永远够不到（小任务栏时最左 / 最上的图标就是这么丢的）。
+           max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏 */
+        className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full ${
           length !== null ? 'flex-1' : ''
-        } ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
-          vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'
-        }`}
+        } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
       >
-        {dockApps.map((id) => {
-          const app = getApp(id)
-          const running = windows.some((w) => w.id === app.id)
-          const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
+        {/* m-auto 两头都管：有富余就居中，真超出时自动变 0，内容从滚动原点开始，两端都够得到 */}
+        <div
+          style={scrollerStyle}
+          className={`m-auto flex shrink-0 gap-1 ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
+            vertical ? 'flex-col' : ''
+          }`}
+        >
+          {dockApps.map((id) => {
+            const app = getApp(id)
+            const running = windows.some((w) => w.id === app.id)
+            const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
 
-          return (
-            <button
-              key={app.id}
-              type="button"
-              style={btnStyle}
-              title={app.name}
-              aria-label={app.name}
-              aria-current={active ? 'page' : undefined}
-              onClick={() => openApp(app.id)}
-              onMouseEnter={(e) => showName(e.currentTarget, app.name)}
-              onMouseLeave={() => setHover(null)}
-              onFocus={(e) => showName(e.currentTarget, app.name)}
-              onBlur={() => setHover(null)}
-              className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
-                active ? 'bg-accent text-accent-ink' : ''
-              }`}
-            >
-              <AppIcon name={app.icon} className="h-1/2 w-1/2" />
-              {running ? (
-                <span
-                  className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
-                  aria-hidden="true"
-                />
-              ) : null}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={app.id}
+                type="button"
+                style={btnStyle}
+                title={app.name}
+                aria-label={app.name}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => openApp(app.id)}
+                onMouseEnter={(e) => showName(e.currentTarget, app.name)}
+                onMouseLeave={() => setHover(null)}
+                onFocus={(e) => showName(e.currentTarget, app.name)}
+                onBlur={() => setHover(null)}
+                className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
+                  active ? 'bg-accent text-accent-ink' : ''
+                }`}
+              >
+                <AppIcon name={app.icon} className="h-1/2 w-1/2" />
+                {running ? (
+                  <span
+                    className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {vertical ? menuButton : null}
