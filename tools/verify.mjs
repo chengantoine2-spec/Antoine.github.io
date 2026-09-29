@@ -464,42 +464,74 @@ async function run() {
     JSON.stringify(dockAlign),
   )
 
-  // 14b 小任务栏时两端都必须滚得到。
-  //     曾经把 justify-center 写在滚动容器上：内容一超出，超出的那一侧会落到滚动原点之外，
-  //     滚轮和拖动都永远够不到（最左 / 最上的图标就这么丢了）—— 这里真把任务栏压小来验
+  // 14b 任务栏被压小 / 加厚时的行为。三条都验：
+  //     · 两端都要滚得到（曾经把 justify-center 写在滚动容器上，超出的那侧永远够不到）
+  //     · 两端固定的三个按钮不能被顶出任务栏边界（长度下限要装得下它们）
+  //     · 加厚 + 拖过长度之后仍要折成多行（折行的尺寸上限不能只在 length === null 时加）
   const dockBefore = await p.evaluate(() => {
     const raw = localStorage.getItem('desktop.dock')
     const dock = raw ? JSON.parse(raw) : {}
     dock.position = 'bottom'
-    dock.length = 240
+    dock.length = 260
+    dock.thickness = 150
+    dock.iconSize = null
     localStorage.setItem('desktop.dock', JSON.stringify(dock))
     return raw
   })
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(900)
-  const reach = await p.evaluate(() => {
-    const scroller = document.querySelector('nav[aria-label="任务栏"] .no-scrollbar')
-    if (!scroller) return null
-    const icons = [...scroller.querySelectorAll('button[aria-label]')]
+  const dockProbe = await p.evaluate(() => {
+    const bar = document.querySelector('nav[aria-label="任务栏"]')
+    const scroller = bar?.querySelector('.no-scrollbar')
+    const items = scroller?.firstElementChild
+    if (!bar || !scroller || !items) return null
+    const icons = [...items.querySelectorAll('button[aria-label]')]
     const box = scroller.getBoundingClientRect()
+    const barBox = bar.getBoundingClientRect()
+    const fixed = [
+      bar.querySelector('button[aria-label="所有项目"]'),
+      bar.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
+      bar.querySelector('button[aria-label="任务栏位置"]'),
+    ].filter(Boolean)
+
     const firstAtStart = icons[0].getBoundingClientRect().left - box.left
     scroller.scrollLeft = 99999
     const maxScroll = Math.round(scroller.scrollLeft)
     const lastAtEnd = icons[icons.length - 1].getBoundingClientRect().right - box.left
     scroller.scrollLeft = 0
+
     return {
-      scrollable: maxScroll > 0,
-      firstReachable: firstAtStart >= -1,
-      lastReachable: lastAtEnd <= box.width + 1,
       viewport: Math.round(box.width),
       content: scroller.scrollWidth,
       maxScroll,
+      firstReachable: firstAtStart >= -1,
+      lastReachable: lastAtEnd <= box.width + 1,
+      fixedInside: fixed.every((b) => {
+        const r = b.getBoundingClientRect()
+        return r.left >= barBox.left - 1 && r.right <= barBox.right + 1
+      }),
+      rows: new Set(icons.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+      iconHeight: Math.round(icons[0].getBoundingClientRect().height),
+      itemsHeight: Math.round(items.getBoundingClientRect().height),
     }
   })
   check(
-    '小任务栏时最左与最右的图标都滚得到',
-    !!reach && reach.scrollable && reach.firstReachable && reach.lastReachable,
-    JSON.stringify(reach),
+    '小任务栏：两端都滚得到，且三个固定按钮不越界',
+    !!dockProbe &&
+      dockProbe.maxScroll > 0 &&
+      dockProbe.firstReachable &&
+      dockProbe.lastReachable &&
+      dockProbe.fixedInside,
+    JSON.stringify(dockProbe),
+  )
+  check(
+    '加厚 + 拖过长度之后仍折成多行',
+    !!dockProbe && dockProbe.rows > 1 && dockProbe.itemsHeight >= dockProbe.iconHeight * 2,
+    JSON.stringify({
+      rows: dockProbe?.rows,
+      itemsHeight: dockProbe?.itemsHeight,
+      iconHeight: dockProbe?.iconHeight,
+    }),
   )
   /* 还原任务栏设置并重新加载，别影响后面的检查 */
   await p.evaluate((raw) => {

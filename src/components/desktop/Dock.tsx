@@ -94,8 +94,16 @@ interface GripState {
 
 /** 任务栏：位置可切到下/上/左/右（左右为竖排），厚度与长度靠拖边缘调整 */
 export function Dock() {
-  const { position, length, thickness, iconSize, dockApps, setPosition, setLength, setThickness } =
-    useDock()
+  const {
+    position,
+    length: rawLength,
+    thickness,
+    iconSize,
+    dockApps,
+    setPosition,
+    setLength,
+    setThickness,
+  } = useDock()
   const { windows, dispatch } = useWindows()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -117,18 +125,25 @@ export function Dock() {
   const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 32, 64))
   const btnStyle: CSSProperties = { width: btn, height: btn }
 
+  /* 长度下限：至少要装得下两端固定的三个按钮（开始 / 全屏 / 位置）+ 一个图标。
+     低于这个值时它们会被顶出任务栏边界（原来的 DOCK_MIN_LENGTH = 140 就装不下 3×40） */
+  const minLength = Math.max(DOCK_MIN_LENGTH, btn * 4 + GAP * 3 + (PAD + BORDER) * 2)
+  /* 拖过长度就按它来，但不允许小于下限；length === null 表示"跟着按钮自适应" */
+  const length = rawLength === null ? null : Math.max(rawLength, minLength)
+
   /* 当前厚度能塞下几行（竖排时是几列），最多 3 */
   const crossAvail = (thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2
   const lines = Math.round(clamp(Math.floor((crossAvail + GAP) / (btn + GAP)), 1, MAX_LINES))
 
-  /* 多行时按行数约束主轴尺寸，按钮才会真的折成 2~3 行并居中；用户手动定过长度就不干预 */
+  /* 多行时给内层一个主轴上限，折行才会发生（内层才是 flex 容器）。
+     注意不能只在 length === null 时加 —— 那样拖过长度的任务栏就永远只有一条，只能在一条里滚 */
   const itemCount = dockApps.length
   const perLine = Math.max(1, Math.ceil(itemCount / lines))
   const lineSize = perLine * btn + (perLine - 1) * GAP
-  const scrollerStyle: CSSProperties = {}
-  if (lines > 1 && length === null && itemCount > 0) {
-    if (vertical) scrollerStyle.height = lineSize
-    else scrollerStyle.width = lineSize
+  const itemsStyle: CSSProperties = {}
+  if (lines > 1 && itemCount > 0) {
+    if (vertical) itemsStyle.height = lineSize
+    else itemsStyle.width = lineSize
   }
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
@@ -278,7 +293,7 @@ export function Dock() {
       } else {
         /* 长度这一维是居中的，两边各长一半，所以被拖的那条边正好跟手 */
         setLength(
-          clamp(startL + delta * axis.sign * 2, DOCK_MIN_LENGTH, maxDockLength(position, viewport)),
+          clamp(startL + delta * axis.sign * 2, minLength, maxDockLength(position, viewport)),
         )
       }
     }
@@ -394,7 +409,7 @@ export function Dock() {
       >
         {/* m-auto 两头都管：有富余就居中，真超出时自动变 0，内容从滚动原点开始，两端都够得到 */}
         <div
-          style={scrollerStyle}
+          style={itemsStyle}
           className={`m-auto flex shrink-0 gap-1 ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
             vertical ? 'flex-col' : ''
           }`}
