@@ -427,7 +427,25 @@ async function run() {
     JSON.stringify(terminal),
   )
 
-  // 14 页面无运行时错误
+  // 14 任务栏对齐：拖长/加厚之后图标要居中，不是从左边排起
+  const dockAlign = await p.evaluate(() => {
+    const dock = document.querySelector('nav[aria-label="任务栏"]')
+    const scroller = dock?.querySelector('.no-scrollbar')
+    return {
+      dockJustify: dock ? getComputedStyle(dock).justifyContent : '',
+      scrollerJustify: scroller ? getComputedStyle(scroller).justifyContent : '',
+      scrollerAlign: scroller ? getComputedStyle(scroller).alignContent : '',
+    }
+  })
+  check(
+    '任务栏与其图标区都居中（拖长 / 加厚后图标不贴边）',
+    dockAlign.dockJustify === 'center' &&
+      dockAlign.scrollerJustify === 'center' &&
+      dockAlign.scrollerAlign === 'center',
+    JSON.stringify(dockAlign),
+  )
+
+  // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

@@ -26,8 +26,8 @@ function clamp(value: number, min: number, max: number): number {
 const GAP = 4
 const PAD = 6
 const BORDER = 1
-/** 按钮最大边长：再厚就去多排一行，而不是把图标撑大 */
-const BTN_MAX = 40
+/** 按钮最大边长：再厚就去多排一行，而不是把图标撑大（设置里手选最大能到 64） */
+const BTN_MAX = 64
 const MAX_LINES = 3
 
 /** 八条拖拽边（四边 + 四个倒角）：拖离中心的方向算变大 */
@@ -113,7 +113,8 @@ export function Dock() {
 
   /* 图标边长：设置里选过就用选的，否则跟随厚度；跟随厚度时超过上限不再变大，富余厚度改成多行 */
   const autoBtn = clamp((thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2, 28, BTN_MAX)
-  const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 28, 56))
+  /* 手动选了尺寸就以它为准；范围与设置里的档位一致（32~64） */
+  const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 32, 64))
   const btnStyle: CSSProperties = { width: btn, height: btn }
 
   /* 当前厚度能塞下几行（竖排时是几列），最多 3 */
@@ -347,7 +348,8 @@ export function Dock() {
       aria-label="任务栏"
       style={barStyle}
       onMouseLeave={() => setHover(null)}
-      className={`absolute z-50 flex gap-1 rounded-dock border border-edge bg-chrome p-1.5 shadow-xl ${
+      /* justify-center：拖长任务栏后 bar 比内容宽，整组要居中（内容自适应宽度时没有富余空间，不受影响） */
+      className={`absolute z-50 flex justify-center gap-1 rounded-dock border border-edge bg-chrome p-1.5 shadow-xl ${
         vertical ? 'flex-col items-center' : 'items-center'
       }`}
     >
@@ -384,10 +386,13 @@ export function Dock() {
         onPointerCancel={endDrag}
         onWheel={onWheel}
         /* max-h/max-w 卡住交叉轴：装不下就在容器内滚，绝不顶出任务栏；
-           只有厚度真放得下多行时才允许折行，否则一条打横滚 */
+           只有厚度真放得下多行时才允许折行，否则一条打横滚。
+           拖长任务栏后（length 有值）让滚动区吃掉富余空间，图标才会在两端按钮之间居中 */
         className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full content-center justify-center gap-1 ${
-          lines > 1 ? 'flex-wrap' : 'flex-nowrap'
-        } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
+          length !== null ? 'flex-1' : ''
+        } ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
+          vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'
+        }`}
       >
         {dockApps.map((id) => {
           const app = getApp(id)

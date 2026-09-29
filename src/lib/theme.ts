@@ -31,12 +31,14 @@ export const WALLPAPER_FITS: Array<{ id: WallpaperFit; name: string; hint: strin
 /** 暗化蒙层档位（0~0.45），让浅色壁纸上的图标与窗口更清楚 */
 export const DIM_LEVELS = [0, 0.15, 0.3, 0.45]
 
-/** 任务栏图标边长档位；null = 跟随任务栏厚度 */
+/** 任务栏图标边长档位；null = 跟随任务栏厚度（跟着厚度时上限见 Dock 的 BTN_MAX） */
 export const ICON_SIZES: Array<{ id: number | null; name: string }> = [
   { id: null, name: '跟随厚度' },
   { id: 32, name: '小' },
   { id: 40, name: '中' },
   { id: 48, name: '大' },
+  { id: 56, name: '特大' },
+  { id: 64, name: '超大' },
 ]
 
 export function isThemeId(value: unknown): value is ThemeId {
