@@ -41,6 +41,14 @@
   免得一边被图标撑高、另一边还按旧厚度让位；
   多行折行的尺寸约束要**一直**加在内层，不能只在 `length === null` 时加，
   否则拖过长度的任务栏就不再折行，只能在一条里滚
+- **桌面挂件：日月时钟**（右上角，`components/desktop/CelestialClock.tsx`）。天空条里的圆盘
+  按正弦弧走（6:00 出、18:00 落；入夜换成同一条弧的月亮），**颜色随时刻变** ——
+  组件只算「哪两档 + 前者的权重」，混色交给 CSS 的 `color-mix`，色值在
+  `tokens.css` 的 `--c-celestial-{night,dawn,noon,dusk}`；入夜按**日期**显示月相
+  （`lib/celestial.ts` 的 `moonPhase`：八相名 + 照亮百分比，形状用「外缘半圆 + 明暗界线椭圆弧」画）。
+  ⚠️ 圆盘位置那两个百分比区间（17%~83% / 29%~71%）是照着「44px 圆盘 + 84px 天空条」留的边距，
+  改尺寸要一起改，否则日出日落时圆盘会被天空条裁掉一块（`verify.mjs` 有一条专门量这个余量）。
+  ⚠️ 挂件 z-5、窗口层 z-10、最大化 z-60：窗口盖住它是**预期**的，和真桌面挂件一样
 - **浏览器级全屏**（连浏览器自己的窗口一起盖住，和"窗口最大化"不是一回事）**不在标题栏**，
   而是两处：任务栏右边固定的 ⛶、设置窗口里的「进入全屏」。两处共用
   `hooks/useFullscreen.ts` 与 `components/desktop/FullscreenButton.tsx`。
@@ -155,10 +163,10 @@ npm run typecheck    # 只做类型检查
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮） |
+| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽） |
-| `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/lib/` | `apps`（窗口登记表）、`celestial`（日月弧线 / 颜色档位 / 月相）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -212,6 +220,8 @@ bg-hover                         悬停底色
 rounded-window / rounded-dock    圆角
 logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
 变宽拖动条 / 滚动条滑块           读 --c-scroll-thumb（滑块）、--c-scroll-thumb-hover（悬停与拖动条）
+日月时钟                         读 --c-celestial-{night,dawn,noon,dusk}（四档主色）
+                                 + --c-celestial-moon / --c-celestial-moon-shade（月亮亮面/暗面）
 ```
 
 **禁止写死颜色**（`#fff`、`rgb(...)`、`bg-white` 这类字面量一律不许出现在组件里）。
@@ -309,6 +319,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
+- 日月时钟在 `verify.mjs` 里有 5 项：读数=系统时间、昼夜换日月、月相与照亮百分比自洽、
+  三个时刻颜色两两不同，以及**拿已知天象验月相**（2024-04-08 日全食→新月、2024-03-25 半影月食→满月）。
+  后两条用 `addInitScript` 把 `Date` 换成固定时刻另开页面来跑 —— 加天象相关的功能照这个办法测
 
 ## 工作流约定（重要）
 

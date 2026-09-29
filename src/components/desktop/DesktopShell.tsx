@@ -8,6 +8,7 @@ import { useWindows } from '../../hooks/useWindows'
 /* 桌面壁纸走 import：部署到子路径时不会失效，也和其它资源一起被指纹化 */
 import desktopWallpaper from '../../assets/wallpapers/desktop.jpg'
 import { Dock } from './Dock'
+import { CelestialClock } from './CelestialClock'
 import { Window } from './Window'
 
 /** 桌面外壳：所有窗口路由的父布局，路由 ↔ 窗口状态在这里对齐 */
@@ -78,6 +79,10 @@ export function DesktopShell() {
           aria-hidden="true"
         />
       ) : null}
+
+      {/* 桌面挂件：日月时钟（随时刻变色，入夜换月相）。放在窗口层之前，
+          所以窗口始终压在它上面；最大化时它会整个被盖住，和真桌面挂件一样 */}
+      <CelestialClock />
 
       {/* 有窗口最大化时给窗口层提级：任务栏是 z-50，不压过它就还是会盖在窗口上面 */}
       <div

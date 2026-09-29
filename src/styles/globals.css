@@ -94,6 +94,124 @@
   pointer-events: none;
 }
 
+/* ── 桌面上的日月时钟（CelestialClock）：天空条 + 圆盘 + 读数 ──
+   颜色全部来自 tokens.css 的 --c-celestial-*：组件只把「哪两档、混合多少」写成
+   --celestial-a / --celestial-b / --celestial-mix，这里用 color-mix 算出此刻的颜色。
+   位置读 --inset-*（DesktopShell 按任务栏位置写），所以任务栏在右边时它自动左移 */
+.celestial {
+  --celestial-disc: color-mix(
+    in oklab,
+    var(--celestial-a) var(--celestial-mix),
+    var(--celestial-b)
+  );
+  position: absolute;
+  top: calc(var(--inset-top, 0px) + 18px);
+  right: calc(var(--inset-right, 0px) + 18px);
+  z-index: 5;
+  width: 170px;
+  padding: 10px 12px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 天空条：底色是此刻的日/月色，低比例铺一层；下沿一道地平线 */
+.celestial__sky {
+  position: relative;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--celestial-disc) 34%, transparent),
+    color-mix(in oklab, var(--celestial-disc) 5%, transparent)
+  );
+}
+
+.celestial__sky::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--c-border);
+}
+
+/* 圆盘：白天是太阳（本体色 + 左上高光 + 光晕），夜里换成月亮（形状交给里面的 SVG） */
+.celestial__disc {
+  position: absolute;
+  left: var(--celestial-x, 50%);
+  top: var(--celestial-y, 50%);
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in oklab, var(--celestial-disc) 52%, var(--c-surface)),
+    var(--celestial-disc) 64%
+  );
+  box-shadow: 0 0 20px color-mix(in oklab, var(--celestial-disc) 60%, transparent);
+  transition:
+    left 1.5s ease,
+    top 1.5s ease,
+    background 1.5s ease;
+}
+
+.celestial__disc[data-disc='moon'] {
+  background: none;
+  box-shadow: 0 0 16px color-mix(in oklab, var(--c-celestial-moon) 45%, transparent);
+}
+
+.celestial__moon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 月亮的暗面与亮面：亮面掺一点此刻的颜色，于是黄昏的月亮偏暖、午夜的偏冷 */
+.celestial__moonShade {
+  fill: var(--c-celestial-moon-shade);
+}
+
+.celestial__moonLit {
+  fill: color-mix(in oklab, var(--c-celestial-moon) 74%, var(--celestial-disc));
+}
+
+.celestial__readout {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.celestial__time {
+  color: var(--c-text);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.celestial__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--c-text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.celestial__phase {
+  color: var(--c-text);
+}
+
+.celestial__illum {
+  margin-left: auto;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 窗口层：平时躲开任务栏（靠 inset），并自成层叠上下文，窗口之间只比各自的 z 就行 */
 .desktop__layer {
   position: absolute;
@@ -749,5 +867,9 @@
 @media (prefers-reduced-motion: reduce) {
   .window {
     animation: none;
+  }
+
+  .celestial__disc {
+    transition: none;
   }
 }

@@ -772,6 +772,126 @@ async function run() {
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(700)
 
+  // 14d 桌面挂件「日月时钟」：随时刻变色（像太阳）、入夜换月亮、按日期显示月相
+  const clock = await p.evaluate(() => {
+    const el = document.querySelector('.celestial')
+    if (!el) return null
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const text = (sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
+    return {
+      time: text('.celestial__time'),
+      expected: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      hour: now.getHours(),
+      phase: el.dataset.phase,
+      disc: el.querySelector('.celestial__disc')?.dataset.disc ?? '',
+      moon: text('.celestial__phase'),
+      illum: Number(text('.celestial__illum').replace('%', '')),
+      moonsvg: !!el.querySelector('.celestial__moonLit'),
+      z: Number(getComputedStyle(el).zIndex),
+    }
+  })
+  const toMinutes = (value) => {
+    const [h, m] = String(value).split(':').map(Number)
+    return h * 60 + m
+  }
+  /* 挂件每 20 秒才走一次表，跨分钟边界时最多差一分钟，所以容差 1 分钟 */
+  check(
+    '桌面有日月时钟挂件，读数就是系统时间',
+    !!clock &&
+      Math.abs(toMinutes(clock.time) - toMinutes(clock.expected)) <= 1 &&
+      /* z 在壁纸之上、窗口层（z-10 / 最大化 z-60）之下 */
+      clock.z > 0 &&
+      clock.z < 10,
+    JSON.stringify(clock),
+  )
+  const isDay = !!clock && clock.hour >= 6 && clock.hour < 18
+  check(
+    '白天是太阳、入夜换月亮（月亮是 SVG 画的相位形状）',
+    !!clock &&
+      clock.phase === (isDay ? 'day' : 'night') &&
+      clock.disc === (isDay ? 'sun' : 'moon') &&
+      clock.moonsvg === !isDay,
+    JSON.stringify({ phase: clock?.phase, disc: clock?.disc, moonsvg: clock?.moonsvg, isDay }),
+  )
+  const MOON_NAMES = ['新月', '蛾眉月', '上弦月', '盈凸月', '满月', '亏凸月', '下弦月', '残月']
+  check(
+    '月相名在八相里，且与照亮百分比自洽',
+    !!clock &&
+      MOON_NAMES.includes(clock.moon) &&
+      clock.illum >= 0 &&
+      clock.illum <= 100 &&
+      (clock.moon !== '满月' || clock.illum >= 95) &&
+      (clock.moon !== '新月' || clock.illum <= 5) &&
+      (!['上弦月', '下弦月'].includes(clock.moon) || Math.abs(clock.illum - 50) <= 13),
+    JSON.stringify({ moon: clock?.moon, illum: clock?.illum }),
+  )
+
+  /* 拿假时钟另开页面：颜色随时间变、月相随日期变。
+     月相那两条是**已知天象** —— 2024-04-08 日全食必是新月、2024-03-25 半影月食必是满月 */
+  const probeSky = async (fixedIso) => {
+    const q = await ctx.newPage()
+    await q.addInitScript((iso) => {
+      const Real = Date
+      const fixed = new Real(iso).getTime()
+      class FakeDate extends Real {
+        constructor(...args) {
+          if (args.length === 0) super(fixed)
+          else super(...args)
+        }
+        static now() {
+          return fixed
+        }
+      }
+      window.Date = FakeDate
+    }, fixedIso)
+    await q.goto(`${BASE}/`, { waitUntil: 'load' })
+    await q.waitForTimeout(600)
+    const info = await q.evaluate(() => {
+      const el = document.querySelector('.celestial')
+      const text = (sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
+      return {
+        time: text('.celestial__time'),
+        disc: el.querySelector('.celestial__disc')?.dataset.disc ?? '',
+        sky: getComputedStyle(el.querySelector('.celestial__sky')).backgroundImage,
+        moon: text('.celestial__phase'),
+        illum: Number(text('.celestial__illum').replace('%', '')),
+      }
+    })
+    await q.close()
+    return info
+  }
+  const dawnSky = await probeSky('2026-09-29T06:40:00')
+  const noonSky = await probeSky('2026-09-29T12:00:00')
+  const nightSky = await probeSky('2026-09-29T23:30:00')
+  check(
+    '颜色随时刻变：拂晓 / 正午 / 深夜各不相同，且只有白天挂太阳',
+    dawnSky.sky !== noonSky.sky &&
+      noonSky.sky !== nightSky.sky &&
+      dawnSky.sky !== nightSky.sky &&
+      dawnSky.disc === 'sun' &&
+      noonSky.disc === 'sun' &&
+      nightSky.disc === 'moon',
+    JSON.stringify({
+      discs: [dawnSky.time, noonSky.time, nightSky.time].join(' / '),
+      dawn: dawnSky.sky.slice(0, 40),
+      night: nightSky.sky.slice(0, 40),
+    }),
+  )
+  const eclipseNew = await probeSky('2024-04-08T18:30:00')
+  const eclipseFull = await probeSky('2024-03-25T15:00:00')
+  check(
+    '月相按日期算：2024-04-08（日全食）算出新月、2024-03-25（半影月食）算出满月',
+    eclipseNew.moon === '新月' &&
+      eclipseNew.illum <= 3 &&
+      eclipseFull.moon === '满月' &&
+      eclipseFull.illum >= 97,
+    JSON.stringify({
+      newMoon: `${eclipseNew.moon} ${eclipseNew.illum}%`,
+      fullMoon: `${eclipseFull.moon} ${eclipseFull.illum}%`,
+    }),
+  )
+
   // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
