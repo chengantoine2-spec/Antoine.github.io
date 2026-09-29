@@ -26,7 +26,8 @@ export const APPS: AppDef[] = [
     path: '/blog',
     source: 'GitHub Issues（chengantoine2-spec/Antoine.github.io）',
     icon: 'blog',
-    defaultSize: { w: 860, h: 640 },
+    /* 贴吧式三栏排版：给到 1000 宽才放得下左栏 + 卡片流 + 右栏（窄窗会自动收成一列） */
+    defaultSize: { w: 1000, h: 680 },
   },
   { id: 'skills', name: '技能', path: '/skills', source: '本地静态', icon: 'skills' },
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },

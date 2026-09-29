@@ -155,6 +155,110 @@
   }
 }
 
+/* ── 博客窗口：贴吧式排版 —— 左（分类 / 标签）、中（搜索 + 卡片流）、右（站标 / 最新 / 统计）
+      栏数跟着「窗口」宽度走（容器查询看的是窗口，不是视口）：
+      <620px 一列，≥620px 两列（右栏落到左栏下方），≥900px 才展开三列 ── */
+.blog {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.blog__grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'nav'
+    'feed'
+    'aside';
+}
+
+.blog__nav {
+  grid-area: nav;
+  min-width: 0;
+}
+
+.blog__feed {
+  grid-area: feed;
+  min-width: 0;
+}
+
+.blog__aside {
+  grid-area: aside;
+  min-width: 0;
+}
+
+/* 窄窗里分类 / 标签排成可换行的横条，别把首屏占满 */
+.blog__navList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.blog__navItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* 卡片里的图文预览：贴吧是图文混排，这里封面在左、摘要在右 */
+.blog__cardBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.blog__cardCover {
+  width: 104px;
+  height: 72px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+@container (min-width: 620px) {
+  .blog__grid {
+    /* 右栏（aside）落到左栏下方，中栏竖着跨两行 */
+    grid-template-columns: 168px minmax(0, 1fr);
+    grid-template-areas:
+      'nav feed'
+      'aside feed';
+    align-items: start;
+  }
+
+  /* 两列起，左栏改成竖排列表（贴吧那种「我常逛的吧」） */
+  .blog__navList {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  .blog__navItem {
+    width: 100%;
+    border-radius: 6px;
+    padding: 5px 8px;
+  }
+}
+
+@container (min-width: 900px) {
+  .blog__grid {
+    grid-template-columns: 176px minmax(0, 1fr) 228px;
+    grid-template-areas: 'nav feed aside';
+  }
+}
+
+/* 特别窄的窗口里把封面缩到一行文字的高度，别把摘要挤没了 */
+@container (max-width: 380px) {
+  .blog__cardCover {
+    width: 72px;
+    height: 52px;
+  }
+}
+
 /* 表格外面的滚动壳：窄窗里表格自己横滚，正文不被撑破 */
 .md-table {
   max-width: 100%;

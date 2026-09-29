@@ -250,7 +250,39 @@ async function run() {
   })
   check('点「博客」→ 窗口渲染出列表或提示', !!blog && blog.len > 0, blog ? blog.head : '窗口未出现')
 
-  // 12 页面无运行时错误
+  // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
+  //    只能靠肉眼发现 —— 所以这里补一条回归检查）
+  const maxBtn = '[aria-label="博客 窗口"] header button[aria-pressed]'
+  await p.click(maxBtn)
+  const maxed = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="博客 窗口"]')
+    const btn = win?.querySelector('header button[aria-pressed]')
+    return {
+      label: btn?.getAttribute('aria-label') ?? '',
+      pressed: btn?.getAttribute('aria-pressed') === 'true',
+      isMax: (win?.className ?? '').includes('window--max'),
+      shapes: btn ? btn.querySelectorAll('svg rect, svg path').length : 0,
+    }
+  })
+  check(
+    '最大化后标题栏按钮变成「还原」（图标换成两个方块）',
+    maxed.label === '还原' && maxed.pressed && maxed.isMax && maxed.shapes === 2,
+    JSON.stringify(maxed),
+  )
+
+  // 再点一次还回去，别把窗口留在最大化状态给后面的检查添乱
+  await p.click(maxBtn)
+  const backUp = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="博客 窗口"]')
+    const btn = win?.querySelector('header button[aria-pressed]')
+    return {
+      label: btn?.getAttribute('aria-label') ?? '',
+      isMax: (win?.className ?? '').includes('window--max'),
+    }
+  })
+  check('再点一次能还原回「最大化」', backUp.label === '最大化' && !backUp.isMax, JSON.stringify(backUp))
+
+  // 13 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()
