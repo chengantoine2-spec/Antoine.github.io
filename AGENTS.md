@@ -24,7 +24,8 @@
   （抹掉空白与标点），所以「焦糖 布丁」也能命中「焦糖布丁」。
   两边规则一旦拆开写就会出现"正文搜不到"，别再改回去
 - 文章详情页（`/blog/:id`）同样按窗口宽度加栏：≥940px 出右栏（目录 + 更多文章）、
-  ≥1160px 再出左栏（文内信息）。**正文列固定 88ch（约 720px）、不跟着窗口拉长**，多出来的宽度给两栏。
+  ≥1160px 再出左栏（文内信息）。**正文列默认 88ch（约 720px）、不跟着窗口拉长**，多出来的宽度给两栏；
+  拖左右两条「白色长条」可以改这个宽度（复刻 DSH 会话页，见「正文列宽拖动条 / 滚动条」一节）。
   右栏断点别写成 960 —— 博客窗口默认 1000 宽，扣掉内边距只剩 958，卡在 960 上就永远看不到右栏。
   目录 id 由标题文字推导（`lib/toc.ts`），`Markdown.tsx` 给 h2/h3 挂同一个 id，两边不共享计数器
 - 窗口标题栏是 `– □ ×`：最小化 / 最大化（铺满视口，含任务栏）/ 关闭
@@ -155,9 +156,9 @@ npm run typecheck    # 只做类型检查
 | 路径 | 职责 |
 |---|---|
 | `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮） |
-| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`） |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏） |
-| `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽） |
+| `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -173,6 +174,30 @@ npm run typecheck    # 只做类型检查
 3. `src/router.tsx` 的 `WINDOWS` 映射里挂上（不挂就自动走 `AppPlaceholder`）
 4. 数据源写进 `apps.ts` 的 `source` —— 它是「窗口名 → 路由 → 数据源」的唯一登记处
 
+## 正文列宽拖动条 / 滚动条（复刻 DSH 会话页）
+
+用户在 DSH 的对话页看到两样东西，要求复刻进博客，现在都在：
+
+1. **左右两条白色拉伸长条**（文章详情页 `– □ ×` 窗口里的正文列两侧）：拖动改正文列宽。
+   实现照搬 DSH 的 `WidthHandle`：
+   - 抓取带 24px 宽、不占位，正好落在正文列与窄栏之间的空隙里；那 3px 长条是 CSS 的 `::after`，
+     平时透明，悬停/拖动/键盘聚焦时才显形，并用 `--width-handle-pointer-y` **跟着指针上下渐隐**
+   - **对称位移 ×2**：正文列居中，往右拖 40px = 两侧各出去 40px = 列宽 +80px，手柄黏在指针下
+   - 拖动走 pointer capture + rAF 节流，**过程中只改 CSS 变量、不进 React 状态**（否则长文章每帧重渲）
+   - 窄的 480 ~（容器 − 48）宽；拖动/键盘（方向键 24px，Shift 96px）松手才落盘；**双击复位**回 88ch
+   - **拖宽到窄栏放不下时窄栏让位**：先让左栏、留住目录，再全让；拖回去自己回来。
+     判定只看「列宽 + 栏占位 ≤ 容器」，与栏当前是否显示无关（见坑 6 的稳定基准）
+   - 没存过偏好时不写 `data-rails`，栏数照旧由容器查询决定 —— 默认观感一点没变
+   - 文件：`components/program/WidthHandle.tsx`（手柄）、`hooks/useArticleWidth.ts`（测量与回调）、
+     `lib/readingWidth.ts`（几何/钳制/让位规则）、`globals.css` 的 `.width-handle` 与 `[data-rails]`
+
+2. **右侧显示上下位置的那条**（= DSH 的自定义滚动条）：`globals.css` 里一套全局
+   `::-webkit-scrollbar` 规则 —— 8px 宽、轨道透明、4px 圆角滑块、悬停变亮，
+   颜色取 `--c-scroll-thumb` / `--c-scroll-thumb-hover`；Firefox 走 `@supports not selector(...)`
+   退回 `scrollbar-width: thin` + `scrollbar-color`。DSH 就是在 `ui-theme` 里这么写的，照抄。
+   ⚠️ 滚动条是浏览器原生绘制的：系统开了「自动隐藏滚动条」时 CSS 不生效，这属正常，
+   验证脚本因此只断言样式表里落了这几条规则（不去量最终外观）。
+
 ## 主题令牌（硬规则）
 
 组件**只读 CSS 变量**，可用类名：
@@ -186,11 +211,14 @@ bg-accent / text-accent-ink      强调（当前项、主按钮）
 bg-hover                         悬停底色
 rounded-window / rounded-dock    圆角
 logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
+变宽拖动条 / 滚动条滑块           读 --c-scroll-thumb（滑块）、--c-scroll-thumb-hover（悬停与拖动条）
 ```
 
 **禁止写死颜色**（`#fff`、`rgb(...)`、`bg-white` 这类字面量一律不许出现在组件里）。
 要加主题就在 `tokens.css` 里加一组变量块 —— 组件一行都不用改。
 站标的投影同理：三套主题各有一个 `--logo-shadow`，加主题时别忘了补上它。
+滚动条那两个同理：**加新主题时必须一起补 `--c-scroll-thumb` / `--c-scroll-thumb-hover`**，
+不然滚动条滑块会变成透明（读不到变量）。
 
 ## localStorage 键
 
@@ -208,6 +236,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.draft` | 编辑中的草稿（自动保存，发布/取消后清除），防止误关窗口丢内容 |
 | `desktop.termPort` | 终端服务端口，默认 5180 |
 | `desktop.termToken` | **终端服务的 token**（`npm run term` 启动时打印）。只存本机浏览器；有了它才能在网页里跑本机命令 |
+| `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -231,7 +260,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 > 现在按"测试阶段、暂不处理安全"处理，**正式上线前必须撤销并重建**。
 > 影响范围：`desktop.ghToken` 泄露 = 该仓库的 Issues 与 Contents 写入权限。
 
-## 五个已经踩过的坑（别再踩）
+## 六个已经踩过的坑（别再踩）
 
 **坑 1 · 自定义 CSS 不要放进 `@layer components`。**
 Tailwind 会按 `content` 扫描结果裁剪 `@layer components` 里"扫描不到"的规则，而运行时拼出来的类名
@@ -260,6 +289,15 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 正确做法是让**内层**用 `margin: auto`：有富余空间时它居中，真超出时自动解析成 0，
 内容从滚动原点开始，两端都够得到（Dock 的 `.no-scrollbar` 视口 + 内层 `m-auto` 就是这个模式）。
 
+**坑 6 · 拖动中的宽度不能被「按存档重贴」覆盖。**
+正文列宽是**不进 React 状态**的（拖动每帧只改 CSS 变量）。但那个 `ResizeObserver` 回调会重贴一次
+「存下来的偏好」—— 没存过偏好时它的动作是**把变量摘掉**。拖宽到窄栏让位时，内容高矮一变、
+滚动条一进一出，观察器立刻回调 → 正在拖的宽度当场被抹掉，表现是"拖到一半弹回去"；
+在滚动条占位的机器（Windows 默认就是）上必现。对策：hook 里放一个 `dragging` ref，
+`onStart` 置位、`onEnd` 复位，**拖动期间 `publish()` 直接 return**。
+同理，窄栏让位的判定要用**稳定基准**（`容器可用宽 + 滚动条占位`），不能直接用会被滚动条改变的那个宽度，
+否则还会多一种"栏藏起来 → 滚动条消失 → 容器变宽 → 栏又回来"的横跳。
+
 ## 验证
 
 - 手动：`npm run dev` → http://localhost:5173
@@ -269,6 +307,8 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
+- 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
+  窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 
 ## 工作流约定（重要）
 

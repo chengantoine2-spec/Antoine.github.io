@@ -1,9 +1,11 @@
 import { Suspense, lazy, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useArticleWidth } from '../../hooks/useArticleWidth'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
 import { useWindowTitle } from '../../hooks/useWindowTitle'
 import { CATEGORIES, charCount, formatDate } from '../../lib/github'
 import { extractToc } from '../../lib/toc'
+import { WidthHandle } from './WidthHandle'
 
 /* markdown 那一坨（react-markdown + remark-gfm + highlight.js）只在真正打开文章时才加载，
    否则桌面首屏要白白多背 100+ KB gzip（实测 77 → 182 KB）。 */
@@ -14,13 +16,18 @@ const CATEGORY_NAME = new Map<string, string>(CATEGORIES.map((item) => [item.id,
 /**
  * 文章详情：路由 /blog/:id，标题栏显示文章标题。
  * 宽窗下左右各挂一条窄栏（文内信息 / 目录 + 更多文章），别让正文孤零零地居中 ——
- * 正文列始终限制在 76ch，多出来的宽度给两栏，行宽不会被拉长。栏数见 globals.css 的 .article__*
+ * 正文列默认 88ch，多出来的宽度给两栏，行宽不会被拉长。栏数见 globals.css 的 .article__*
+ *
+ * 正文列宽还能拖：左右两条白色长条就是 DSH 会话页那两条的复刻
+ * （拖动条在 components/program/WidthHandle.tsx，几何在 lib/readingWidth.ts）。
+ * 拖过之后列宽写 localStorage，窄栏位置不变、正文只在中间变宽；双击手柄回到 88ch。
  */
 export function BlogDetailWindow() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { feed, loading } = useBlogFeed()
   const post = feed?.posts.find((item) => String(item.id) === id)
+  const { gridRef, handlesVisible, handles } = useArticleWidth()
 
   useWindowTitle(post?.title ?? '文章')
 
@@ -49,7 +56,7 @@ export function BlogDetailWindow() {
 
   return (
     <article className="reading">
-      <div className="article__grid">
+      <div className="article__grid" ref={gridRef}>
         {/* 左栏：文内信息（窄窗时这些信息在主栏头部，见 .article__meta） */}
         <aside className="article__rail article__rail--left" aria-label="文章信息">
           <section className="rounded-lg border border-edge bg-surface-2 p-2.5">
@@ -84,6 +91,15 @@ export function BlogDetailWindow() {
         </aside>
 
         <div className="article__main space-y-4">
+          {/* 两条拖动条贴在正文列左右两侧的空白里（绝对定位，不占位）。
+              容器太窄、两侧放不下时 useArticleWidth 会先藏起来，免得顶出横向滚动 */}
+          {handlesVisible ? (
+            <div className="article__handles">
+              <WidthHandle side="left" {...handles} />
+              <WidthHandle side="right" {...handles} />
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={() => navigate('/blog')}

@@ -162,20 +162,28 @@
 
 /* ── 文章详情：宽窗下左右各加一条窄栏（文内信息 / 目录 + 更多文章），
       别让正文孤零零居中、两侧空荡荡。.reading 仍是容器，栏数看窗口宽度；
-      正文列固定 88ch（约 720px），多出来的宽度给两栏，行宽不被拉长 ── */
+      正文列默认 88ch（约 720px），多出来的宽度给两栏，行宽不被拉长。
+      拖过手柄之后 --article-main-width 被写成 px（见 hooks/useArticleWidth.ts） ── */
 .article__grid {
+  /* 正文列宽：默认按行宽自适应；拖过手柄就由 useArticleWidth 覆盖成 px 值 */
+  --article-main-width: 88ch;
+  /* 手柄抓取带的宽度，同时也是正文与窄栏之间的空隙。
+     ⚠️ 与 lib/readingWidth.ts 的 ARTICLE_HANDLE_OFFSET 必须一致 */
+  --width-handle-offset: 24px;
   display: grid;
   /* 整组居中：两栏/三栏时窄栏紧贴正文，不会在正文和窄栏之间留出奇怪的空白 */
   justify-content: center;
   align-items: start;
-  gap: 20px;
-  grid-template-columns: minmax(0, 88ch);
+  gap: var(--width-handle-offset);
+  grid-template-columns: minmax(0, var(--article-main-width));
   grid-template-areas: 'main';
 }
 
 .article__main {
   grid-area: main;
   min-width: 0;
+  /* 两条拖动条以它为定位基准（贴在正文列左右两侧的空白里） */
+  position: relative;
 }
 
 .article__rail {
@@ -194,7 +202,7 @@
    扣掉窗口内边距只剩 958，卡在 960 上就永远看不到右栏了 */
 @container (min-width: 940px) {
   .article__grid {
-    grid-template-columns: minmax(0, 88ch) 208px;
+    grid-template-columns: minmax(0, var(--article-main-width)) 208px;
     grid-template-areas: 'main right';
   }
 
@@ -206,7 +214,7 @@
 /* ≥1160px 再放出左栏；同时把主栏头部那份元信息收起来（挪到左栏，不重复） */
 @container (min-width: 1160px) {
   .article__grid {
-    grid-template-columns: 168px minmax(0, 88ch) 216px;
+    grid-template-columns: 168px minmax(0, var(--article-main-width)) 216px;
     grid-template-areas: 'left main right';
   }
 
@@ -217,6 +225,109 @@
   .article__meta {
     display: none;
   }
+}
+
+/* 正文拖宽到窄栏放不下时，窄栏让位（规则在 lib/readingWidth.ts：先让左栏、
+   留住目录，再全让；拖窄回去它们自己回来）。没存过偏好就不写这个属性，
+   栏数照旧由上面的容器查询决定，所以默认观感一点没变 */
+.article__grid[data-rails='both'] {
+  grid-template-columns: 168px minmax(0, var(--article-main-width)) 216px;
+  grid-template-areas: 'left main right';
+}
+
+.article__grid[data-rails='both'] .article__rail {
+  display: block;
+}
+
+.article__grid[data-rails='right'] {
+  grid-template-columns: minmax(0, var(--article-main-width)) 208px;
+  grid-template-areas: 'main right';
+}
+
+.article__grid[data-rails='right'] .article__rail--right {
+  display: block;
+}
+
+.article__grid[data-rails='none'] {
+  grid-template-columns: minmax(0, var(--article-main-width));
+  grid-template-areas: 'main';
+}
+
+/* 栏被让掉时，原来藏在左栏里的那份文内信息要回到正文头部，别一起消失 */
+.article__grid[data-rails='none'] .article__rail,
+.article__grid[data-rails='right'] .article__rail--left {
+  display: none;
+}
+
+.article__grid[data-rails='none'] .article__meta,
+.article__grid[data-rails='right'] .article__meta {
+  display: flex;
+}
+
+/* ── 正文列宽拖动条：DSH 会话页左右那两条白色长条的复刻 ──
+   .width-handle 是抓取带（绝对定位、不占位，正好落在正文与窄栏之间的空隙里）；
+   ::after 才是那条 3px 的指示条，平时透明，悬停或拖动时才显形，
+   并且跟着指针的上下位置渐隐 —— --width-handle-pointer-y 由组件在 pointermove 里写。
+   钳制规则（拖到哪儿为止）在 lib/readingWidth.ts */
+.article__handles {
+  position: absolute;
+  inset: 0;
+  /* 只有那两条带子能点，正文照常选中 / 点击 */
+  pointer-events: none;
+  /* 抵消 .article__main 上 space-y-4 给后续兄弟加的 margin-top：
+     绝对定位 + inset:0 时它会把盒子整个顶下去 16px */
+  margin-top: 0;
+}
+
+.width-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 8;
+  width: var(--width-handle-offset, 24px);
+  cursor: col-resize;
+  pointer-events: auto;
+  /* 触屏上是"拖动改宽度"，别变成滚页面 */
+  touch-action: none;
+}
+
+.width-handle[data-side='right'] {
+  left: 100%;
+}
+
+.width-handle[data-side='left'] {
+  right: 100%;
+}
+
+.width-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent calc(var(--width-handle-pointer-y, 50%) - 52px),
+    var(--c-scroll-thumb-hover) calc(var(--width-handle-pointer-y, 50%) - 12px),
+    var(--c-scroll-thumb-hover) calc(var(--width-handle-pointer-y, 50%) + 12px),
+    transparent calc(var(--width-handle-pointer-y, 50%) + 52px)
+  );
+}
+
+.width-handle[data-side='right']::after {
+  left: 10px;
+}
+
+.width-handle[data-side='left']::after {
+  right: 10px;
+}
+
+.width-handle:hover::after,
+.width-handle[data-dragging]::after,
+.width-handle:focus-visible::after {
+  opacity: 1;
 }
 
 /* ── 博客窗口：贴吧式排版 —— 左（分类 / 标签）、中（搜索 + 卡片流）、右（站标 / 最新 / 统计）
@@ -587,6 +698,41 @@
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* ── 滚动条：复刻 DSH 右侧那个「上下位置指示」──
+   8px 宽、轨道透明、滑块是 4px 圆角胶囊，悬停变亮；颜色全走主题令牌，
+   所以换主题时它跟着变（令牌在 tokens.css）。
+   Firefox 没有 ::-webkit-scrollbar，退到标准属性（@supports 里判掉，
+   否则 Chrome 121+ 也认 scrollbar-width，会把上面这套覆盖掉） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-scroll-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-scroll-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  body,
+  body * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-scroll-thumb) transparent;
+  }
 }
 
 @keyframes win-in {

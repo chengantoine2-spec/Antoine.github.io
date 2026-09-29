@@ -337,6 +337,163 @@ async function run() {
     JSON.stringify(defaultRail),
   )
 
+  // 11e 正文列宽拖动条：复刻 DSH 会话页左右那两条长条。
+  //     抓取带要正好贴住正文列两侧（左条的右边缘 = 正文列左边缘），拖动是「对称位移」——
+  //     正文列居中，两侧各出去 40px，所以拖 40px 宽度该 +80px。
+  const handles = await p.evaluate(() => {
+    const main = document.querySelector('.article__main')
+    const mainBox = main.getBoundingClientRect()
+    const list = Array.from(document.querySelectorAll('.width-handle'))
+    return {
+      count: list.length,
+      fit: list.every((el) => {
+        const box = el.getBoundingClientRect()
+        return el.dataset.side === 'right'
+          ? Math.abs(box.left - mainBox.right) < 1
+          : Math.abs(box.right - mainBox.left) < 1
+      }),
+    }
+  })
+  check(
+    '文章页左右各一条拖动条，且抓取带正好贴住正文列',
+    handles.count === 2 && handles.fit,
+    JSON.stringify(handles),
+  )
+
+  const mainWidth = () =>
+    p.evaluate(() =>
+      Math.round(document.querySelector('.article__main').getBoundingClientRect().width),
+    )
+  const railsState = () =>
+    p.evaluate(() => ({
+      attr: document.querySelector('.article__grid').getAttribute('data-rails'),
+      right:
+        getComputedStyle(document.querySelector('.article__rail--right')).display !== 'none',
+      meta: getComputedStyle(document.querySelector('.article__meta')).display,
+    }))
+  /* 起点取在窗口可视区里，别落在滚动视口之外 */
+  const gripPoint = async () => {
+    const box = await p.locator('.width-handle[data-side="right"]').boundingBox()
+    return { x: box.x + box.width / 2, y: Math.min(Math.max(box.y + 120, 80), 640) }
+  }
+  const dragGrip = async (dx) => {
+    const from = await gripPoint()
+    await p.mouse.move(from.x, from.y)
+    await p.mouse.down()
+    await p.mouse.move(from.x + dx, from.y, { steps: 8 })
+    await p.waitForTimeout(120)
+    await p.mouse.up()
+    await p.waitForTimeout(200)
+  }
+
+  const widthBefore = await mainWidth()
+  const from = await gripPoint()
+  await p.mouse.move(from.x, from.y)
+  await p.mouse.down()
+  await p.mouse.move(from.x + 40, from.y, { steps: 8 })
+  /* 拖动走 rAF 节流：等那一帧真的落到布局上再断言，否则会读到一个还没生效的中间态 */
+  await p
+    .waitForFunction(
+      (expect) =>
+        Math.round(document.querySelector('.article__main').getBoundingClientRect().width) ===
+        expect,
+      widthBefore + 80,
+      { timeout: 2000, polling: 100 },
+    )
+    .catch(() => {})
+  const widthDuring = await mainWidth()
+  await p.mouse.up()
+  await p.waitForTimeout(200)
+  const dragged = await p.evaluate(() => ({
+    width: Math.round(document.querySelector('.article__main').getBoundingClientRect().width),
+    stored: Number(localStorage.getItem('desktop.articleWidth')),
+  }))
+  check(
+    '往右拖 40px → 正文列宽 +80px（对称位移 ×2），松手写进 localStorage',
+    widthDuring === widthBefore + 80 &&
+      dragged.width === widthBefore + 80 &&
+      dragged.stored === widthBefore + 80,
+    `${widthBefore} → ${widthDuring}｜落盘 ${dragged.stored}`,
+  )
+
+  /* 拖宽到窄栏放不下时窄栏让位（默认窗口 958 容器，正文 802 已经放不下右栏了）；
+     双击复位后偏好被清掉，右栏回来 */
+  const yielded = await railsState()
+  await p.dblclick('.width-handle[data-side="right"]')
+  await p.waitForTimeout(250)
+  const restored = await p.evaluate(() => ({
+    stored: localStorage.getItem('desktop.articleWidth'),
+    attr: document.querySelector('.article__grid').getAttribute('data-rails'),
+    width: Math.round(document.querySelector('.article__main').getBoundingClientRect().width),
+    right: getComputedStyle(document.querySelector('.article__rail--right')).display !== 'none',
+  }))
+  check(
+    '拖宽后窄栏让位（目录藏起来、文内信息回到头部），双击复位后右栏回来',
+    yielded.attr === 'none' &&
+      yielded.right === false &&
+      yielded.meta === 'flex' &&
+      restored.stored === null &&
+      restored.attr === null &&
+      restored.right === true &&
+      Math.abs(restored.width - widthBefore) <= 1,
+    `${JSON.stringify(yielded)}｜${JSON.stringify(restored)}`,
+  )
+
+  /* 宽窗（容器 ≥1160）拖宽时先让左栏、留住目录：这是让位顺序，别写反 */
+  await p.click(MAX_BTN)
+  await p.waitForTimeout(250)
+  await dragGrip(120)
+  const order = await p.evaluate(() => ({
+    attr: document.querySelector('.article__grid').getAttribute('data-rails'),
+    left: getComputedStyle(document.querySelector('.article__rail--left')).display !== 'none',
+    right: getComputedStyle(document.querySelector('.article__rail--right')).display !== 'none',
+  }))
+  await p.dblclick('.width-handle[data-side="right"]')
+  await p.waitForTimeout(200)
+  await p.click(MAX_BTN)
+  await p.waitForTimeout(200)
+  check(
+    '宽窗拖宽先让左栏、留住目录（顺序别写反）',
+    order.attr === 'right' && order.left === false && order.right === true,
+    JSON.stringify(order),
+  )
+
+  /* 11e2 滚动条：复刻 DSH 的「右侧上下位置指示」—— 8px、透明轨道、4px 圆角滑块走主题令牌。
+     滚动条是浏览器原生绘制的，量它的最终外观不稳（各系统滚动条设置不一），
+     所以这里断言样式表里确实落了这几条规则、且令牌有值 */
+  const scrollbar = await p.evaluate(() => {
+    const found = { width: null, track: null, thumb: null }
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules = []
+      try {
+        rules = Array.from(sheet.cssRules)
+      } catch {
+        continue
+      }
+      for (const rule of rules) {
+        if (rule.selectorText === '::-webkit-scrollbar') found.width = rule.style.width
+        else if (rule.selectorText === '::-webkit-scrollbar-track')
+          found.track = rule.style.background
+        else if (rule.selectorText === '::-webkit-scrollbar-thumb')
+          found.thumb = rule.style.background
+      }
+    }
+    return {
+      ...found,
+      token: getComputedStyle(document.documentElement)
+        .getPropertyValue('--c-scroll-thumb')
+        .trim(),
+    }
+  })
+  check(
+    '滚动条复刻 DSH（8px 宽、透明轨道、圆角滑块用主题令牌）',
+    scrollbar.width === '8px' &&
+      scrollbar.track === 'transparent' &&
+      /--c-scroll-thumb/.test(String(scrollbar.thumb)) &&
+      scrollbar.token !== '',
+    JSON.stringify(scrollbar),
+  )
+
   // 11d 任务栏上固定的「全屏」按钮：走 Fullscreen API，要真的进全屏（连浏览器窗口一起盖住），
   //     按钮自己也要跟着状态变 —— 和"窗口最大化"不是一回事。
   //     标题栏已经没有全屏按钮了（挪到任务栏 + 设置里），这里顺手断言它不在
