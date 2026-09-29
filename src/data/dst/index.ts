@@ -8,10 +8,41 @@
  * - 纯数据，不要在这里 import React 或做副作用
  * - 正文用「段落数组」而不是 markdown：markdown 渲染器有 100+ KB，wiki 窗口不该背上它
  * - 数值类信息放 facts，渲染成键值对，比塞进正文更好扫
+ *
+ * 这个文件负责**契约与装配**：类型、分类表、配方关系反查；具体条目按分类拆在
+ * `characters.ts` / `items.ts` / `creatures.ts` / `world.ts`，配方在 `recipes.ts`。
+ * 拆开的理由：条目会持续变多，全塞一个文件既难 diff 也容易和并行改动撞车。
  */
 
+import { CHARACTERS } from './characters'
+import { CREATURES } from './creatures'
+import { ITEMS } from './items'
+import { RECIPES } from './recipes'
+import { WORLD } from './world'
+
+/** 配方里的一项材料（或产出） */
+export interface DstIngredient {
+  /** 对应某个 DstEntry.id */
+  id: string
+  count: number
+}
+
+/** 配方：一个产出 + 若干材料。产出也可能是「站台」类条目（营火、科学机器） */
+export interface DstRecipe {
+  /** 产出条目 id */
+  output: string
+  /** 产出数量，不写 = 1 */
+  count?: number
+  /** 材料 */
+  ingredients: DstIngredient[]
+  /** 制作站台的中文名，如「科学机器」「炼金引擎」「随时可做」 */
+  station: string
+  /** 补充说明，如「需要先在科学机器旁解锁」 */
+  note?: string
+}
+
 export interface DstEntry {
-  /** 稳定 id，用作 React key；改了等于换条目 */
+  /** 稳定 id，用作 React key；改了等于换条目。只用小写英文与连字符 */
   id: string
   /** 中文名 */
   name: string
@@ -25,6 +56,14 @@ export interface DstEntry {
   body: string[]
   /** 关键数值 / 标签，例如「生命 150」 */
   facts?: Array<{ label: string; value: string }>
+  /**
+   * 其它常见叫法：俗称、旧译名、错别字、英文缩写。
+   * **直接喂给搜索**（含拼音首字母），所以要写「玩家真的会打进去的词」，
+   * 不要把摘要再抄一遍 —— 摘要本来就在索引里。
+   */
+  aliases?: string[]
+  /** 物品栏 / 小节分组，用于左栏二级筛选（如「武器」「护甲」） */
+  group?: string
   /** 相关条目 id */
   related?: string[]
 }
@@ -46,59 +85,71 @@ export const DST_CATEGORIES: DstCategory[] = [
 ]
 
 /**
- * 条目。现在只有几条**基础事实**用来把版式撑起来，
- * 细节与扩充由 wiki 窗口负责人来做（有疑问的数值宁可不写）。
+ * 全部条目。
+ *
+ * 数值一律按游戏内原始单位。**拿不准的宁可留空或写进正文说明，也不要填一个看起来像真的错数** ——
+ * 这个站的定位是「查得到、可以信」，一条错数值比缺一条更伤。
  */
 export const DST_ENTRIES: DstEntry[] = [
-  {
-    id: 'wilson',
-    name: '威尔逊',
-    en: 'Wilson',
-    category: 'character',
-    summary: '科学家，公认最好上手的角色：会长胡子，胡子能保暖、也能做复活肉像。',
-    body: [
-      '威尔逊是默认角色，三维均衡，没有明显短板，适合第一次玩联机版的人。',
-      '他的专属能力是胡子：随着天数增长会越长越长，冬天能当保暖用，剃下来的胡子可以做复活肉像。',
-    ],
-    facts: [
-      { label: '生命', value: '150' },
-      { label: '理智', value: '200' },
-      { label: '饥饿', value: '150' },
-      { label: '专属', value: '胡子 / 复活肉像' },
-    ],
-    related: ['beefalo'],
-  },
-  {
-    id: 'beefalo',
-    name: '牛',
-    en: 'Beefalo',
-    category: 'creature',
-    summary: '草原上的中立生物。剃毛得牛毛，喂够食物后可驯服成坐骑。',
-    body: [
-      '平时中立，被攻击或发情期会成群反击，前期不建议硬碰。',
-      '可以剃毛拿牛毛（做保暖衣物），也可以持续喂食驯服成坐骑。',
-    ],
-    facts: [
-      { label: '态度', value: '中立' },
-      { label: '产出', value: '牛毛 / 粪便' },
-      { label: '注意', value: '发情期主动攻击' },
-    ],
-    related: ['wilson'],
-  },
-  {
-    id: 'chester',
-    name: '切斯特',
-    en: 'Chester',
-    category: 'creature',
-    summary: '会跟着玩家走的移动储物箱，用眼骨召唤。',
-    body: [
-      '把眼骨带在身上，切斯特就会一直跟着你，相当于一个随身箱子。',
-      '联机版里它同样可以被升级形态替换，放东西进去比来回跑基地省事。',
-    ],
-    facts: [
-      { label: '召唤', value: '眼骨' },
-      { label: '作用', value: '移动储物' },
-    ],
-    related: [],
-  },
+  ...CHARACTERS,
+  ...CREATURES,
+  ...ITEMS,
+  ...WORLD,
 ]
+
+/* ───────────── 配方关系反查 ─────────────
+   引用只存 id（见各条目），展示时用下面这两个 Map 反查。
+   这样「这个物品被哪些配方用到」「它是怎么做出来的」都是算出来的，
+   不需要在条目里手写第二份 —— 手写的那份一定会和配方表对不上。 */
+
+const BY_ID = new Map(DST_ENTRIES.map((entry) => [entry.id, entry]))
+
+const RECIPES_BY_OUTPUT = new Map<string, DstRecipe[]>()
+const RECIPES_USING = new Map<string, DstRecipe[]>()
+
+for (const recipe of RECIPES) {
+  const made = RECIPES_BY_OUTPUT.get(recipe.output)
+  if (made) made.push(recipe)
+  else RECIPES_BY_OUTPUT.set(recipe.output, [recipe])
+
+  for (const ingredient of recipe.ingredients) {
+    const used = RECIPES_USING.get(ingredient.id)
+    if (used) used.push(recipe)
+    else RECIPES_USING.set(ingredient.id, [recipe])
+  }
+}
+
+export function findEntry(id: string): DstEntry | undefined {
+  return BY_ID.get(id)
+}
+
+/** 某个 id 显示成什么名字；查不到就退回 id，不会渲染出空白 */
+export function entryName(id: string): string {
+  return BY_ID.get(id)?.name ?? id
+}
+
+/** 怎么做出来（可能有多条，例如同一种材料的不同配方） */
+export function recipesFor(id: string): DstRecipe[] {
+  return RECIPES_BY_OUTPUT.get(id) ?? []
+}
+
+/** 被用在哪些配方里 */
+export function recipesUsing(id: string): DstRecipe[] {
+  return RECIPES_USING.get(id) ?? []
+}
+
+/** 全部配方（只读用） */
+export { RECIPES }
+
+/** 一个条目的可搜索文本：名字 + 英文名 + 别名 + 摘要 + 正文 + facts。
+    索引与查询必须走同一套归一化（见 DstWikiWindow 里的 normalize）。 */
+export function searchableText(entry: DstEntry): string {
+  return [
+    entry.name,
+    entry.en ?? '',
+    ...(entry.aliases ?? []),
+    entry.summary,
+    ...entry.body,
+    ...(entry.facts ?? []).map((fact) => `${fact.label} ${fact.value}`),
+  ].join(' ')
+}

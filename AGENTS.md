@@ -50,7 +50,17 @@
 | 谁 | 负责 | 能动哪些文件 |
 |---|---|---|
 | **主管** | 全站 UI / 交互 / 内容标准：桌面外壳、任务栏、窗口框架、主题令牌、路由、部署、验证脚本 | 除右边那两处以外的**全部** |
-| **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`src/data/dst/**` |
+| **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`src/data/dst/**`、`src/lib/dst/**` |
+
+**当前进度（2026-09-29 主管记录）**：负责人已加 `src/lib/dst/types.ts`
+（`DsCharacter` / `DsItem` / `DsSection` / `DsStation` / `DsRecipe` / `DsBundle` + 类型守卫）
+与 `src/data/dst/characters.ts`（18 个角色），并为此加了依赖 `pinyin-pro`（已在依赖表登记）。
+窗口**目前还接在主管写的 `src/data/dst/index.ts`**（3 条种子 + `DstEntry`）上 —— 两套并存是暂时的：
+接线完成后 `src/data/dst/index.ts` 应成为唯一入口（re-export 负责人的数据），
+主管写的 `DstEntry` / `DST_CATEGORIES` / `DST_ENTRIES` 种子随之删掉。
+⚠️ 提交前**必须** `npm run typecheck` 通过：曾经出现 `characters.ts` 里
+`import … from '../types'` 指向不存在的路径，`npm run build` 直接失败（一推就炸 CI），
+主管已改成 `'../../lib/dst/types'`。
 
 wiki 负责人的硬约束：
 
@@ -60,8 +70,9 @@ wiki 负责人的硬约束：
 2. 颜色**只用主题令牌类**（`text-ink` / `bg-surface-2` / `border-edge` / `text-dim` / `bg-accent` …），
    不许写死 `#fff` / `rgb()` / `bg-white`（见「主题令牌」一节）
 3. 版式用现成的三栏模式 `.wiki__*`（`globals.css`），栏数跟着窗口宽度走；正文行宽别超过 `68ch`
-4. **不加依赖**，尤其别为这个窗口引 markdown 渲染器或 UI 组件库 —— wiki 正文用「段落数组 + facts」
-   表达（`src/data/dst/index.ts` 里有类型）
+4. **新增依赖要先登记**：用户的规矩是「批准，但要记录并提示」—— `npm install` 之后必须在
+   「依赖清单」表里加一行（写清为什么需要），并在回复里说出来。重的别引：
+   markdown 渲染器、UI 组件库、状态管理库都免谈
 5. 改完必须 `npm run build` 通过；涉及交互再跑 `npm run verify`（需要 dev server 在跑）。
    `verify` 里有针对这个窗口的检查，**别改测试去迁就实现** —— 那是主管的文件
 6. 新窗口该有的登记（`apps.ts` 一行、`router.tsx` 映射、图标、`source`、默认尺寸）已由主管完成，
@@ -87,6 +98,7 @@ Vite 5 + React 18 + TypeScript + Tailwind 3 + react-router-dom 6。
 | `react-markdown` 9 | 博客正文 markdown 渲染 | 博客窗口 |
 | `remark-gfm` 4 | GFM 语法：表格、任务列表、删除线 | 博客窗口 |
 | `rehype-highlight` 7 | 代码块语法高亮（配色不引第三方 CSS，用主题令牌写在 `globals.css`） | 博客窗口 |
+| `pinyin-pro` 3.29 | 饥荒 Wiki 窗口的拼音匹配 / 排序（中文条目名按拼音搜） | 饥荒 Wiki 窗口（wiki 负责人加入，主管已登记） |
 
 **故意不装的**：`@tailwindcss/typography`（用 `.md` 自定义规则代替）、`playwright`（验证脚本复用 DSH 那份）、任何 UI 组件库。
 
