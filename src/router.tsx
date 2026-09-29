@@ -5,6 +5,7 @@ import { AboutWindow } from './components/program/AboutWindow'
 import { AppPlaceholder } from './components/program/AppPlaceholder'
 import { BlogDetailWindow } from './components/program/BlogDetailWindow'
 import { BlogWindow } from './components/program/BlogWindow'
+import { DstWikiWindow } from './components/program/DstWikiWindow'
 import { ProjectDetailWindow } from './components/program/ProjectDetailWindow'
 import { ProjectsWindow } from './components/program/ProjectsWindow'
 import { SettingsWindow } from './components/program/SettingsWindow'
@@ -20,6 +21,7 @@ const WINDOWS: Partial<Record<AppId, ReactElement>> = {
   projects: <ProjectsWindow />,
   settings: <SettingsWindow />,
   terminal: <TerminalWindow />,
+  wiki: <DstWikiWindow />,
   write: <WriteWindow />,
 }
 

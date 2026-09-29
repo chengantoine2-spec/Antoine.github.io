@@ -4,8 +4,8 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**、**终端**
-- 其余 3 个（技能 / 联系 / 资产库）走 `AppPlaceholder` 占位
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**、**终端**、**饥荒 Wiki**
+- 其余 2 个（技能 / 联系 / 资产库）走 `AppPlaceholder` 占位
 - **终端**窗口跑的是**真命令**：浏览器只当屏幕，命令在本机执行。为此需要一个本地服务
   `npm run term`（`tools/term-server.mjs`，只用 Node 内置模块，不引依赖）。
   ⚠️ 它的安全面比那个 GitHub PAT 大得多 —— 等价于把本机 shell 开给这个页面，所以三条底线：
@@ -42,6 +42,30 @@
   状态听 `fullscreenchange`，所以按 Esc / F11 退出也能同步；进全屏时会顺手最大化当前窗口。
   ⚠️ 取舍：全屏后窗口盖住任务栏，那个 ⛶ 自己就点不到了 —— 退出靠 Esc / F11。
   想让"全屏时任务栏仍可点"，把 useFullscreen 里那一步最大化去掉即可
+
+## 分工：饥荒 Wiki 窗口（多人 / 多 agent 同时改时看这里）
+
+这个仓库可能同时有**两个 agent** 在改，边界如下：
+
+| 谁 | 负责 | 能动哪些文件 |
+|---|---|---|
+| **主管** | 全站 UI / 交互 / 内容标准：桌面外壳、任务栏、窗口框架、主题令牌、路由、部署、验证脚本 | 除右边那两处以外的**全部** |
+| **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`src/data/dst/**` |
+
+wiki 负责人的硬约束：
+
+1. **只改上面那两个地方**。窗口外壳（`Window.tsx` / `Dock.tsx`）、登记表（`lib/apps.ts`）、
+   路由（`router.tsx`）、主题（`tokens.css`、`globals.css` 的共享部分）、验证脚本（`tools/verify.mjs`）
+   都归主管 —— 需要新能力（条目要独立路由 `/wiki/:id`、要新图标、要新令牌）就提出来，别自己动
+2. 颜色**只用主题令牌类**（`text-ink` / `bg-surface-2` / `border-edge` / `text-dim` / `bg-accent` …），
+   不许写死 `#fff` / `rgb()` / `bg-white`（见「主题令牌」一节）
+3. 版式用现成的三栏模式 `.wiki__*`（`globals.css`），栏数跟着窗口宽度走；正文行宽别超过 `68ch`
+4. **不加依赖**，尤其别为这个窗口引 markdown 渲染器或 UI 组件库 —— wiki 正文用「段落数组 + facts」
+   表达（`src/data/dst/index.ts` 里有类型）
+5. 改完必须 `npm run build` 通过；涉及交互再跑 `npm run verify`（需要 dev server 在跑）。
+   `verify` 里有针对这个窗口的检查，**别改测试去迁就实现** —— 那是主管的文件
+6. 新窗口该有的登记（`apps.ts` 一行、`router.tsx` 映射、图标、`source`、默认尺寸）已由主管完成，
+   你直接在组件与数据里填内容即可
 
 ## 技术栈
 
@@ -87,7 +111,7 @@ npm run typecheck    # 只做类型检查
 | `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
-| `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`） |
+| `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
 | `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
 | `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |

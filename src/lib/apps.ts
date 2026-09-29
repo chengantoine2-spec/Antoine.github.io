@@ -29,6 +29,15 @@ export const APPS: AppDef[] = [
     /* 贴吧式三栏排版：给到 1000 宽才放得下左栏 + 卡片流 + 右栏（窄窗会自动收成一列） */
     defaultSize: { w: 1000, h: 680 },
   },
+  {
+    id: 'wiki',
+    name: '饥荒 Wiki',
+    path: '/wiki',
+    source: '饥荒联机版资料（本地数据 src/data/dst/，窗口内容由 wiki 负责人维护）',
+    icon: 'wiki',
+    /* 三栏版式，和博客窗口一样给宽一点 */
+    defaultSize: { w: 1000, h: 680 },
+  },
   { id: 'skills', name: '技能', path: '/skills', source: '本地静态', icon: 'skills' },
   { id: 'contact', name: '联系', path: '/contact', source: '本地静态', icon: 'contact' },
   {

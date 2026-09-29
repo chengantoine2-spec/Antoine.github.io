@@ -20,6 +20,7 @@ export type IconName =
   | 'terminal'
   | 'assets'
   | 'settings'
+  | 'wiki'
 
 export type AppId = IconName
 

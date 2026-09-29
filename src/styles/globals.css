@@ -323,6 +323,88 @@
   }
 }
 
+/* ── 饥荒 Wiki：和博客窗口同一套三栏套路（左分类 / 中列表或详情 / 右速览）。
+      单独一组类名、互不影响；栏数同样跟着窗口宽度走 ── */
+.wiki {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.wiki__grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'nav'
+    'feed'
+    'aside';
+}
+
+.wiki__nav {
+  grid-area: nav;
+  min-width: 0;
+}
+
+.wiki__feed {
+  grid-area: feed;
+  min-width: 0;
+}
+
+.wiki__aside {
+  grid-area: aside;
+  min-width: 0;
+}
+
+.wiki__navList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wiki__navItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* 正文段落：别把行宽拉太长（和文章页一个量级） */
+.wiki__body {
+  max-width: 68ch;
+}
+
+@container (min-width: 620px) {
+  .wiki__grid {
+    grid-template-columns: 168px minmax(0, 1fr);
+    grid-template-areas:
+      'nav feed'
+      'aside feed';
+    align-items: start;
+  }
+
+  .wiki__navList {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  .wiki__navItem {
+    width: 100%;
+    border-radius: 6px;
+    padding: 5px 8px;
+  }
+}
+
+@container (min-width: 900px) {
+  .wiki__grid {
+    grid-template-columns: 176px minmax(0, 1fr) 228px;
+    grid-template-areas: 'nav feed aside';
+  }
+}
+
 /* 表格外面的滚动壳：窄窗里表格自己横滚，正文不被撑破 */
 .md-table {
   max-width: 100%;

@@ -443,6 +443,30 @@ async function run() {
     JSON.stringify(terminal),
   )
 
+  // 13b 饥荒 Wiki 窗口：内容是 wiki 负责人的，这里只保证外壳能开、
+  //     搜索 / 分类 / 条目都渲染出来（外壳属于主管的职责范围）
+  await p.click(`${DOCK} button[aria-label="所有项目"]`)
+  await p.waitForTimeout(250)
+  await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("饥荒 Wiki")')
+  await p.waitForTimeout(900)
+  const wiki = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="饥荒 Wiki 窗口"]')
+    const grid = document.querySelector('.wiki__grid')
+    if (!win) return null
+    return {
+      hasSearch: !!win.querySelector('input[aria-label="搜索 Wiki 条目"]'),
+      categories: win.querySelectorAll('.wiki__navItem').length,
+      cards: win.querySelectorAll('.wiki__feed li button').length,
+      columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+      empty: (win.textContent ?? '').includes('条目整理中'),
+    }
+  })
+  check(
+    '饥荒 Wiki 窗口能开：有搜索、分类与条目',
+    !!wiki && wiki.hasSearch && wiki.categories >= 2 && wiki.cards > 0 && !wiki.empty,
+    JSON.stringify(wiki),
+  )
+
   // 14 任务栏对齐：拖长/加厚之后图标要居中，但不是从左边排起、也不是靠滚动容器居中
   const dockAlign = await p.evaluate(() => {
     const dock = document.querySelector('nav[aria-label="任务栏"]')
