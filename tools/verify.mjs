@@ -29,6 +29,10 @@ if (!chromium) {
 
 const BASE = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '')
 const DOCK = 'nav[aria-label="任务栏"]'
+/* 最大化 / 还原：两个标签轮流出现，用组合选择器一次抓。
+   别用 [aria-pressed] —— 全屏按钮也带这个属性，会选错元素 */
+const MAX_BTN =
+  '[aria-label="博客 窗口"] header button[aria-label="最大化"], [aria-label="博客 窗口"] header button[aria-label="还原"]'
 
 const results = []
 function check(name, ok, detail = '') {
@@ -274,10 +278,10 @@ async function run() {
     JSON.stringify(search),
   )
 
-  // 11c 文章详情页：最大化后左右两栏要出来，正文列不跟着拉长
+  // 11c 文章详情页：最大化后左右两栏要出来，正文列放大但仍被限制（不跟着窗口无限拉长）
   await p.click('.blog__feed li button')
   await p.waitForTimeout(1500)
-  await p.click('[aria-label="博客 窗口"] header button[aria-pressed]')
+  await p.click(MAX_BTN)
   await p.waitForTimeout(250)
   const article = await p.evaluate(() => {
     const grid = document.querySelector('.article__grid')
@@ -295,18 +299,54 @@ async function run() {
     }
   })
   check(
-    '文章详情页宽窗下有左右栏，正文列不被拉长',
-    article.left && article.right && article.columns === 3 && article.toc > 0 && article.mainWidth <= 760,
+    '文章详情页宽窗下有左右栏，正文列放大但不被拉长',
+    article.left &&
+      article.right &&
+      article.columns === 3 &&
+      article.toc > 0 &&
+      article.mainWidth >= 680 &&
+      article.mainWidth <= 780,
     JSON.stringify(article),
   )
+
+  // 11d 标题栏的「全屏」按钮：走 Fullscreen API，要真的进全屏（盖住整个屏幕），
+  //     并且按钮自己跟着状态变 —— 和"窗口最大化"不是一回事
+  await p.click('[aria-label="博客 窗口"] header button[aria-label="全屏"]')
+  await p.waitForTimeout(300)
+  const fsIn = await p.evaluate(() => ({
+    on: document.fullscreenElement !== null,
+    label:
+      document
+        .querySelector('[aria-label="博客 窗口"] header button[aria-label="退出全屏"]')
+        ?.getAttribute('aria-label') ?? '',
+    buttons: [...document.querySelectorAll('[aria-label="博客 窗口"] header button')].map((b) =>
+      b.getAttribute('aria-label'),
+    ),
+  }))
+  check(
+    '标题栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住）',
+    fsIn.on && fsIn.label === '退出全屏' && fsIn.buttons.join(',') === '最小化,还原,退出全屏,关闭',
+    JSON.stringify(fsIn),
+  )
+
+  await p.click('[aria-label="博客 窗口"] header button[aria-label="退出全屏"]')
+  await p.waitForTimeout(300)
+  const fsOut = await p.evaluate(() => ({
+    on: document.fullscreenElement !== null,
+    back:
+      document
+        .querySelector('[aria-label="博客 窗口"] header button[aria-label="全屏"]')
+        ?.getAttribute('aria-label') ?? '',
+  }))
+  check('再点一次退出全屏，按钮回到「全屏」', !fsOut.on && fsOut.back === '全屏', JSON.stringify(fsOut))
+
   // 复原成未最大化，后面的检查靠这个状态
-  await p.click('[aria-label="博客 窗口"] header button[aria-pressed]')
+  await p.click(MAX_BTN)
   await p.waitForTimeout(200)
 
   // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
   //    只能靠肉眼发现 —— 所以这里补一条回归检查）
-  const maxBtn = '[aria-label="博客 窗口"] header button[aria-pressed]'
-  await p.click(maxBtn)
+  await p.click(MAX_BTN)
   const maxed = await p.evaluate(() => {
     const win = document.querySelector('[aria-label="博客 窗口"]')
     const btn = win?.querySelector('header button[aria-pressed]')
@@ -338,7 +378,7 @@ async function run() {
   )
 
   // 再点一次还回去，别把窗口留在最大化状态给后面的检查添乱
-  await p.click(maxBtn)
+  await p.click(MAX_BTN)
   const backUp = await p.evaluate(() => {
     const win = document.querySelector('[aria-label="博客 窗口"]')
     const btn = win?.querySelector('header button[aria-pressed]')

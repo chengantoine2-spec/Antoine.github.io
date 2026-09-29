@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getApp } from '../../lib/apps'
 import { useWindows } from '../../hooks/useWindows'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
@@ -18,6 +18,33 @@ export function Window({ win, children, onClose }: WindowProps) {
   const [title, setTitle] = useState<string | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const resize = useRef<{ x: number; y: number } | null>(null)
+
+  /* 浏览器级全屏：连浏览器自己的窗口一起盖住，铺满整个屏幕（不同于窗口最大化）。
+     用户按 Esc / F11 也能进出，所以状态听 fullscreenchange，而不是"我点过没有" */
+  const [fullscreen, setFullscreen] = useState(false)
+  /* 极少数环境不支持（比如 iOS Safari），那就别摆一个点了没反应的按钮 */
+  const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled
+
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null)
+    sync()
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+        return
+      }
+      /* 顺手最大化：否则浏览器进了全屏、窗口还是小的，看着依旧"没铺开" */
+      if (!win.maximized) dispatch({ type: 'toggle-maximize', id: win.id })
+      await document.documentElement.requestFullscreen()
+    } catch {
+      /* 被拒绝或不支持：什么都不做，按钮状态始终由 fullscreenchange 决定 */
+    }
+  }
 
   function startDrag(e: React.PointerEvent<HTMLElement>) {
     if (win.maximized) return
@@ -112,6 +139,43 @@ export function Window({ win, children, onClose }: WindowProps) {
               )}
             </svg>
           </button>
+          {canFullscreen ? (
+            <button
+              type="button"
+              className="grid h-6 w-6 place-items-center rounded text-dim hover:bg-hover hover:text-ink"
+              aria-label={fullscreen ? '退出全屏' : '全屏'}
+              aria-pressed={fullscreen}
+              onClick={toggleFullscreen}
+            >
+              {/* 全屏 / 退出全屏：四角朝外 vs 朝内，一眼能看出当前状态 */}
+              <svg
+                viewBox="0 0 12 12"
+                className="h-3 w-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                {fullscreen ? (
+                  <>
+                    <path d="M5 1.5V5H1.5" />
+                    <path d="M7 1.5V5h3.5" />
+                    <path d="M5 10.5V7H1.5" />
+                    <path d="M7 10.5V7h3.5" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M1.5 5V1.5H5" />
+                    <path d="M10.5 5V1.5H7" />
+                    <path d="M1.5 7v3.5H5" />
+                    <path d="M10.5 7v3.5H7" />
+                  </>
+                )}
+              </svg>
+            </button>
+          ) : null}
           <button
             type="button"
             className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-accent hover:text-accent-ink"

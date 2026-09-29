@@ -162,14 +162,14 @@
 
 /* ── 文章详情：宽窗下左右各加一条窄栏（文内信息 / 目录 + 更多文章），
       别让正文孤零零居中、两侧空荡荡。.reading 仍是容器，栏数看窗口宽度；
-      正文列固定 76ch（约 600px），多出来的宽度给两栏，行宽不被拉长 ── */
+      正文列固定 88ch（约 720px），多出来的宽度给两栏，行宽不被拉长 ── */
 .article__grid {
   display: grid;
   /* 整组居中：两栏/三栏时窄栏紧贴正文，不会在正文和窄栏之间留出奇怪的空白 */
   justify-content: center;
   align-items: start;
   gap: 20px;
-  grid-template-columns: minmax(0, 76ch);
+  grid-template-columns: minmax(0, 88ch);
   grid-template-areas: 'main';
 }
 
@@ -190,10 +190,10 @@
   grid-area: right;
 }
 
-/* ≥920px 才放得下「正文 + 一条窄栏」 */
-@container (min-width: 920px) {
+/* ≥960px 才放得下「正文 + 一条窄栏」 */
+@container (min-width: 960px) {
   .article__grid {
-    grid-template-columns: minmax(0, 76ch) 208px;
+    grid-template-columns: minmax(0, 88ch) 208px;
     grid-template-areas: 'main right';
   }
 
@@ -202,10 +202,10 @@
   }
 }
 
-/* ≥1120px 再放出左栏；同时把主栏头部那份元信息收起来（挪到左栏，不重复） */
-@container (min-width: 1120px) {
+/* ≥1160px 再放出左栏；同时把主栏头部那份元信息收起来（挪到左栏，不重复） */
+@container (min-width: 1160px) {
   .article__grid {
-    grid-template-columns: 168px minmax(0, 76ch) 216px;
+    grid-template-columns: 168px minmax(0, 88ch) 216px;
     grid-template-areas: 'left main right';
   }
 
