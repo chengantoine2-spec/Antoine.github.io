@@ -27,8 +27,23 @@ import {
 /* markdown 是懒加载的；提前预热 + startTransition 切换，避免"同步更新里挂起"那个 React 报错 */
 const Markdown = lazy(() => import('./Markdown').then((mod) => ({ default: mod.Markdown })))
 
-type Category = 'daily' | 'project' | 'none'
+/**
+ * 写作窗口的分类。`wiki` = 饥荒 Wiki 的攻略/教程：
+ * 打上这个分类会写入 `wiki` 标签，文章归到 Wiki 窗口的教程区，不混进博客正文流。
+ */
+type Category = 'daily' | 'project' | 'wiki' | 'none'
 type ViewMode = 'edit' | 'split' | 'preview'
+
+/** 分类 id → 按钮文字。加分类只改这里 */
+const CATEGORY_LABEL: Record<Category, string> = {
+  daily: '日常',
+  project: '项目',
+  wiki: '饥荒 Wiki',
+  none: '不分类',
+}
+
+/** 分类顺序：日常 / 项目 / 饥荒 Wiki / 不分类 */
+const CATEGORY_ORDER: Category[] = ['daily', 'project', 'wiki', 'none']
 
 type Draft = {
   /** null = 新建 */
@@ -48,7 +63,11 @@ function draftFromPost(post: BlogPost): Draft {
     title: post.title,
     body: post.body,
     category: post.category === 'other' ? 'none' : post.category,
-    tags: post.labels.filter((label) => label !== 'daily' && label !== 'project').join(', '),
+    /* 分类标签由分类按钮负责重写，这里只留「其它标签」，
+       否则编辑一篇教程会把它自己的 wiki 标签塞进标签输入框，看着像重复 */
+    tags: post.labels
+      .filter((label) => label !== 'daily' && label !== 'project' && label !== 'wiki')
+      .join(', '),
   }
 }
 
@@ -482,7 +501,7 @@ export function WriteWindow() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-dim">
             <span>分类</span>
-            {(['daily', 'project', 'none'] as const).map((item) => (
+            {CATEGORY_ORDER.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -494,7 +513,7 @@ export function WriteWindow() {
                     : 'border-edge text-ink hover:bg-hover'
                 }`}
               >
-                {item === 'daily' ? '日常' : item === 'project' ? '项目' : '不分类'}
+                {CATEGORY_LABEL[item]}
               </button>
             ))}
             <input

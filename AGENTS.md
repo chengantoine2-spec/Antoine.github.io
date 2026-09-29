@@ -50,23 +50,43 @@
 | 谁 | 负责 | 能动哪些文件 |
 |---|---|---|
 | **主管** | 全站 UI / 交互 / 内容标准：桌面外壳、任务栏、窗口框架、主题令牌、路由、部署、验证脚本 | 除右边那两处以外的**全部** |
-| **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`src/data/dst/**`、`src/lib/dst/**` |
+| **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`DstWikiContent.tsx`、`src/data/dst/**`、`src/lib/dst/**`、`tools/verify-dst.mjs`、`docs/**` |
 
-**当前进度（2026-09-29 主管记录）**：负责人已加 `src/lib/dst/types.ts`
-（`DsCharacter` / `DsItem` / `DsSection` / `DsStation` / `DsRecipe` / `DsBundle` + 类型守卫）
-与 `src/data/dst/characters.ts`（18 个角色），并为此加了依赖 `pinyin-pro`（已在依赖表登记）。
-窗口**目前还接在主管写的 `src/data/dst/index.ts`**（3 条种子 + `DstEntry`）上 —— 两套并存是暂时的：
-接线完成后 `src/data/dst/index.ts` 应成为唯一入口（re-export 负责人的数据），
-主管写的 `DstEntry` / `DST_CATEGORIES` / `DST_ENTRIES` 种子随之删掉。
+**当前进度（2026-09-29 更新）**：这个窗口已经**做完并接好线**，不再是种子状态。
+
+- 数据：`src/data/dst/` 拆成 `characters`（18 角色）/ `creatures`(8) / `items`（64 物品 + 9 料理）/
+  `world`(5) / `recipes`（40 配方）；`index.ts` 是唯一入口，做类型再导出、**按 id 去重**、
+  以及 `recipesFor` / `recipesUsing` / `entryName` 反查
+- 契约：`src/lib/dst/types.ts`（**唯一一份**）。判别字段是 **`category`** 而不是 `kind` ——
+  组件按 category 分栏，不需要知道具体是角色还是物品
+- 搜索：`src/lib/dst/search.ts`（索引 + 打分）+ `src/lib/dst/pinyin.ts`（拼音 / 多音字覆盖）。
+  支持中文 / 别名 / 英文 / 全拼 / **首字母**（`jft` → 金斧头）
+- 界面：`DstWikiWindow.tsx` 只是轻量外壳，实现全在 `DstWikiContent.tsx`（懒加载，见下）
+- 校验：`npm run verify:dst`（21 项：引用完整性 / 搜索回归 / 配方反查 / 教程区）
+- 教程：带 `wiki` 标签的博客文章，已经用 `docs/dst-guides/publish.mjs` 发布为
+  **issue #14 / #15 / #16**（标签 `wiki` + `新手教程`）。Wiki 窗口的「新手教程」区按标签筛；
+  **博客列表会把它们分流出去**（`src/lib/github.ts` 的 `isWikiGuide()`），选中「饥荒 Wiki」分类才显示。
+  ⚠️ 博客窗口的**分类角标要统计全部已发布文章**，不能统计筛选后的列表 —— 否则切分类时角标会跳成 0
+  （踩过一次，见 `docs/dst-wiki.md` 的「踩过的坑」）
+- 详细实现说明（数据模型、打分规则、chunk 拆分原因、踩过的坑）：**`docs/dst-wiki.md`**
+
 ⚠️ 提交前**必须** `npm run typecheck` 通过：曾经出现 `characters.ts` 里
-`import … from '../types'` 指向不存在的路径，`npm run build` 直接失败（一推就炸 CI），
-主管已改成 `'../../lib/dst/types'`。
+`import … from '../types'` 指向不存在的路径，`npm run build` 直接失败（一推就炸 CI）。
+路径是 `'../../lib/dst/types'`（数据文件在 `src/data/dst/`，契约在 `src/lib/dst/`）。
+
+⚠️ `router.tsx` 静态 import 的 `DstWikiWindow.tsx` **必须保持轻量**：它只 import react，
+真正的实现与数据在 `DstWikiContent.tsx` 里由 `lazy()` 拉。一旦让外壳静态 import 数据或
+`pinyin.ts`，几百 KB 会折进桌面首屏 chunk（实测首屏 +120 KB gzip）。改完请看构建产物的 chunk 大小。
 
 wiki 负责人的硬约束：
 
-1. **只改上面那两个地方**。窗口外壳（`Window.tsx` / `Dock.tsx`）、登记表（`lib/apps.ts`）、
+1. **改的范围以归属表为准**。窗口外壳（`Window.tsx` / `Dock.tsx`）、登记表（`lib/apps.ts`）、
    路由（`router.tsx`）、主题（`tokens.css`、`globals.css` 的共享部分）、验证脚本（`tools/verify.mjs`）
-   都归主管 —— 需要新能力（条目要独立路由 `/wiki/:id`、要新图标、要新令牌）就提出来，别自己动
+   都归主管 —— 需要新能力（条目要独立路由 `/wiki/:id`、要新图标、要新令牌）就提出来，别自己动。
+   ⚠️ **已有一个经用户批准的例外**：为了让教程能"以博客文章（wiki 标签）呈现"，
+   wiki 负责人改过三个共享文件 —— `src/lib/github.ts`（`CATEGORIES` 加 `wiki` + `isWikiGuide()`）、
+   `BlogWindow.tsx`（教程分流，一行 filter）、`WriteWindow.tsx`（Draft 类型 + 分类按钮）。
+   三处都是**纯增量**，可单独撤回。以后这类跨边界改动要先说明。
 2. 颜色**只用主题令牌类**（`text-ink` / `bg-surface-2` / `border-edge` / `text-dim` / `bg-accent` …），
    不许写死 `#fff` / `rgb()` / `bg-white`（见「主题令牌」一节）
 3. 版式用现成的三栏模式 `.wiki__*`（`globals.css`），栏数跟着窗口宽度走；正文行宽别超过 `68ch`
@@ -122,6 +142,7 @@ npm run term         # 本机终端服务（终端窗口用；只监听 127.0.0.
 npm run build        # tsc --noEmit + vite build
 npm run build:pages  # 追加生成 dist/404.html（GitHub Pages 深链兜底）
 npm run verify       # Playwright 冒烟验证（需要 dev 已在跑）
+npm run verify:dst   # 饥荒 Wiki 专属校验：数据完整性 + 搜索回归 + 配方反查（需要 dev 已在跑）
 npm run typecheck    # 只做类型检查
 ```
 
@@ -138,7 +159,8 @@ npm run typecheck    # 只做类型检查
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
 | `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
-| `tools/` | `verify.mjs`（冒烟验证）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
+| `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
+| `docs/` | `dst-wiki.md`（饥荒 Wiki 的实现说明：数据模型 / 打分规则 / chunk 拆分 / 踩坑）、`dst-guides/`（3 篇新手教程稿件 + 发布脚本 + 说明），**归 wiki 负责人** |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
@@ -187,10 +209,14 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 
 ## 数据约定（GitHub 仓库即后端）
 
-- **文章 = Issues**：分类用 `daily` / `project` 标签，其余标签当 tag；封面取正文里第一张图。
+- **文章 = Issues**：分类用 `daily` / `project` / `wiki` 标签，其余标签当 tag；封面取正文里第一张图。
   - **增 / 改**：`POST /issues`、`PATCH /issues/{n}`
   - **删**：REST 没有删 issue 的接口，只能走 GraphQL `deleteIssue`（需要 issue 的 `node_id`，列表接口会给）
   - **下架 = close**：公开博客列表只显示 `state=open`，下架的仍能在创作窗口看到并「重新显示」
+  - **`wiki` = 饥荒 Wiki 的教程**：这类文章归 Wiki 窗口的「新手教程」区，
+    **博客列表会把它们分流出去**（免得几十篇教程淹掉日常 / 项目），选中「饥荒 Wiki」分类才显示。
+    判定统一走 `src/lib/github.ts` 的 `isWikiGuide()`，两个窗口共用，别各写一份。
+    教程稿件与批量发布脚本见 `docs/dst-guides/`。
 - **图片 = `img` 分支**：路径 `YYYY/MM/<随机16位>.<ext>`，对外地址
   `https://cdn.jsdelivr.net/gh/chengantoine2-spec/Antoine.github.io@img/<路径>`（jsDelivr 加速）。
   上传走 Contents API（`PUT /contents/<path>` + `branch: 'img'`），需要 Token；
@@ -235,6 +261,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - 手动：`npm run dev` → http://localhost:5173
 - 自动：`npm run verify`（复用 DSH 的 Playwright + 系统 Edge，不把 playwright 装进本项目；
   需要换位置就设 `PLAYWRIGHT_PKG`）
+- 饥荒 Wiki 专属：`npm run verify:dst` —— 引用完整性 / 搜索回归 / 配方反查 / 教程区（21 项）。
+  它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
+  只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
 
 ## 工作流约定（重要）

@@ -11,13 +11,29 @@ const OWNER = 'chengantoine2-spec'
 const REPO = 'Antoine.github.io'
 const API = `https://api.github.com/repos/${OWNER}/${REPO}/issues`
 
+/**
+ * 分类标签。文章就是 Issue，分类 = 它带的标签。
+ *
+ * `wiki` 是**饥荒 Wiki 的攻略/教程**专用分类：这类文章属于 wiki 内容，
+ * 不该混进博客的日常/项目流，所以 `BlogWindow` 会把它们筛掉，
+ * 由「饥荒 Wiki」窗口的教程区去列（见 `WIKI_GUIDE_LABEL` 与 `isWikiGuide`）。
+ */
 export const CATEGORIES = [
   { id: 'all', name: '全部' },
   { id: 'daily', name: '日常' },
   { id: 'project', name: '项目' },
+  { id: 'wiki', name: '饥荒 Wiki', hint: '新手教程与攻略，在 Wiki 窗口里看' },
 ] as const
 
+/** 饥荒 Wiki 攻略用的标签。写作窗口选「饥荒 Wiki」分类时打的就是它 */
+export const WIKI_GUIDE_LABEL = 'wiki'
+
 export type CategoryId = (typeof CATEGORIES)[number]['id']
+
+/** 这篇是不是饥荒 Wiki 的攻略（带 `wiki` 标签，或分类已落到 wiki） */
+export function isWikiGuide(post: Pick<BlogPost, 'category' | 'labels'>): boolean {
+  return post.category === 'wiki' || post.labels.includes(WIKI_GUIDE_LABEL)
+}
 
 export interface BlogPost {
   id: number
@@ -27,8 +43,8 @@ export interface BlogPost {
   body: string
   /** 全部标签原文 */
   labels: string[]
-  /** daily / project / other */
-  category: 'daily' | 'project' | 'other'
+  /** daily / project / wiki / other */
+  category: 'daily' | 'project' | 'wiki' | 'other'
   /** open = 线上可见；closed = 已下架（仅创作窗口能看到） */
   state: 'open' | 'closed'
   /** 正文里第一张图，作为封面 */
@@ -84,7 +100,15 @@ function toPost(issue: RawIssue): BlogPost {
     title: issue.title,
     body,
     labels,
-    category: labels.includes('project') ? 'project' : labels.includes('daily') ? 'daily' : 'other',
+    /* 分类优先级：wiki > project > daily。wiki 排最前，
+       这样带 wiki 标签的教程即使同时有 daily 也会归到 wiki 教程那边 */
+    category: labels.includes(WIKI_GUIDE_LABEL)
+      ? 'wiki'
+      : labels.includes('project')
+        ? 'project'
+        : labels.includes('daily')
+          ? 'daily'
+          : 'other',
     state: issue.state === 'closed' ? 'closed' : 'open',
     cover: pickCover(body),
     createdAt: issue.created_at,

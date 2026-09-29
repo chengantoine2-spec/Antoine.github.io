@@ -6,6 +6,7 @@ import {
   CATEGORIES,
   charCount,
   formatDate,
+  isWikiGuide,
   normalizeForSearch,
   plainText,
   type BlogPost,
@@ -36,10 +37,15 @@ export function BlogWindow() {
     void import('./Markdown')
   }, [])
 
-  /* 公开列表只显示已发布的；下架的文章不在这里出现（创作窗口里仍能看到并恢复） */
+  /* 公开列表只显示已发布的；下架的文章不在这里出现（创作窗口里仍能看到并恢复）。
+     饥荒 Wiki 的教程（`wiki` 标签）不属于博客正文流 —— 只在显式选中「饥荒 Wiki」分类时
+     才显示出来，主要由 Wiki 窗口的教程区去列，免得几十篇教程把日常/项目淹掉。 */
   const posts = useMemo(
-    () => (feed?.posts ?? []).filter((post) => post.state === 'open'),
-    [feed],
+    () =>
+      (feed?.posts ?? []).filter(
+        (post) => post.state === 'open' && (category === 'wiki' || !isWikiGuide(post)),
+      ),
+    [feed, category],
   )
 
   /* 搜索索引：标题 + 正文 + 标签。索引与查询都过 normalizeForSearch（抹掉空白与标点），
@@ -63,11 +69,15 @@ export function BlogWindow() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [posts])
 
+  /* 分类角标必须统计**全部已发布文章**，不能统计 `posts`。
+     `posts` 会随所选分类变化（选中「饥荒 Wiki」时只剩教程），拿它算角标会让
+     其它分类全变 0 —— 切一下分类角标就跳，是实打实的显示 bug。 */
   const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>([['all', posts.length]])
-    for (const post of posts) counts.set(post.category, (counts.get(post.category) ?? 0) + 1)
+    const open = (feed?.posts ?? []).filter((post) => post.state === 'open')
+    const counts = new Map<string, number>([['all', open.length]])
+    for (const post of open) counts.set(post.category, (counts.get(post.category) ?? 0) + 1)
     return counts
-  }, [posts])
+  }, [feed])
 
   const keyword = normalizeForSearch(query)
   const filtering = keyword !== '' || category !== 'all' || tag !== null

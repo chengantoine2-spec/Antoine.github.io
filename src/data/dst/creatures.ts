@@ -1,0 +1,176 @@
+import type { DstEntry } from './index'
+
+/**
+ * 生物条目。
+ *
+ * 数值取自游戏脚本量级（生命 / 伤害 / 攻击间隔）。联机版对多数生物做了联机调整，
+ * 所以同一只怪在单机与联机里的血量是不同的 —— 这里一律用**联机版**数值。
+ */
+export const CREATURES: DstEntry[] = [
+  {
+    id: 'beefalo',
+    name: '牛',
+    en: 'Beefalo',
+    category: 'creature',
+    aliases: ['皮弗娄牛', '野牛', '牛牛', 'beef'],
+    summary: '草原上的中立生物。剃毛得牛毛，喂够食物后可驯服成坐骑。',
+    body: [
+      '平时中立，被攻击或发情期会成群反击，前期不建议硬碰。',
+      '可以剃毛拿牛毛（做保暖衣物），也可以持续喂食驯服成坐骑。',
+      '发情期（秋季末与春季）公牛会主动攻击靠近的玩家，这段时间要绕开牛群。',
+      '驯服后的牛可以骑乘，能大幅提升赶路速度，还能装鞍具。',
+    ],
+    facts: [
+      { label: '态度', value: '中立' },
+      { label: '生命', value: '500' },
+      { label: '伤害', value: '34' },
+      { label: '产出', value: '牛毛 / 粪便 / 大肉' },
+      { label: '注意', value: '发情期主动攻击' },
+    ],
+    related: ['wilson', 'beefalo-wool'],
+  },
+  {
+    id: 'chester',
+    name: '切斯特',
+    en: 'Chester',
+    category: 'creature',
+    aliases: ['眼球箱', '移动箱子', 'chester'],
+    summary: '会跟着玩家走的移动储物箱，用眼骨召唤。',
+    body: [
+      '把眼骨带在身上，切斯特就会一直跟着你，相当于一个随身箱子。',
+      '联机版里它同样可以被升级形态替换，放东西进去比来回跑基地省事。',
+      '眼骨通常在发条生物或遗迹附近能找到，属于开局后值得专门去拿的物件。',
+    ],
+    facts: [
+      { label: '召唤', value: '眼骨' },
+      { label: '作用', value: '移动储物' },
+      { label: '态度', value: '被动' },
+    ],
+    related: ['eyebone'],
+  },
+  {
+    id: 'spider',
+    name: '蜘蛛',
+    en: 'Spider',
+    category: 'creature',
+    aliases: ['小蜘蛛', '蛛蛛', 'zz'],
+    summary: '最常见的敌人，从蜘蛛巢出来。掉落蜘蛛丝与怪物肉，是前期最主要的资源来源。',
+    body: [
+      '白天待在巢里，黄昏与夜晚成群出来活动，数量多的时候很危险。',
+      '击杀会掉落蜘蛛丝和怪物肉，是前期布料与食物的重要来源。',
+      '韦伯与蜘蛛中立，还能把肉放进巢里收买它们。',
+      '蜘蛛战士血更厚、伤害更高，会主动追击；蜘蛛女王能召唤大量蜘蛛。',
+    ],
+    facts: [
+      { label: '态度', value: '敌对' },
+      { label: '生命', value: '100' },
+      { label: '伤害', value: '20' },
+      { label: '掉落', value: '蜘蛛丝 / 怪物肉 / 蜘蛛腺体' },
+    ],
+    related: ['silk', 'monster-meat', 'webber'],
+  },
+  {
+    id: 'hound',
+    name: '猎犬',
+    en: 'Hound',
+    category: 'creature',
+    aliases: ['狗', '野狗', 'hound'],
+    summary: '周期性成群袭击玩家的敌人，是中期最主要的生存压力来源。',
+    body: [
+      '每隔一段时间会成群来袭，前期几只、后期十几只，还会出现火焰犬与冰霜犬。',
+      '掉落犬牙与怪物肉，犬牙可以做犬牙陷阱。',
+      '对付它们的常规办法是引到牛群、猪人或触手旁边让它们互斗。',
+    ],
+    facts: [
+      { label: '态度', value: '敌对' },
+      { label: '生命', value: '150' },
+      { label: '伤害', value: '20' },
+      { label: '掉落', value: '犬牙 / 怪物肉' },
+      { label: '注意', value: '周期性成群来袭' },
+    ],
+    related: ['houndstooth', 'monster-meat'],
+  },
+  {
+    id: 'deerclops',
+    name: '独眼巨鹿',
+    en: 'Deerclops',
+    category: 'creature',
+    aliases: ['巨鹿', '独眼鹿', '冬季Boss', 'deerclops'],
+    summary: '冬季出现的 Boss，会主动拆建筑，前期最不想遇到的东西。',
+    body: [
+      '冬季末尾出现，会朝着玩家基地走，沿途拆掉建筑与树木。',
+      '攻击范围大、伤害高，硬拼需要护甲与回血准备。',
+      '常见打法是引到沼泽 / 牛群 / 树林里让它和其它生物互斗。',
+      '掉落独眼巨鹿眼球（可以做眼球伞 / 保温石相关物品）与大肉。',
+    ],
+    facts: [
+      { label: '态度', value: '敌对' },
+      { label: '生命', value: '2000' },
+      { label: '伤害', value: '150' },
+      { label: '出现', value: '冬季' },
+      { label: '掉落', value: '巨鹿眼球 / 大肉' },
+    ],
+    related: ['eyebrella', 'hound'],
+  },
+  {
+    id: 'bearger',
+    name: '熊獾',
+    en: 'Bearger',
+    category: 'creature',
+    aliases: ['熊', '秋Boss', '熊灌', 'bearger'],
+    summary: '秋季出现的 Boss，会翻找并吃掉地上的食物，同样会拆家。',
+    body: [
+      '秋季出现，会循着食物味找过来，把箱子里的东西翻出来吃掉。',
+      '血量与伤害都很高，攻击带击退，硬拼对装备要求高。',
+      '它的毛皮（熊皮）可以做保暖装备，是冬季前的实用掉落。',
+    ],
+    facts: [
+      { label: '态度', value: '敌对' },
+      { label: '生命', value: '3000' },
+      { label: '伤害', value: '100' },
+      { label: '出现', value: '秋季' },
+      { label: '掉落', value: '熊皮 / 大肉' },
+    ],
+    related: ['deerclops'],
+  },
+  {
+    id: 'pig',
+    name: '猪人',
+    en: 'Pig',
+    category: 'creature',
+    aliases: ['猪', '猪人村民', 'pig'],
+    summary: '中立生物。喂肉可以收买成打手，月圆与吃怪物肉后会变成疯猪。',
+    body: [
+      '平时中立，喂它肉类食物（怪物肉除外）可以收买，跟随玩家作战。',
+      '猪人吃下 4 块怪物肉、或月圆之夜会变成疯猪，攻击附近的一切。',
+      '猪人村可以提供稳定的肉与猪皮来源，也是守家的好帮手。',
+      '沃特靠近猪人会被主动攻击。',
+    ],
+    facts: [
+      { label: '态度', value: '中立' },
+      { label: '生命', value: '250' },
+      { label: '伤害', value: '33' },
+      { label: '掉落', value: '猪皮 / 大肉' },
+    ],
+    related: ['pigskin', 'monster-meat', 'wurt'],
+  },
+  {
+    id: 'bee-queen',
+    name: '蜂后',
+    en: 'Bee Queen',
+    category: 'creature',
+    aliases: ['蜂王', '蜂后Boss', 'fenghou'],
+    summary: '蜂巢深处的 Boss，掉落蜂后帽等强力装备。',
+    body: [
+      '在蜂巢区域内敲击巨型蜂巢可以召唤。',
+      '会召唤大量蜜蜂并附加减速效果，单打难度很高，建议组队。',
+      '掉落蜂后帽与蜂蜜类材料。',
+    ],
+    facts: [
+      { label: '态度', value: '敌对' },
+      { label: '生命', value: '22500' },
+      { label: '掉落', value: '蜂后帽 / 蜂蜜' },
+    ],
+    related: ['bee-queen-crown', 'honey'],
+  },
+]

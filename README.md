@@ -8,7 +8,7 @@
 - 源码仓库：<https://github.com/chengantoine2-spec/Antoine.github.io>
 
 技术栈：Vite 5 + React 18 + TypeScript + Tailwind CSS 3 + react-router-dom 6 +
-react-markdown + remark-gfm + rehype-highlight。
+react-markdown + remark-gfm + rehype-highlight + pinyin-pro。
 
 ---
 
@@ -18,6 +18,7 @@ react-markdown + remark-gfm + rehype-highlight。
 |---|---|
 | **博客** | 文章列表（分类 / 标签筛选）+ 详情，正文按 markdown 渲染；排版随窗口宽度自适应 |
 | **博客创作** | 用本机 PAT 直接新建 / 编辑 / 下架 / 删除文章，上传图片到 `img` 分支，可浏览图库并插入正文 |
+| **饥荒 Wiki** | 饥荒联机版资料库：**资料**区是 104 条结构化条目（角色 / 生物 / 物品 / 料理 / 世界机制）+ 40 条配方反查；**新手教程**区列带 `wiki` 标签的文章。支持中文 / 别名 / 英文 / 拼音 / **首字母**检索（`jft` → 金斧头） |
 | **项目** | 项目卡片 + 详情（静态数据 `src/data/projects.ts`） |
 | **关于** | 站点信息（静态数据 `src/data/site.ts`） |
 | **设置** | 三套主题、四种纯 CSS 纹理壁纸 + 图片壁纸、任务栏位置与尺寸、任务栏显示哪些应用、图标大小 |
@@ -25,8 +26,13 @@ react-markdown + remark-gfm + rehype-highlight。
 
 ## 数据从哪来
 
-- **文章 = GitHub Issues**：`daily` / `project` 标签当分类，其余标签当 tag；`state=open` 的才在博客里显示。
+- **文章 = GitHub Issues**：`daily` / `project` / `wiki` 标签当分类，其余标签当 tag；`state=open` 的才在博客里显示。
   站内创作走 GitHub API（新建 `POST /issues`、修改 `PATCH /issues/{n}`、下架 `state=closed`、删除走 GraphQL `deleteIssue`）。
+  - `wiki` 是饥荒 Wiki 的教程分类：归 Wiki 窗口的「新手教程」区，**博客列表会把它们分流出去**
+    （免得教程淹掉日常 / 项目），选中「饥荒 Wiki」分类才显示。判定走 `lib/github.ts` 的 `isWikiGuide()`。
+- **饥荒 Wiki 资料 = 本地数据**：`src/data/dst/`（角色 18 / 生物 8 / 物品 64 + 料理 9 / 世界 5 / 配方 40）。
+  纯 TypeScript 常量，构建期打进包里，没有运行期请求；引用只存 id，配方关系是算出来的。
+  详细约定见 `docs/dst-wiki.md`。
 - **图片 = 仓库 `img` 分支**：路径 `YYYY/MM/<随机>.png`，对外用 jsDelivr 加速；浏览图库不需要凭据。
 - **设置 = 浏览器 localStorage**：主题、壁纸、任务栏、窗口几何、草稿等（键名见 `AGENTS.md`）。
 
@@ -39,7 +45,8 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # 类型检查 + 产出 dist/
 npm run build:pages  # 追加生成 dist/404.html（GitHub Pages 深链兜底）
-npm run verify       # 冒烟验证（需要 dev 已在跑）
+npm run verify       # 全站冒烟验证（需要 dev 已在跑）
+npm run verify:dst   # 饥荒 Wiki 专属校验：数据完整性 + 搜索回归 + 配方反查（需要 dev 已在跑）
 ```
 
 ## 部署
@@ -54,12 +61,14 @@ npm run verify       # 冒烟验证（需要 dev 已在跑）
 
 ```
 src/components/desktop/   桌面外壳：DesktopShell / Window / Dock / StartMenu / AppIcon
-src/components/program/   窗口内容（新窗口一律放这里）
+src/components/program/   窗口内容（新窗口一律放这里）；DstWikiWindow（外壳）+ DstWikiContent（实现）
 src/hooks/                useAppearance / useDock / useWindows / useBlogFeed / useWindowTitle
 src/lib/                  apps（窗口登记表）/ dock / theme / windowManager / windowStore / github
+src/lib/dst/              饥荒 Wiki 的契约（types）、搜索与打分（search）、拼音与多音字（pinyin）
 src/styles/               tokens.css（三套主题变量）、globals.css
-src/data/                 site.ts、projects.ts
-tools/                    verify.mjs（冒烟验证）、pages-postbuild.mjs（404 兜底）
+src/data/                 site.ts、projects.ts；dst/ 是饥荒 Wiki 的数据（角色 / 生物 / 物品 / 世界 / 配方）
+docs/                     dst-wiki.md（饥荒 Wiki 实现说明）、dst-guides/（3 篇新手教程稿件 + 发布脚本）
+tools/                    verify.mjs（全站冒烟）、verify-dst.mjs（饥荒 Wiki 校验）、pages-postbuild.mjs（404 兜底）
 AGENTS.md                 开发约定：窗口契约、主题令牌硬规则、localStorage 键、踩过的坑
 ```
 
