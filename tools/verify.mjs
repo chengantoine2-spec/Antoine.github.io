@@ -109,9 +109,18 @@ async function run() {
     const win = document.querySelector('[aria-label="设置 窗口"]')
     if (!win) return null
     const r = win.getBoundingClientRect()
-    return { w: Math.round(r.width), h: Math.round(r.height), hasHelp: win.textContent.includes('操作说明') }
+    return {
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      hasHelp: win.textContent.includes('操作说明'),
+      /* 全屏入口现在归到设置窗口里（标题栏那个已经撤掉） */
+      fullscreenBtn: [...win.querySelectorAll('button')].some((b) =>
+        /进入全屏|退出全屏/.test(b.textContent ?? ''),
+      ),
+    }
   })
   check('设置窗口打开且带「操作说明」', !!settings?.hasHelp, JSON.stringify(settings))
+  check('设置窗口里有「全屏」按钮', settings?.fullscreenBtn === true, JSON.stringify(settings))
   check('设置窗口用了自己的默认尺寸（720×620）', settings?.w === 720 && settings?.h === 620, `${settings?.w}×${settings?.h}`)
 
   // 5 主题切换
@@ -308,41 +317,47 @@ async function run() {
       article.mainWidth <= 780,
     JSON.stringify(article),
   )
+  /* 先复原成未最大化：最大化窗口会盖住任务栏，那上面的按钮点不到 */
+  await p.click(MAX_BTN)
+  await p.waitForTimeout(200)
 
-  // 11d 标题栏的「全屏」按钮：走 Fullscreen API，要真的进全屏（盖住整个屏幕），
-  //     并且按钮自己跟着状态变 —— 和"窗口最大化"不是一回事
-  await p.click('[aria-label="博客 窗口"] header button[aria-label="全屏"]')
+  // 11d 任务栏上固定的「全屏」按钮：走 Fullscreen API，要真的进全屏（连浏览器窗口一起盖住），
+  //     按钮自己也要跟着状态变 —— 和"窗口最大化"不是一回事。
+  //     标题栏已经没有全屏按钮了（挪到任务栏 + 设置里），这里顺手断言它不在
+  const FS_BTN = `${DOCK} button[aria-label="全屏"], ${DOCK} button[aria-label="退出全屏"]`
+  await p.click(FS_BTN)
   await p.waitForTimeout(300)
-  const fsIn = await p.evaluate(() => ({
+  const fsIn = await p.evaluate((dockSel) => ({
     on: document.fullscreenElement !== null,
-    label:
+    dockLabel:
       document
-        .querySelector('[aria-label="博客 窗口"] header button[aria-label="退出全屏"]')
+        .querySelector(`${dockSel} button[aria-label="退出全屏"]`)
         ?.getAttribute('aria-label') ?? '',
-    buttons: [...document.querySelectorAll('[aria-label="博客 窗口"] header button')].map((b) =>
+    titleButtons: [...document.querySelectorAll('[aria-label="博客 窗口"] header button')].map((b) =>
       b.getAttribute('aria-label'),
     ),
-  }))
+  }), DOCK)
   check(
-    '标题栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住）',
-    fsIn.on && fsIn.label === '退出全屏' && fsIn.buttons.join(',') === '最小化,还原,退出全屏,关闭',
+    '任务栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住）',
+    fsIn.on && fsIn.dockLabel === '退出全屏' && fsIn.titleButtons.join(',') === '最小化,还原,关闭',
     JSON.stringify(fsIn),
   )
 
-  await p.click('[aria-label="博客 窗口"] header button[aria-label="退出全屏"]')
-  await p.waitForTimeout(300)
-  const fsOut = await p.evaluate(() => ({
-    on: document.fullscreenElement !== null,
-    back:
-      document
-        .querySelector('[aria-label="博客 窗口"] header button[aria-label="全屏"]')
-        ?.getAttribute('aria-label') ?? '',
-  }))
-  check('再点一次退出全屏，按钮回到「全屏」', !fsOut.on && fsOut.back === '全屏', JSON.stringify(fsOut))
-
-  // 复原成未最大化，后面的检查靠这个状态
+  /* 进全屏时窗口被顺手最大化了，任务栏又被盖住 —— 先还原窗口，任务栏上的按钮才点得到 */
   await p.click(MAX_BTN)
   await p.waitForTimeout(200)
+  await p.click(FS_BTN)
+  await p.waitForTimeout(300)
+  const fsOut = await p.evaluate((dockSel) => ({
+    on: document.fullscreenElement !== null,
+    dockLabel:
+      document.querySelector(`${dockSel} button[aria-label="全屏"]`)?.getAttribute('aria-label') ?? '',
+  }), DOCK)
+  check(
+    '再点一次退出全屏，任务栏按钮回到「全屏」',
+    !fsOut.on && fsOut.dockLabel === '全屏',
+    JSON.stringify(fsOut),
+  )
 
   // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
   //    只能靠肉眼发现 —— 所以这里补一条回归检查）

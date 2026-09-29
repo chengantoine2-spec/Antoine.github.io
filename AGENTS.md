@@ -20,10 +20,13 @@
 - 文章详情页（`/blog/:id`）同样按窗口宽度加栏：≥960px 出右栏（目录 + 更多文章）、
   ≥1160px 再出左栏（文内信息）。**正文列固定 88ch（约 720px）、不跟着窗口拉长**，多出来的宽度给两栏。
   目录 id 由标题文字推导（`lib/toc.ts`），`Markdown.tsx` 给 h2/h3 挂同一个 id，两边不共享计数器
-- 窗口标题栏是 `– □ ⛶ ×`：最小化 / 最大化（铺满视口，含任务栏）/ **浏览器级全屏** / 关闭。
-  全屏走 Fullscreen API（`document.documentElement.requestFullscreen`），是连浏览器自己的窗口
-  一起盖住的那种，和"窗口最大化"不是一回事；按 Esc 或 F11 也能退出，所以按钮状态听
-  `fullscreenchange`，不是记"我点过没有"
+- 窗口标题栏是 `– □ ×`：最小化 / 最大化（铺满视口，含任务栏）/ 关闭
+- **浏览器级全屏**（连浏览器自己的窗口一起盖住，和"窗口最大化"不是一回事）**不在标题栏**，
+  而是两处：任务栏右边固定的 ⛶、设置窗口里的「进入全屏」。两处共用
+  `hooks/useFullscreen.ts` 与 `components/desktop/FullscreenButton.tsx`。
+  状态听 `fullscreenchange`，所以按 Esc / F11 退出也能同步；进全屏时会顺手最大化当前窗口。
+  ⚠️ 取舍：全屏后窗口盖住任务栏，那个 ⛶ 自己就点不到了 —— 退出靠 Esc / F11。
+  想让"全屏时任务栏仍可点"，把 useFullscreen 里那一步最大化去掉即可
 
 ## 技术栈
 
@@ -61,9 +64,9 @@ npm run typecheck    # 只做类型检查
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon` |
+| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮） |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`） |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆） |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏） |
 | `src/lib/` | `apps`（窗口登记表）、`dock`（任务栏几何）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |

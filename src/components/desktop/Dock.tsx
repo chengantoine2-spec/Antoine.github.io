@@ -15,6 +15,7 @@ import {
 import type { AppId } from '../../types/desktop'
 import { AppIcon } from './AppIcon'
 import { DockPositionMenu, PositionGlyph } from './DockPositionMenu'
+import { FullscreenButton } from './FullscreenButton'
 import { StartMenu } from './StartMenu'
 
 function clamp(value: number, min: number, max: number): number {
@@ -423,6 +424,9 @@ export function Dock() {
       </div>
 
       {vertical ? menuButton : null}
+
+      {/* 全屏按钮：固定在任务栏上，和「任务栏位置」并排（设置窗口里也有一个） */}
+      <FullscreenButton style={btnStyle} />
 
       {/* 位置按钮：点开后保持展开 */}
       <div ref={posWrap} className="relative shrink-0">

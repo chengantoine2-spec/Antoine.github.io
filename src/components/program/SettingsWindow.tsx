@@ -16,6 +16,7 @@ import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import type { DockPosition } from '../../types/desktop'
 import { PositionGlyph } from '../desktop/DockPositionMenu'
+import { FullscreenButton } from '../desktop/FullscreenButton'
 
 const POSITION_LABEL: Record<DockPosition, string> = {
   bottom: '底部',
@@ -33,6 +34,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ['拖窗口标题栏', '移动窗口；双击标题栏最大化 / 还原'],
   ['拖窗口右下角', '缩放窗口'],
   ['窗口的 — / □ / ×', '最小化 / 最大化 / 关闭；最小化后点任务栏按钮唤回'],
+  ['任务栏右边的 ⛶（或设置里的「进入全屏」）', '浏览器全屏，连浏览器窗口一起盖住；Esc / F11 也能退出'],
 ]
 
 function Section({
@@ -264,6 +266,13 @@ export function SettingsWindow() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      <Section
+        title="全屏"
+        hint="连浏览器自己的窗口一起盖住，铺满整个屏幕；任务栏右边也有一个，按 Esc / F11 也能退出"
+      >
+        <FullscreenButton variant="text" />
       </Section>
 
       <Section title="重置">
