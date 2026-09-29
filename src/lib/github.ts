@@ -196,6 +196,24 @@ export function formatDate(iso: string): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * 搜索归一化：抹掉 markdown 结构、空白和标点，只留字母、数字与汉字。
+ * **索引和查询必须走同一套规则** —— 之前索引用 plainText（把换行压成空格、还删掉 -_*#），
+ * 查询只 trim，于是「焦糖 布丁」搜不到「焦糖布丁」、`node_id` 也搜不到正文里的写法。
+ */
+export function normalizeForSearch(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') /* 图片整条去掉，地址不参与搜索 */
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') /* 链接只留可见文字 */
+    .replace(/[^\p{L}\p{N}]+/gu, '') /* 其余（空白、标点、markdown 记号）一律抹掉 */
+    .toLowerCase()
+}
+
+/** 正文字数：列表页与详情页都用它 */
+export function charCount(body: string): number {
+  return plainText(body, Number.MAX_SAFE_INTEGER).length
+}
+
 /* ───────────── 写入：需要你自己在本机填一个 PAT ─────────────
    安全边界说清楚：
    - Token 只写进这台浏览器的 localStorage（键 desktop.ghToken），**不会进仓库、不会进代码**；

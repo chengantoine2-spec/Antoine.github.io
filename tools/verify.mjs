@@ -250,6 +250,59 @@ async function run() {
   })
   check('点「博客」→ 窗口渲染出列表或提示', !!blog && blog.len > 0, blog ? blog.head : '窗口未出现')
 
+  // 11b 搜索：要能检索正文，且空格 / 标点不该影响命中
+  // （之前索引走 plainText、查询只 trim，两套规则不一致，多打一个空格就搜不到正文）
+  const search = await p.evaluate(async () => {
+    const input = document.querySelector('input[aria-label="搜索文章"]')
+    if (!input) return null
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    const run = async (q) => {
+      setter.call(input, q)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      return document.querySelectorAll('.blog__feed li button').length
+    }
+    const spaced = await run('焦糖 布丁')
+    const plain = await run('焦糖布丁')
+    const none = await run('zzz不存在的词')
+    await run('')
+    return { spaced, plain, none }
+  })
+  check(
+    '搜索能检索正文，空格 / 标点不影响命中',
+    !!search && search.spaced > 0 && search.spaced === search.plain && search.none === 0,
+    JSON.stringify(search),
+  )
+
+  // 11c 文章详情页：最大化后左右两栏要出来，正文列不跟着拉长
+  await p.click('.blog__feed li button')
+  await p.waitForTimeout(1500)
+  await p.click('[aria-label="博客 窗口"] header button[aria-pressed]')
+  await p.waitForTimeout(250)
+  const article = await p.evaluate(() => {
+    const grid = document.querySelector('.article__grid')
+    const main = document.querySelector('.article__main')
+    const vis = (sel) => {
+      const el = document.querySelector(sel)
+      return !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0
+    }
+    return {
+      columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+      left: vis('.article__rail--left'),
+      right: vis('.article__rail--right'),
+      toc: document.querySelectorAll('.article__rail--right li').length,
+      mainWidth: main ? Math.round(main.getBoundingClientRect().width) : 0,
+    }
+  })
+  check(
+    '文章详情页宽窗下有左右栏，正文列不被拉长',
+    article.left && article.right && article.columns === 3 && article.toc > 0 && article.mainWidth <= 760,
+    JSON.stringify(article),
+  )
+  // 复原成未最大化，后面的检查靠这个状态
+  await p.click('[aria-label="博客 窗口"] header button[aria-pressed]')
+  await p.waitForTimeout(200)
+
   // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
   //    只能靠肉眼发现 —— 所以这里补一条回归检查）
   const maxBtn = '[aria-label="博客 窗口"] header button[aria-pressed]'

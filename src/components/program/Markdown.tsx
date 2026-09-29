@@ -1,6 +1,17 @@
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
+import type { ReactNode } from 'react'
+import { headingId } from '../../lib/toc'
+
+/** 把标题里的富文本（加粗、行内代码、链接）压成纯文字，用来算目录 id */
+function textOf(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map((child) => textOf(child as ReactNode)).join('')
+  const props = (node as { props?: { children?: ReactNode } }).props
+  return props ? textOf(props.children) : ''
+}
 
 /* 表格外面套一层可横向滚动的容器：窗口再窄也不会把正文撑破 */
 const components: Components = {
@@ -8,6 +19,17 @@ const components: Components = {
     <div className="md-table">
       <table {...props} />
     </div>
+  ),
+  /* h2 / h3 挂上 id，文章详情页的目录靠它跳转（id 由标题文字推导，见 lib/toc.ts） */
+  h2: ({ node: _node, children, ...props }) => (
+    <h2 id={headingId(textOf(children))} {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ node: _node, children, ...props }) => (
+    <h3 id={headingId(textOf(children))} {...props}>
+      {children}
+    </h3>
   ),
 }
 

@@ -2,18 +2,21 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SITE } from '../../data/site'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
-import { CATEGORIES, formatDate, plainText, type BlogPost, type CategoryId } from '../../lib/github'
+import {
+  CATEGORIES,
+  charCount,
+  formatDate,
+  normalizeForSearch,
+  plainText,
+  type BlogPost,
+  type CategoryId,
+} from '../../lib/github'
 
 /** 分类 id → 中文名；卡片头上的"圆牌"取它的第一个字（对应贴吧那边的吧头像） */
 const CATEGORY_NAME = new Map<string, string>(CATEGORIES.map((item) => [item.id, item.name]))
 
 function categoryMark(post: BlogPost): string {
   return (CATEGORY_NAME.get(post.category) ?? '其他').slice(0, 1)
-}
-
-/** 正文字数：列表里拿它替代贴吧的「评论 / 赞」，因为 Issues 没有可对外展示的阅读数据 */
-function charCount(body: string): number {
-  return plainText(body, Number.MAX_SAFE_INTEGER).length
 }
 
 /**
@@ -39,14 +42,12 @@ export function BlogWindow() {
     [feed],
   )
 
-  /* 搜索索引：标题 + 正文 + 标签，一次性小写化，边打字边筛 */
+  /* 搜索索引：标题 + 正文 + 标签。索引与查询都过 normalizeForSearch（抹掉空白与标点），
+     所以「焦糖 布丁」也能命中「焦糖布丁」；两边规则一旦不一致就会出现"正文搜不到" */
   const haystack = useMemo(() => {
     const map = new Map<number, string>()
     for (const post of posts) {
-      map.set(
-        post.id,
-        `${post.title} ${plainText(post.body, Number.MAX_SAFE_INTEGER)} ${post.labels.join(' ')}`.toLowerCase(),
-      )
+      map.set(post.id, normalizeForSearch(`${post.title} ${post.body} ${post.labels.join(' ')}`))
     }
     return map
   }, [posts])
@@ -68,7 +69,7 @@ export function BlogWindow() {
     return counts
   }, [posts])
 
-  const keyword = query.trim().toLowerCase()
+  const keyword = normalizeForSearch(query)
   const filtering = keyword !== '' || category !== 'all' || tag !== null
 
   const shown = posts.filter(
