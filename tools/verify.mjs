@@ -287,6 +287,96 @@ async function run() {
     JSON.stringify(search),
   )
 
+  // 11b2 博客首页两侧的分隔条：拖的是「栏与栏的分界」，中栏（卡片流）始终 1fr 吃满剩余空间，
+  //       所以拖多少变多少（不像文章页那种居中对称的 ×2），整行永远贴齐、两端不留白
+  const railState = () =>
+    p.evaluate(() => {
+      const grid = document.querySelector('.blog__grid')
+      const nav = document.querySelector('.blog__nav')
+      const feed = document.querySelector('.blog__feed')
+      const aside = document.querySelector('.blog__aside')
+      return {
+        gridWidth: Math.round(grid.getBoundingClientRect().width),
+        nav: Math.round(nav.getBoundingClientRect().width),
+        feed: Math.round(feed.getBoundingClientRect().width),
+        aside: Math.round(aside.getBoundingClientRect().width),
+        handles: Array.from(document.querySelectorAll('.width-handle')).map((h) => h.dataset.side),
+        stored: [
+          localStorage.getItem('desktop.blogNavWidth'),
+          localStorage.getItem('desktop.blogAsideWidth'),
+        ],
+      }
+    })
+  const railsBefore = await railState()
+  check(
+    '博客首页三列时左右各有一条分隔条',
+    railsBefore.handles.length === 2 &&
+      railsBefore.handles.includes('left') &&
+      railsBefore.handles.includes('right'),
+    JSON.stringify(railsBefore),
+  )
+  const railFit = await p.evaluate(() => {
+    const nav = document.querySelector('.blog__nav').getBoundingClientRect()
+    const feed = document.querySelector('.blog__feed').getBoundingClientRect()
+    const left = document.querySelector('.width-handle[data-side="left"]')?.getBoundingClientRect()
+    const right = document.querySelector('.width-handle[data-side="right"]')?.getBoundingClientRect()
+    if (!left || !right) return null
+    return {
+      leftWidth: Math.round(left.width),
+      gap: Math.round(feed.left - nav.right),
+      /* 左条的左边缘 = 左栏右边缘；右条的左边缘 = 中栏右边缘（两条都从内容列往外铺） */
+      leftPinned: Math.abs(left.left - nav.right) < 1,
+      rightPinned: Math.abs(right.left - feed.right) < 1,
+    }
+  })
+  check(
+    '分隔条正好落在栏间空隙里（不压侧栏、也不压卡片）',
+    !!railFit && railFit.leftPinned && railFit.rightPinned && railFit.leftWidth === railFit.gap,
+    JSON.stringify(railFit),
+  )
+
+  const dragRail = async (side, dx) => {
+    const box = await p.locator(`.width-handle[data-side="${side}"]`).boundingBox()
+    const x = box.x + box.width / 2
+    const y = Math.min(Math.max(box.y + 120, 90), 600)
+    await p.mouse.move(x, y)
+    await p.mouse.down()
+    await p.mouse.move(x + dx, y, { steps: 8 })
+    await p.waitForTimeout(150)
+    await p.mouse.up()
+    await p.waitForTimeout(300)
+    return railState()
+  }
+  const navDragged = await dragRail('left', 40)
+  check(
+    '拖左分隔条 40px → 左栏 +40、中栏 -40，整行仍然贴齐（没留白）',
+    navDragged.nav === railsBefore.nav + 40 &&
+      navDragged.feed === railsBefore.feed - 40 &&
+      navDragged.gridWidth === railsBefore.gridWidth &&
+      navDragged.stored[0] === String(navDragged.nav),
+    `${railsBefore.nav}/${railsBefore.feed} → ${navDragged.nav}/${navDragged.feed}｜落盘 ${navDragged.stored[0]}`,
+  )
+  const asideDragged = await dragRail('right', -40)
+  check(
+    '拖右分隔条向左 40px → 右栏 +40、中栏 -40，并落盘',
+    asideDragged.aside === railsBefore.aside + 40 &&
+      asideDragged.feed === navDragged.feed - 40 &&
+      asideDragged.stored[1] === String(asideDragged.aside),
+    `${railsBefore.aside}/${navDragged.feed} → ${asideDragged.aside}/${asideDragged.feed}｜落盘 ${asideDragged.stored[1]}`,
+  )
+  await p.dblclick('.width-handle[data-side="left"]')
+  await p.dblclick('.width-handle[data-side="right"]')
+  await p.waitForTimeout(350)
+  const railsReset = await railState()
+  check(
+    '双击分隔条复位：宽度回默认、localStorage 的键清掉',
+    railsReset.nav === railsBefore.nav &&
+      railsReset.aside === railsBefore.aside &&
+      railsReset.stored[0] === null &&
+      railsReset.stored[1] === null,
+    JSON.stringify(railsReset),
+  )
+
   // 11c 文章详情页：最大化后左右两栏要出来，正文列放大但仍被限制（不跟着窗口无限拉长）
   await p.click('.blog__feed li button')
   await p.waitForTimeout(1500)

@@ -6,10 +6,12 @@
    - 上限 = 容器宽 - 两侧抓取带（48px），再宽就没有抓的地方了
    - 拖宽到窄栏放不下时**窄栏让位**（先让左栏、留住目录，再全让），拖回去自己回来 ——
      否则默认窗口下（容器 958）上限只有 726，往外拖几乎没反应
-   这里只放纯函数与常量；测量与渲染在 hooks/useArticleWidth.ts */
+   这里只放纯函数与常量；测量与渲染在 hooks/useArticleWidth.ts。
+   存取与钳制这两个通用动作在 lib/columnWidth.ts（博客首页的两条侧栏也用它） */
+
+import { clampWidth, readStoredWidth, writeStoredWidth } from './columnWidth'
 
 export const ARTICLE_WIDTH_KEY = 'desktop.articleWidth'
-
 /** 正文列下限：再窄行宽就碎了（DSH 是 640，我们字号小一点，取 480） */
 export const ARTICLE_MIN_WIDTH = 480
 
@@ -36,24 +38,12 @@ export type RailMode = 'none' | 'right' | 'both'
 
 /** 读存下来的偏好；没存过、或者存坏了，都回 null（= 用 CSS 里按行宽自适应的 88ch） */
 export function readArticleWidth(): number | null {
-  try {
-    const raw = localStorage.getItem(ARTICLE_WIDTH_KEY)
-    if (raw === null) return null
-    const value = Number(raw)
-    return Number.isFinite(value) && value > 0 ? value : null
-  } catch {
-    return null
-  }
+  return readStoredWidth(ARTICLE_WIDTH_KEY)
 }
 
 /** 传 null = 清掉偏好，正文列回到 CSS 的自适应行宽（双击手柄就是这个） */
 export function writeArticleWidth(width: number | null): void {
-  try {
-    if (width === null) localStorage.removeItem(ARTICLE_WIDTH_KEY)
-    else localStorage.setItem(ARTICLE_WIDTH_KEY, String(Math.round(width)))
-  } catch {
-    /* 写不进去也不影响这次拖动 */
-  }
+  writeStoredWidth(ARTICLE_WIDTH_KEY, width)
 }
 
 /** 上限：容器里除了正文，还得留下两侧抓取带 */
@@ -62,7 +52,7 @@ export function maxArticleWidth(containerWidth: number): number {
 }
 
 export function clampArticleWidth(width: number, containerWidth: number): number {
-  return Math.min(Math.max(Math.round(width), ARTICLE_MIN_WIDTH), maxArticleWidth(containerWidth))
+  return clampWidth(width, ARTICLE_MIN_WIDTH, maxArticleWidth(containerWidth))
 }
 
 /** 某个栏位组合占掉的横向空间（栏宽 + 它们两侧的空隙） */

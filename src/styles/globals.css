@@ -395,13 +395,13 @@
    ::after 才是那条 3px 的指示条，平时透明，悬停或拖动时才显形，
    并且跟着指针的上下位置渐隐 —— --width-handle-pointer-y 由组件在 pointermove 里写。
    钳制规则（拖到哪儿为止）在 lib/readingWidth.ts */
-.article__handles {
+.width-handles {
   position: absolute;
   inset: 0;
   /* 只有那两条带子能点，正文照常选中 / 点击 */
   pointer-events: none;
-  /* 抵消 .article__main 上 space-y-4 给后续兄弟加的 margin-top：
-     绝对定位 + inset:0 时它会把盒子整个顶下去 16px */
+  /* 抵消父容器上 space-y-* 给后续兄弟加的 margin-top：
+     绝对定位 + inset:0 时它会把盒子整个顶下去 */
   margin-top: 0;
 }
 
@@ -442,12 +442,14 @@
   );
 }
 
+/* 那条 3px 长条在抓取带里居中：带宽由各自的容器给（文章页 24px = 栏间空隙，
+   博客首页 14px = 格子间距），所以这里按变量算，别再写死像素 */
 .width-handle[data-side='right']::after {
-  left: 10px;
+  left: calc((var(--width-handle-offset, 24px) - 3px) / 2);
 }
 
 .width-handle[data-side='left']::after {
-  right: 10px;
+  right: calc((var(--width-handle-offset, 24px) - 3px) / 2);
 }
 
 .width-handle:hover::after,
@@ -465,8 +467,11 @@
 }
 
 .blog__grid {
+  /* 抓取带的宽度就是这里的 gap（与 lib/blogRails.ts 的 BLOG_HANDLE_OFFSET 一致）：
+     分隔条正好落在栏与栏之间的空隙里，既不压住侧栏、也不压住卡片 */
+  --width-handle-offset: 14px;
   display: grid;
-  gap: 14px;
+  gap: var(--width-handle-offset);
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'nav'
@@ -482,6 +487,8 @@
 .blog__feed {
   grid-area: feed;
   min-width: 0;
+  /* 两条分隔条以它为定位基准（贴在卡片流左右两侧的分界上） */
+  position: relative;
 }
 
 .blog__aside {
@@ -523,8 +530,8 @@
 
 @container (min-width: 620px) {
   .blog__grid {
-    /* 右栏（aside）落到左栏下方，中栏竖着跨两行 */
-    grid-template-columns: 168px minmax(0, 1fr);
+    /* 右栏（aside）落到左栏下方，中栏竖着跨两行；左栏宽度可拖 */
+    grid-template-columns: var(--blog-nav-width, 168px) minmax(0, 1fr);
     grid-template-areas:
       'nav feed'
       'aside feed';
@@ -547,7 +554,11 @@
 
 @container (min-width: 900px) {
   .blog__grid {
-    grid-template-columns: 176px minmax(0, 1fr) 228px;
+    /* 三列：左栏与右栏的宽度都能拖（中栏 1fr 吃满剩余空间，所以拖的是分界） */
+    grid-template-columns:
+      var(--blog-nav-width, 176px)
+      minmax(0, 1fr)
+      var(--blog-aside-width, 228px);
     grid-template-areas: 'nav feed aside';
   }
 }

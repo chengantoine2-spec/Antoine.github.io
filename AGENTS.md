@@ -19,7 +19,9 @@
   快捷键 Ctrl+B / Ctrl+I / Ctrl+K / **Ctrl+S 保存**、草稿自动保存、图库点图即插入光标处
 - **博客**窗口是贴吧式三栏：左（分类 / 标签，带计数）、中（搜索 + 卡片流）、右（站标 / 最新 / 统计）。
   栏数跟着**窗口宽度**走（`globals.css` 里 `.blog` 那段容器查询）：窄于 620px 一列、≥620px 两列、≥900px 三列，
-  所以 `apps.ts` 里博客窗口默认给到 1000 宽
+  所以 `apps.ts` 里博客窗口默认给到 1000 宽。
+  中栏与两侧栏之间的**分界可以拖**（和文章页同款的白条，见「正文列宽拖动条 / 滚动条」一节）：
+  中栏始终 `1fr` 吃满剩余空间，所以拖的是分界 —— 拖多少变多少，整行永远贴齐
 - 博客搜索是本地即时筛选，匹配标题 + 正文 + 标签；**索引和查询都过 `normalizeForSearch`**
   （抹掉空白与标点），所以「焦糖 布丁」也能命中「焦糖布丁」。
   两边规则一旦拆开写就会出现"正文搜不到"，别再改回去
@@ -170,8 +172,8 @@ npm run typecheck    # 只做类型检查
 |---|---|
 | `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽） |
-| `src/lib/` | `apps`（窗口登记表）、`celestial`（日月弧线 / 颜色档位 / 月相）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useBlogRails`（博客首页两条侧栏宽度） |
+| `src/lib/` | `apps`（窗口登记表）、`blogRails`（首页两条侧栏的几何与范围）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnWidth`（列宽存取与钳制，两个页面共用）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -201,8 +203,9 @@ npm run typecheck    # 只做类型检查
    - **拖宽到窄栏放不下时窄栏让位**：先让左栏、留住目录，再全让；拖回去自己回来。
      判定只看「列宽 + 栏占位 ≤ 容器」，与栏当前是否显示无关（见坑 6 的稳定基准）
    - 没存过偏好时不写 `data-rails`，栏数照旧由容器查询决定 —— 默认观感一点没变
-   - 文件：`components/program/WidthHandle.tsx`（手柄）、`hooks/useArticleWidth.ts`（测量与回调）、
-     `lib/readingWidth.ts`（几何/钳制/让位规则）、`globals.css` 的 `.width-handle` 与 `[data-rails]`
+   - 文件：`components/program/WidthHandle.tsx`（手柄，两个页面共用）、`hooks/useArticleWidth.ts`（测量与回调）、
+     `lib/readingWidth.ts`（几何/钳制/让位规则）、`lib/columnWidth.ts`（存取与钳制，两个页面共用）、
+     `globals.css` 的 `.width-handle` / `.width-handles` 与 `[data-rails]`
 
 2. **右侧显示上下位置的那条**（= DSH 的自定义滚动条）：`globals.css` 里一套全局
    `::-webkit-scrollbar` 规则 —— 8px 宽、轨道透明、4px 圆角滑块、悬停变亮，
@@ -210,6 +213,19 @@ npm run typecheck    # 只做类型检查
    退回 `scrollbar-width: thin` + `scrollbar-color`。DSH 就是在 `ui-theme` 里这么写的，照抄。
    ⚠️ 滚动条是浏览器原生绘制的：系统开了「自动隐藏滚动条」时 CSS 不生效，这属正常，
    验证脚本因此只断言样式表里落了这几条规则（不去量最终外观）。
+
+3. **博客首页两侧的分隔条**（`BlogWindow`）：同一个 `WidthHandle`，但**模型不一样** ——
+   中栏（卡片流）始终 `1fr` 吃满剩余空间，所以拖的是**栏与栏的分界**：
+   - `scale={-1}`：分界跟着指针走，拖多少变多少（正文列那种 ×2 是对称居中才需要的）
+   - 拖的是侧栏宽度（左条 → 分类栏、右条 → 右栏），中栏自己吃掉差额 → 整行永远贴齐，两端不留白
+   - 抓取带就是**格子间距**（14px，写进 `.blog__grid` 的 `--width-handle-offset`），
+     那 3px 长条按 `calc((带宽 - 3px) / 2)` 居中，所以两处带宽不同也不用改规则
+   - 范围：左栏 132~360、右栏 168~420，且中栏至少留 300（`lib/blogRails.ts`）；
+     栏数不够（<900 三列变两列）时右条自动收起，只剩左条；再窄（<620）两条都没有
+   - 文件：`hooks/useBlogRails.ts`、`lib/blogRails.ts`、`components/program/BlogWindow.tsx`
+   - 想再往别的窗口搬：**窗口内容是一个"内容列 + 两侧栏"的都能用这套**（饥荒 Wiki 窗口结构一样，
+     但那是 wiki 负责人的地盘，要动先跟用户确认）；博客创作窗口的"分屏"是**分割比例**、
+     不是列宽，属于另一种交互，别硬套
 
 ## 主题令牌（硬规则）
 
@@ -252,6 +268,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.termPort` | 终端服务端口，默认 5180 |
 | `desktop.termToken` | **终端服务的 token**（`npm run term` 启动时打印）。只存本机浏览器；有了它才能在网页里跑本机命令 |
 | `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
+| `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -324,6 +341,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
+- 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、
+  拖左条 40px → 左栏 +40 中栏 −40 且整行贴齐、拖右条同理、双击复位且清掉 localStorage。
+  改 `lib/blogRails.ts` 的常量后一定要跑
 - 日月时钟在 `verify.mjs` 里有 6 项：读数与系统时间**精确到秒**一致、**自己会跳秒（不刷新也在走）**、
   昼夜换日月、月相与照亮百分比自洽、三个时刻颜色两两不同，以及**拿已知天象验月相**
   （2024-04-08 日全食→新月、2024-03-25 半影月食→满月）。

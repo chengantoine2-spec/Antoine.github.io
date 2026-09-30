@@ -94,7 +94,7 @@ export function BlogDetailWindow() {
           {/* 两条拖动条贴在正文列左右两侧的空白里（绝对定位，不占位）。
               容器太窄、两侧放不下时 useArticleWidth 会先藏起来，免得顶出横向滚动 */}
           {handlesVisible ? (
-            <div className="article__handles">
+            <div className="width-handles">
               <WidthHandle side="left" {...handles} />
               <WidthHandle side="right" {...handles} />
             </div>

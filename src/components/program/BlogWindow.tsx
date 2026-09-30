@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SITE } from '../../data/site'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
+import { useBlogRails } from '../../hooks/useBlogRails'
 import {
   CATEGORIES,
   charCount,
@@ -12,6 +13,7 @@ import {
   type BlogPost,
   type CategoryId,
 } from '../../lib/github'
+import { WidthHandle } from './WidthHandle'
 
 /** 分类 id → 中文名；卡片头上的"圆牌"取它的第一个字（对应贴吧那边的吧头像） */
 const CATEGORY_NAME = new Map<string, string>(CATEGORIES.map((item) => [item.id, item.name]))
@@ -23,10 +25,14 @@ function categoryMark(post: BlogPost): string {
 /**
  * 「博客」窗口：贴吧式排版 —— 左栏分类 / 标签，中栏搜索 + 卡片流，右栏最新与统计。
  * 栏数跟着窗口宽度走（容器查询在 globals.css 的 .blog 那一段），窄窗自动堆成一列。
+ *
+ * 两条侧栏的宽度可以拖：中栏（卡片流）始终吃满剩余空间，所以这里拖的是**栏与栏的分界** ——
+ * 分界跟着指针走，布局永远贴齐。拖动条与文章页共用 `WidthHandle`，几何在 `lib/blogRails.ts`。
  */
 export function BlogWindow() {
   const navigate = useNavigate()
   const { feed, loading, refresh } = useBlogFeed()
+  const rails = useBlogRails()
   const [category, setCategory] = useState<CategoryId>('all')
   const [tag, setTag] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -106,7 +112,7 @@ export function BlogWindow() {
 
   return (
     <div className="blog">
-      <div className="blog__grid">
+      <div className="blog__grid" ref={rails.gridRef}>
         {/* ── 左栏：分类与标签（贴吧的「首页 / 我常逛的吧」）── */}
         <nav className="blog__nav space-y-3" aria-label="文章分类与标签">
           <section className="rounded-lg border border-edge bg-surface-2 p-2.5">
@@ -166,6 +172,31 @@ export function BlogWindow() {
 
         {/* ── 中栏：搜索 + 卡片流（贴吧的帖子列表）── */}
         <div className="blog__feed space-y-3">
+          {/* 两条拖动条贴在卡片流左右两侧的分界上（绝对定位，不占位）。
+              栏数不够、或者中栏留不出最小宽度时，useBlogRails 会把对应那条藏起来 */}
+          {rails.handles.nav || rails.handles.aside ? (
+            <div className="width-handles">
+              {rails.handles.nav ? (
+                <WidthHandle
+                  side="left"
+                  scale={-1}
+                  growKey="ArrowRight"
+                  label="拖动调整分类栏宽度"
+                  {...rails.nav}
+                />
+              ) : null}
+              {rails.handles.aside ? (
+                <WidthHandle
+                  side="right"
+                  scale={-1}
+                  growKey="ArrowLeft"
+                  label="拖动调整右栏宽度"
+                  {...rails.aside}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
           <div
             className="flex flex-wrap items-center gap-2 rounded-lg border border-edge bg-surface-2 p-2.5"
             role="search"
