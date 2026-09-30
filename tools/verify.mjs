@@ -781,7 +781,7 @@ async function run() {
     const text = (sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
     return {
       time: text('.celestial__time'),
-      expected: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      expected: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
       hour: now.getHours(),
       phase: el.dataset.phase,
       disc: el.querySelector('.celestial__disc')?.dataset.disc ?? '',
@@ -791,19 +791,32 @@ async function run() {
       z: Number(getComputedStyle(el).zIndex),
     }
   })
-  const toMinutes = (value) => {
-    const [h, m] = String(value).split(':').map(Number)
-    return h * 60 + m
+  const toSeconds = (value) => {
+    const [h, m, s] = String(value).split(':').map(Number)
+    return h * 3600 + m * 60 + (s || 0)
   }
-  /* 挂件每 20 秒才走一次表，跨分钟边界时最多差一分钟，所以容差 1 分钟 */
   check(
-    '桌面有日月时钟挂件，读数就是系统时间',
+    '桌面有日月时钟挂件，读数与系统时间一致（精确到秒）',
     !!clock &&
-      Math.abs(toMinutes(clock.time) - toMinutes(clock.expected)) <= 1 &&
+      Math.abs(toSeconds(clock.time) - toSeconds(clock.expected)) <= 2 &&
       /* z 在壁纸之上、窗口层（z-10 / 最大化 z-60）之下 */
       clock.z > 0 &&
       clock.z < 10,
     JSON.stringify(clock),
+  )
+  /* 用户报过"时间停在那一刻、点刷新才动"：时钟必须自己走，而且不依赖刷新。
+     这里只等两秒多，靠秒数变化就能证明它在自己跳 */
+  const secondsA = await p.evaluate(
+    () => document.querySelector('.celestial__seconds')?.textContent ?? '',
+  )
+  await p.waitForTimeout(2600)
+  const secondsB = await p.evaluate(
+    () => document.querySelector('.celestial__seconds')?.textContent ?? '',
+  )
+  check(
+    '时钟自己会走（不刷新页面也在跳秒）',
+    /^:\d\d$/.test(secondsA) && /^:\d\d$/.test(secondsB) && secondsA !== secondsB,
+    `${secondsA} → ${secondsB}`,
   )
   const isDay = !!clock && clock.hour >= 6 && clock.hour < 18
   check(

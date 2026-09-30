@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import {
   formatClock,
   formatMonthDay,
+  formatSeconds,
   formatWeekday,
   moonLitPath,
   moonPhase,
@@ -12,8 +13,11 @@ import {
 /** 月相圆的半径（SVG 用户单位，viewBox 是 -50 ~ 50） */
 const MOON_RADIUS = 46
 
-/** 每 20 秒对一次表：颜色是连续变的，秒级刷新没人看得出来，省点电 */
-const TICK_MS = 20_000
+/** 每秒对一次表：分 / 秒一到就跟着变。挂件只有十来个节点，每秒重渲染一次的开销可以忽略。
+    ⚠️ 别改回 `setInterval` —— 后台标签页被节流、Edge 的"睡眠标签页"、电脑睡一觉回来，
+    定时器都可能长时间不触发甚至停掉，表现就是"时间停在那一刻，点刷新才对"（用户报过一次）。
+    这里用「对齐到整秒的自调度 setTimeout」+ 三个兜底事件，任何一次唤醒都立刻重新对表。 */
+const TICK_MS = 1000
 
 /**
  * 桌面上的日月时钟：天空条里的圆盘随时刻走一条弧（6:00 出、18:00 落），
@@ -25,13 +29,29 @@ export function CelestialClock() {
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    const tick = () => setNow(new Date())
-    const timer = window.setInterval(tick, TICK_MS)
-    /* 电脑睡了一觉回来时立刻校准，别让时间停在睡前 */
-    document.addEventListener('visibilitychange', tick)
+    /* 自调度：每跳完一次再排下一次，并且对齐到整秒，所以秒数不会越走越飘 */
+    let timer = 0
+    const schedule = () => {
+      timer = window.setTimeout(
+        () => {
+          setNow(new Date())
+          schedule()
+        },
+        TICK_MS - (Date.now() % TICK_MS),
+      )
+    }
+    schedule()
+
+    /* 兜底：标签页被节流 / 冻结、从后台切回来、电脑睡醒，都立刻重新对表 */
+    const resync = () => setNow(new Date())
+    document.addEventListener('visibilitychange', resync)
+    window.addEventListener('focus', resync)
+    window.addEventListener('pageshow', resync)
     return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', tick)
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', resync)
+      window.removeEventListener('focus', resync)
+      window.removeEventListener('pageshow', resync)
     }
   }, [])
 
@@ -39,6 +59,7 @@ export function CelestialClock() {
   const sky = skyColor(now)
   const arc = skyArc(now)
   const clock = formatClock(now)
+  const seconds = formatSeconds(now)
   const illumination = Math.round(moon.illumination * 100)
 
   const style = {
@@ -57,7 +78,7 @@ export function CelestialClock() {
       className="celestial rounded-window border border-edge bg-surface shadow-2xl"
       data-phase={arc.day ? 'day' : 'night'}
       style={style}
-      aria-label={`${clock}，${formatMonthDay(now)} ${formatWeekday(now)}，月相${moon.name}，照亮 ${illumination}%`}
+      aria-label={`${clock}:${seconds}，${formatMonthDay(now)} ${formatWeekday(now)}，月相${moon.name}，照亮 ${illumination}%`}
     >
       <div className="celestial__sky" aria-hidden="true">
         <div className="celestial__disc" data-disc={arc.day ? 'sun' : 'moon'}>
@@ -73,6 +94,8 @@ export function CelestialClock() {
       <div className="celestial__readout">
         <time className="celestial__time" dateTime={now.toISOString()}>
           {clock}
+          {/* 秒单独一层、小一号：一眼能看出表在走，而不是"停住了" */}
+          <span className="celestial__seconds">:{seconds}</span>
         </time>
         <p className="celestial__meta">
           {formatMonthDay(now)} {formatWeekday(now)}

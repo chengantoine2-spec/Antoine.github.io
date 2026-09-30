@@ -144,6 +144,11 @@ export function formatClock(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+/** 秒（两位）。挂在 HH:MM 后面显示，让"表在走"一眼可见 */
+export function formatSeconds(date: Date): string {
+  return String(date.getSeconds()).padStart(2, '0')
+}
+
 export function formatMonthDay(date: Date): string {
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日`
 }

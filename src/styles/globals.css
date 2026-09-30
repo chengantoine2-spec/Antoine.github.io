@@ -192,6 +192,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 秒：小一号、次要色，让"表在走"一眼可见 */
+.celestial__seconds {
+  margin-left: 2px;
+  color: var(--c-text-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .celestial__meta {
   display: flex;
   align-items: baseline;
