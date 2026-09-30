@@ -22,6 +22,12 @@ function categoryMark(post: BlogPost): string {
   return (CATEGORY_NAME.get(post.category) ?? '其他').slice(0, 1)
 }
 
+/** 字数：过万就换成「万字」，统计里别摆一长串数字 */
+function formatChars(count: number): string {
+  if (count >= 10000) return `${(count / 10000).toFixed(1)} 万字`
+  return `${count} 字`
+}
+
 /**
  * 「博客」窗口：贴吧式排版 —— 左栏分类 / 标签，中栏搜索 + 卡片流，右栏最新与统计。
  * 栏数跟着窗口宽度走（容器查询在 globals.css 的 .blog 那一段），窄窗自动堆成一列。
@@ -33,7 +39,7 @@ export function BlogWindow() {
   const navigate = useNavigate()
   const { feed, loading, refresh } = useBlogFeed()
   const rails = useBlogRails()
-  const [category, setCategory] = useState<CategoryId>('all')
+  const [category, setCategory] = useState<CategoryId | 'other'>('all')
   const [tag, setTag] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
@@ -43,15 +49,21 @@ export function BlogWindow() {
     void import('./Markdown')
   }, [])
 
-  /* 公开列表只显示已发布的；下架的文章不在这里出现（创作窗口里仍能看到并恢复）。
-     饥荒 Wiki 的教程（`wiki` 标签）不属于博客正文流 —— 只在显式选中「饥荒 Wiki」分类时
-     才显示出来，主要由 Wiki 窗口的教程区去列，免得几十篇教程把日常/项目淹掉。 */
+  /* 已发布的全部文章（含饥荒 Wiki 教程）。**角标、统计、标签、最新发布都只认这一份** ——
+     绝不能拿筛选后的列表去算，否则切分类时数字会跳（wiki 负责人踩过一次，见 AGENTS 那条） */
+  const openPosts = useMemo(
+    () => (feed?.posts ?? []).filter((post) => post.state === 'open'),
+    [feed],
+  )
+
+  /** 博客正文流：已发布里去掉饥荒 Wiki 教程（教程归 Wiki 窗口，免得把日常/项目淹掉） */
+  const flowPosts = useMemo(() => openPosts.filter((post) => !isWikiGuide(post)), [openPosts])
+
+  /* 中栏列表的候选集：默认只列正文流；显式选了「饥荒 Wiki」分类、
+     或者点了某个标签（#新手教程 这种标签本来就只属于教程）时，把教程也放进来 */
   const posts = useMemo(
-    () =>
-      (feed?.posts ?? []).filter(
-        (post) => post.state === 'open' && (category === 'wiki' || !isWikiGuide(post)),
-      ),
-    [feed, category],
+    () => (category === 'wiki' || tag !== null ? openPosts : flowPosts),
+    [category, tag, openPosts, flowPosts],
   )
 
   /* 搜索索引：标题 + 正文 + 标签。索引与查询都过 normalizeForSearch（抹掉空白与标点），
@@ -64,26 +76,45 @@ export function BlogWindow() {
     return map
   }, [posts])
 
+  /* 标签列表取自**全部已发布**（与统计里的「标签 N 个」同一个来源）：
+     切分类时列表不跳；点了教程专属的标签也不会查出一片空白 */
   const tags = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const post of posts) {
+    for (const post of openPosts) {
       for (const label of post.labels) {
         if (label === 'daily' || label === 'project') continue
         counts.set(label, (counts.get(label) ?? 0) + 1)
       }
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  }, [posts])
+  }, [openPosts])
 
-  /* 分类角标必须统计**全部已发布文章**，不能统计 `posts`。
-     `posts` 会随所选分类变化（选中「饥荒 Wiki」时只剩教程），拿它算角标会让
-     其它分类全变 0 —— 切一下分类角标就跳，是实打实的显示 bug。 */
+  /* 分类角标必须统计**全部已发布文章**，不能统计筛选后的列表。 */
   const categoryCounts = useMemo(() => {
-    const open = (feed?.posts ?? []).filter((post) => post.state === 'open')
-    const counts = new Map<string, number>([['all', open.length]])
-    for (const post of open) counts.set(post.category, (counts.get(post.category) ?? 0) + 1)
+    const counts = new Map<string, number>([['all', openPosts.length]])
+    for (const post of openPosts) counts.set(post.category, (counts.get(post.category) ?? 0) + 1)
     return counts
-  }, [feed])
+  }, [openPosts])
+
+  /* 没打 daily / project / wiki 标签的文章会落到 other。左栏也必须列出来，
+     否则「日常 + 项目 + 饥荒 Wiki」加不出「全部」那个数（差的就是它） */
+  const otherCount = categoryCounts.get('other') ?? 0
+  const wikiCount = categoryCounts.get('wiki') ?? 0
+
+  /** 右栏统计：字数、建站天数、最近更新 —— 全部以「已发布」为准 */
+  const stats = useMemo(() => {
+    const chars = openPosts.reduce((sum, post) => sum + charCount(post.body), 0)
+    /* 建站天数按本地日期算，开站当天算第 1 天 */
+    const start = new Date(`${SITE.since}T00:00:00`)
+    const now = new Date()
+    const dayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    const days = Math.max(1, Math.round((dayOf(now) - dayOf(start)) / 86_400_000) + 1)
+    return {
+      chars,
+      days,
+      updated: openPosts.reduce((acc, post) => (post.updatedAt > acc ? post.updatedAt : acc), ''),
+    }
+  }, [openPosts])
 
   const keyword = normalizeForSearch(query)
   const filtering = keyword !== '' || category !== 'all' || tag !== null
@@ -95,14 +126,10 @@ export function BlogWindow() {
       (keyword === '' || (haystack.get(post.id) ?? '').includes(keyword)),
   )
 
+  /* 右栏「最新发布」固定看博客正文流，别跟着选中分类变 */
   const recent = useMemo(
-    () => [...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
-    [posts],
-  )
-
-  const lastUpdated = useMemo(
-    () => posts.reduce((acc, post) => (post.updatedAt > acc ? post.updatedAt : acc), ''),
-    [posts],
+    () => [...flowPosts].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
+    [flowPosts],
   )
 
   function openPost(id: number) {
@@ -139,6 +166,23 @@ export function BlogWindow() {
                   </button>
                 )
               })}
+
+              {/* 「其他」= 没打 daily / project / wiki 标签的文章。列出来才凑得齐「全部」 */}
+              {otherCount > 0 ? (
+                <button
+                  type="button"
+                  aria-pressed={category === 'other'}
+                  onClick={() => setCategory('other')}
+                  className={`blog__navItem border ${
+                    category === 'other'
+                      ? 'border-accent bg-accent text-accent-ink'
+                      : 'border-edge text-ink hover:bg-hover'
+                  }`}
+                >
+                  <span className="truncate">其他</span>
+                  <span className="ml-auto shrink-0 text-[11px] opacity-70">{otherCount}</span>
+                </button>
+              ) : null}
             </div>
           </section>
 
@@ -362,17 +406,35 @@ export function BlogWindow() {
             <dl className="space-y-1 px-1 text-xs">
               <div className="flex justify-between gap-2">
                 <dt className="text-dim">文章</dt>
-                <dd className="text-ink">{posts.length} 篇</dd>
+                {/* 「已发布」= state open 的全部文章（含饥荒 Wiki 教程），和左栏「全部」是同一个数 */}
+                <dd className="text-ink">{openPosts.length} 篇已发布</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-dim">字数</dt>
+                <dd className="text-ink">约 {formatChars(stats.chars)}</dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-dim">标签</dt>
                 <dd className="text-ink">{tags.length} 个</dd>
               </div>
               <div className="flex justify-between gap-2">
+                <dt className="text-dim">建站</dt>
+                <dd className="text-ink">
+                  {stats.days} 天
+                  <span className="ml-1 text-[10px] text-dim">（{SITE.since}）</span>
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
                 <dt className="text-dim">最近更新</dt>
-                <dd className="text-ink">{lastUpdated ? formatDate(lastUpdated) : '—'}</dd>
+                <dd className="text-ink">{stats.updated ? formatDate(stats.updated) : '—'}</dd>
               </div>
             </dl>
+            {/* 说明一句：为什么「全部」列表里的篇数看着比这里少（教程被分流到 Wiki 窗口了） */}
+            {wikiCount > 0 ? (
+              <p className="mt-1.5 border-t border-edge px-1 pt-1.5 text-[11px] leading-relaxed text-dim">
+                其中饥荒 Wiki 教程 {wikiCount} 篇，在「饥荒 Wiki」窗口里看
+              </p>
+            ) : null}
           </section>
         </aside>
       </div>

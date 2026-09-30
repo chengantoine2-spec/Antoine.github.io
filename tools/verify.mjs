@@ -287,6 +287,66 @@ async function run() {
     JSON.stringify(search),
   )
 
+  // 11b1 右栏统计与左栏角标：数字要对得上，而且不能跟着筛选跳
+  //       （踩过的坑：统计拿筛选后的列表算，于是「文章 6 篇」和左栏「全部 9」对不上；
+  //         另外没打标签的文章落在 other，不列出来角标就加不出「全部」）
+  const statsSnapshot = () =>
+    p.evaluate(() => {
+      const nav = Array.from(document.querySelectorAll('.blog__nav button')).map((b) =>
+        b.textContent.trim(),
+      )
+      const rows = Array.from(document.querySelectorAll('.blog__aside dl > div')).map((d) => ({
+        label: d.querySelector('dt')?.textContent?.trim() ?? '',
+        value: d.querySelector('dd')?.textContent?.trim() ?? '',
+      }))
+      const first = (text) => Number((String(text).match(/\d+/) ?? ['0'])[0])
+      /* 第一项是「全部」，带 # 的是标签，剩下的是各分类角标 */
+      const cats = nav.filter((text, index) => index > 0 && !text.startsWith('#'))
+      return {
+        nav,
+        all: first(nav[0]),
+        sum: cats.reduce((acc, text) => acc + first(text), 0),
+        rows,
+        list: document.querySelectorAll('.blog__feed li').length,
+      }
+    })
+  const statsAll = await statsSnapshot()
+  const publishedRow = statsAll.rows.find((row) => row.label === '文章')
+  const published = Number((String(publishedRow?.value).match(/\d+/) ?? ['0'])[0])
+  check(
+    '右栏「文章」= 已发布总数，且与左栏「全部」一致',
+    published > 0 && published === statsAll.all,
+    `统计 ${published}｜全部角标 ${statsAll.all}｜${publishedRow?.value}`,
+  )
+  check(
+    '左栏分类角标加得出「全部」（含「其他」这一档）',
+    statsAll.sum === statsAll.all && statsAll.nav.some((text) => text.startsWith('其他')),
+    `角标和 ${statsAll.sum} / 全部 ${statsAll.all}｜${statsAll.nav.join(' ')}`,
+  )
+  await p.click('.blog__nav button:has-text("饥荒 Wiki")')
+  await p.waitForTimeout(400)
+  const statsWiki = await statsSnapshot()
+  await p.click('.blog__nav button:has-text("全部")')
+  await p.waitForTimeout(400)
+  check(
+    '切分类时角标与统计一个都不变',
+    JSON.stringify(statsWiki.nav) === JSON.stringify(statsAll.nav) &&
+      JSON.stringify(statsWiki.rows) === JSON.stringify(statsAll.rows),
+    JSON.stringify(statsWiki.rows.map((row) => row.value)),
+  )
+  const days = Number(
+    (String(statsAll.rows.find((row) => row.label === '建站')?.value).match(/\d+/) ?? ['0'])[0],
+  )
+  const charsRow = statsAll.rows.find((row) => row.label === '字数')?.value ?? ''
+  check(
+    '统计有「建站 N 天」与「字数」等内容',
+    days >= 1 &&
+      /字/.test(charsRow) &&
+      statsAll.rows.some((row) => row.label === '标签') &&
+      statsAll.rows.some((row) => row.label === '最近更新'),
+    JSON.stringify(statsAll.rows.map((row) => `${row.label}=${row.value}`)),
+  )
+
   // 11b2 博客首页两侧的分隔条：拖的是「栏与栏的分界」，中栏（卡片流）始终 1fr 吃满剩余空间，
   //       所以拖多少变多少（不像文章页那种居中对称的 ×2），整行永远贴齐、两端不留白
   const railState = () =>

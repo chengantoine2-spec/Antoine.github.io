@@ -5,6 +5,11 @@
 export const SITE = {
   name: '焦糖布丁',
   /**
+   * 开站日（本地时间，YYYY-MM-DD）：仓库第一次提交、这个桌面站开始动工的那天。
+   * 博客右栏的「建站」天数由它算（`BlogWindow` 的 stats）。
+   */
+  since: '2026-09-24',
+  /**
    * 站标（出处 public/logo.svg）。**必须自己拼 BASE_URL**：
    * src 里的字符串 Vite 不会改写，写死 '/logo.svg' 在子路径部署下会指到域名根目录而 404。
    */
