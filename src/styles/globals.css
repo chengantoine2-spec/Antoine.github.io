@@ -579,8 +579,10 @@
 }
 
 .wiki__grid {
+  /* 与博客首页同一套：抓取带 = 格子间距（lib/columnRails.ts 的 offset 也必须是 14） */
+  --width-handle-offset: 14px;
   display: grid;
-  gap: 14px;
+  gap: var(--width-handle-offset);
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'nav'
@@ -596,6 +598,8 @@
 .wiki__feed {
   grid-area: feed;
   min-width: 0;
+  /* 两条分隔条以它为定位基准（贴在内容列两侧的分界上） */
+  position: relative;
 }
 
 .wiki__aside {
@@ -626,11 +630,18 @@
 
 @container (min-width: 620px) {
   .wiki__grid {
-    grid-template-columns: 168px minmax(0, 1fr);
+    grid-template-columns: var(--wiki-nav-width, 168px) minmax(0, 1fr);
     grid-template-areas:
       'nav feed'
       'aside feed';
     align-items: start;
+  }
+
+  /* 教程区没有左栏：别留一条空轨道（原来那条 176px 的空列白占着，内容被推到右边 230px）。
+     这里只放内容列 + 速览栏，速览栏宽度照样能拖 */
+  .wiki__grid[data-view='guide'] {
+    grid-template-columns: minmax(0, 1fr) var(--wiki-aside-width, 228px);
+    grid-template-areas: 'feed aside';
   }
 
   .wiki__navList {
@@ -648,7 +659,10 @@
 
 @container (min-width: 900px) {
   .wiki__grid {
-    grid-template-columns: 176px minmax(0, 1fr) 228px;
+    grid-template-columns:
+      var(--wiki-nav-width, 176px)
+      minmax(0, 1fr)
+      var(--wiki-aside-width, 228px);
     grid-template-areas: 'nav feed aside';
   }
 }

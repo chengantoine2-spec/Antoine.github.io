@@ -2,7 +2,7 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SITE } from '../../data/site'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
-import { useBlogRails } from '../../hooks/useBlogRails'
+import { useColumnRails } from '../../hooks/useColumnRails'
 import {
   CATEGORIES,
   charCount,
@@ -13,6 +13,7 @@ import {
   type BlogPost,
   type CategoryId,
 } from '../../lib/github'
+import { BLOG_RAILS } from '../../lib/columnRails'
 import { WidthHandle } from './WidthHandle'
 
 /** 分类 id → 中文名；卡片头上的"圆牌"取它的第一个字（对应贴吧那边的吧头像） */
@@ -38,7 +39,7 @@ function formatChars(count: number): string {
 export function BlogWindow() {
   const navigate = useNavigate()
   const { feed, loading, refresh } = useBlogFeed()
-  const rails = useBlogRails()
+  const rails = useColumnRails(BLOG_RAILS)
   const [category, setCategory] = useState<CategoryId | 'other'>('all')
   const [tag, setTag] = useState<string | null>(null)
   const [query, setQuery] = useState('')

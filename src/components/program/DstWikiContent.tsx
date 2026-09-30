@@ -16,7 +16,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
+import { useColumnRails } from '../../hooks/useColumnRails'
+import { WIKI_RAILS } from '../../lib/columnRails'
 import { formatDate, isWikiGuide, normalizeForSearch, plainText } from '../../lib/github'
+import { WidthHandle } from './WidthHandle'
 import {
   DST_CATEGORIES,
   DST_ENTRIES,
@@ -75,6 +78,8 @@ const SECTION_NAME: Record<string, string> = {
 function DstWikiContent() {
   const navigate = useNavigate()
   const { feed, loading: guideLoading } = useBlogFeed()
+  /* 栏宽拖动条：和博客首页共用一套（几何在 lib/columnRails.ts，手柄是 WidthHandle） */
+  const rails = useColumnRails(WIKI_RAILS)
   /* 两个区：资料 = 结构化条目；教程 = 带 `wiki` 标签的博客文章（新手教程就发在这里） */
   const [mode, setMode] = useState<'data' | 'guide'>('data')
   const [guideQuery, setGuideQuery] = useState('')
@@ -265,8 +270,32 @@ function DstWikiContent() {
 
       {mode === 'guide' ? (
         /* ── 教程区：中栏列教程，右栏说明怎么投稿 ── */
-        <div className="wiki__grid">
+        <div className="wiki__grid" data-view="guide" ref={rails.gridRef}>
           <div className="wiki__feed space-y-3">
+          {/* 两条拖动条贴在内容列两侧的分界上（同博客首页；显不显示由 useColumnRails 判断，
+              教程区没有左栏，所以那边只会出现右边那条） */}
+          {rails.handles.nav || rails.handles.aside ? (
+            <div className="width-handles">
+              {rails.handles.nav ? (
+                <WidthHandle
+                  side="left"
+                  scale={-1}
+                  growKey="ArrowRight"
+                  label="拖动调整分类栏宽度"
+                  {...rails.nav}
+                />
+              ) : null}
+              {rails.handles.aside ? (
+                <WidthHandle
+                  side="right"
+                  scale={-1}
+                  growKey="ArrowLeft"
+                  label="拖动调整速览栏宽度"
+                  {...rails.aside}
+                />
+              ) : null}
+            </div>
+          ) : null}
             <div
               className="flex flex-wrap items-center gap-2 rounded-lg border border-edge bg-surface-2 p-2.5"
               role="search"
@@ -357,7 +386,7 @@ function DstWikiContent() {
       ) : null}
 
       {mode === 'data' ? (
-      <div className="wiki__grid">
+      <div className="wiki__grid" ref={rails.gridRef}>
         {/* ── 左栏：分类（+ 物品小节） ── */}
         <nav className="wiki__nav space-y-3" aria-label="条目分类">
           <section className="rounded-lg border border-edge bg-surface-2 p-2.5">
@@ -429,6 +458,30 @@ function DstWikiContent() {
 
         {/* ── 中栏：列表，或某条目的详情 ── */}
         <div className="wiki__feed space-y-3">
+          {/* 两条拖动条贴在内容列两侧的分界上（同博客首页；显不显示由 useColumnRails 判断，
+              教程区没有左栏，所以那边只会出现右边那条） */}
+          {rails.handles.nav || rails.handles.aside ? (
+            <div className="width-handles">
+              {rails.handles.nav ? (
+                <WidthHandle
+                  side="left"
+                  scale={-1}
+                  growKey="ArrowRight"
+                  label="拖动调整分类栏宽度"
+                  {...rails.nav}
+                />
+              ) : null}
+              {rails.handles.aside ? (
+                <WidthHandle
+                  side="right"
+                  scale={-1}
+                  growKey="ArrowLeft"
+                  label="拖动调整速览栏宽度"
+                  {...rails.aside}
+                />
+              ) : null}
+            </div>
+          ) : null}
           {open !== null ? (
             <>
               <button

@@ -108,10 +108,15 @@ wiki 负责人的硬约束：
 1. **改的范围以归属表为准**。窗口外壳（`Window.tsx` / `Dock.tsx`）、登记表（`lib/apps.ts`）、
    路由（`router.tsx`）、主题（`tokens.css`、`globals.css` 的共享部分）、验证脚本（`tools/verify.mjs`）
    都归主管 —— 需要新能力（条目要独立路由 `/wiki/:id`、要新图标、要新令牌）就提出来，别自己动。
-   ⚠️ **已有一个经用户批准的例外**：为了让教程能"以博客文章（wiki 标签）呈现"，
-   wiki 负责人改过三个共享文件 —— `src/lib/github.ts`（`CATEGORIES` 加 `wiki` + `isWikiGuide()`）、
-   `BlogWindow.tsx`（教程分流，一行 filter）、`WriteWindow.tsx`（Draft 类型 + 分类按钮）。
-   三处都是**纯增量**，可单独撤回。以后这类跨边界改动要先说明。
+   ⚠️ **已经用户批准的两个例外**：
+   ① 为了让教程能"以博客文章（wiki 标签）呈现"，wiki 负责人改过三个共享文件 ——
+   `src/lib/github.ts`（`CATEGORIES` 加 `wiki` + `isWikiGuide()`）、`BlogWindow.tsx`（教程分流）、
+   `WriteWindow.tsx`（Draft 类型 + 分类按钮）；
+   ② 主管给这个窗口加了**栏宽分隔条**（用户点名要的）：`DstWikiContent.tsx` 里只加了
+   `useColumnRails(WIKI_RAILS)`、两处 `ref={rails.gridRef}`、`data-view="guide"` 与内容列里的
+   `<div className="width-handles">`，**没动任何条目 / 搜索 / 配方逻辑**；
+   `globals.css` 的 `.wiki__*` 里把网格列改成 CSS 变量，并**补掉教程区那条 176px 空轨道**。
+   这类跨边界改动以后仍然要先说明。
 2. 颜色**只用主题令牌类**（`text-ink` / `bg-surface-2` / `border-edge` / `text-dim` / `bg-accent` …），
    不许写死 `#fff` / `rgb()` / `bg-white`（见「主题令牌」一节）
 3. 版式用现成的三栏模式 `.wiki__*`（`globals.css`），栏数跟着窗口宽度走；正文行宽别超过 `68ch`
@@ -177,8 +182,8 @@ npm run typecheck    # 只做类型检查
 |---|---|
 | `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useBlogRails`（博客首页两条侧栏宽度） |
-| `src/lib/` | `apps`（窗口登记表）、`blogRails`（首页两条侧栏的几何与范围）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnWidth`（列宽存取与钳制，两个页面共用）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
+| `src/lib/` | `apps`（窗口登记表）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -219,18 +224,26 @@ npm run typecheck    # 只做类型检查
    ⚠️ 滚动条是浏览器原生绘制的：系统开了「自动隐藏滚动条」时 CSS 不生效，这属正常，
    验证脚本因此只断言样式表里落了这几条规则（不去量最终外观）。
 
-3. **博客首页两侧的分隔条**（`BlogWindow`）：同一个 `WidthHandle`，但**模型不一样** ——
-   中栏（卡片流）始终 `1fr` 吃满剩余空间，所以拖的是**栏与栏的分界**：
-   - `scale={-1}`：分界跟着指针走，拖多少变多少（正文列那种 ×2 是对称居中才需要的）
-   - 拖的是侧栏宽度（左条 → 分类栏、右条 → 右栏），中栏自己吃掉差额 → 整行永远贴齐，两端不留白
-   - 抓取带就是**格子间距**（14px，写进 `.blog__grid` 的 `--width-handle-offset`），
+3. **博客首页 + 饥荒 Wiki 窗口两侧的分隔条**（两个窗口共用一套）：打开 `useColumnRails`，
+   中栏（内容列）始终 `1fr` 吃满剩余空间，所以拖的是**栏与栏的分界**：
+   - `WidthHandle` 用 `scale={-1}`：分界跟着指针走，拖多少变多少（正文列那种 ×2 是对称居中才需要的）；
+     `growKey` 指定哪个方向键算变宽（左条 → 右键、右条 → 左键）
+   - 拖的是侧栏宽度（左条 → 分类栏、右条 → 速览/统计栏），中栏自己吃掉差额 → 整行永远贴齐，两端不留白
+   - 抓取带就是**格子间距**（14px，写进 `.blog__grid` / `.wiki__grid` 的 `--width-handle-offset`），
      那 3px 长条按 `calc((带宽 - 3px) / 2)` 居中，所以两处带宽不同也不用改规则
-   - 范围：左栏 132~360、右栏 168~420，且中栏至少留 300（`lib/blogRails.ts`）；
-     栏数不够（<900 三列变两列）时右条自动收起，只剩左条；再窄（<620）两条都没有
-   - 文件：`hooks/useBlogRails.ts`、`lib/blogRails.ts`、`components/program/BlogWindow.tsx`
-   - 想再往别的窗口搬：**窗口内容是一个"内容列 + 两侧栏"的都能用这套**（饥荒 Wiki 窗口结构一样，
-     但那是 wiki 负责人的地盘，要动先跟用户确认）；博客创作窗口的"分屏"是**分割比例**、
-     不是列宽，属于另一种交互，别硬套
+   - 范围：左栏 132~360、右栏 168~420，且内容列至少留 300；<900 变两列时右条自动收起，
+     只剩左条；再窄（<620）两条都没有。**没有那条栏的视图里也不显示**（Wiki 教程区就没左栏）
+   - 文件：`hooks/useColumnRails.ts`（钩子）、`lib/columnRails.ts`（`RailSpec` 配置 + 几何/钳制）、
+     `components/program/WidthHandle.tsx`（手柄）
+   - 📌 **以后新窗口要加这套（三步）**：
+     ① `lib/columnRails.ts` 里照 `BLOG_RAILS` 加一份配置（换键名 / CSS 变量名 / 选择器，
+     几何数值直接展开 `RAIL_SHAPE`）；
+     ② `globals.css` 里把网格列写成 `var(--xxx-nav-width, 默认值)` / `var(--xxx-aside-width, 默认值)`，
+     容器加 `--width-handle-offset`（= 格子间距），内容列加 `position: relative`；
+     ③ 组件里 `const rails = useColumnRails(XXX_RAILS)`，网格挂 `ref={rails.gridRef}`，
+     内容列里放 `<div className="width-handles">` + 两条 `<WidthHandle scale={-1} .../>`。
+     **前提是这个窗口真有"内容列 + 两侧栏"**：单列铺满的窗口（项目、关于）别硬加；
+     博客创作窗口的"分屏"是分割比例、不是列宽，属于另一种交互，也别硬套
 
 ## 主题令牌（硬规则）
 
@@ -274,6 +287,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.termToken` | **终端服务的 token**（`npm run term` 启动时打印）。只存本机浏览器；有了它才能在网页里跑本机命令 |
 | `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
+| `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -348,7 +362,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 - 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、
   拖左条 40px → 左栏 +40 中栏 −40 且整行贴齐、拖右条同理、双击复位且清掉 localStorage。
-  改 `lib/blogRails.ts` 的常量后一定要跑
+  改 `lib/columnRails.ts` 的 `RAIL_SHAPE` 后一定要跑
+- 饥荒 Wiki 的分隔条有 3 项：资料区两条都在且左栏贴最左、拖左条 40px 落盘 `desktop.wikiNavWidth`、
+  **教程区只剩右边那条且不留空轨道**
 - 博客首页的统计/角标有 4 项：右栏「文章」= 左栏「全部」= 已发布总数、角标加得出「全部」、
   **切分类时角标与统计一个都不变**、统计里确实有「建站 N 天」与「字数」
 - 日月时钟在 `verify.mjs` 里有 6 项：读数与系统时间**精确到秒**一致、**自己会跳秒（不刷新也在走）**、

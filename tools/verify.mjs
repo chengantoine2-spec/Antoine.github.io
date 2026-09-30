@@ -774,6 +774,80 @@ async function run() {
     JSON.stringify(wiki),
   )
 
+  // 13b 饥荒 Wiki 窗口也有那两条分隔条（和博客首页共用 useColumnRails / WidthHandle）：
+  //     资料区左右各一条，教程区没有左栏、所以只剩右边那条，而且不留空轨道
+  const wikiRails = await p.evaluate(() => {
+    const grid = document.querySelector('.wiki__grid')
+    const nav = document.querySelector('.wiki__nav')
+    const feed = document.querySelector('.wiki__feed')
+    const g = grid.getBoundingClientRect()
+    return {
+      handles: Array.from(document.querySelectorAll('.width-handle')).map((h) => h.dataset.side),
+      gap: Math.round(feed.getBoundingClientRect().left - g.left),
+      nav: nav ? Math.round(nav.getBoundingClientRect().width) : 0,
+      feed: Math.round(feed.getBoundingClientRect().width),
+      flush: Math.round(g.width),
+    }
+  })
+  check(
+    '饥荒 Wiki 资料区左右各有一条分隔条，左栏贴最左、中间只隔一道栏距',
+    wikiRails.handles.length === 2 &&
+      wikiRails.handles.includes('left') &&
+      wikiRails.handles.includes('right') &&
+      Math.abs(wikiRails.gap - (wikiRails.nav + 14)) < 2,
+    JSON.stringify(wikiRails),
+  )
+  const wikiDrag = await (async () => {
+    const box = await p.locator('.width-handle[data-side="left"]').boundingBox()
+    const x = box.x + box.width / 2
+    const y = Math.min(Math.max(box.y + 120, 100), 560)
+    await p.mouse.move(x, y)
+    await p.mouse.down()
+    await p.mouse.move(x + 40, y, { steps: 8 })
+    await p.waitForTimeout(150)
+    await p.mouse.up()
+    await p.waitForTimeout(300)
+    return p.evaluate(() => ({
+      nav: Math.round(document.querySelector('.wiki__nav').getBoundingClientRect().width),
+      feed: Math.round(document.querySelector('.wiki__feed').getBoundingClientRect().width),
+      stored: localStorage.getItem('desktop.wikiNavWidth'),
+      flush: Math.round(document.querySelector('.wiki__grid').getBoundingClientRect().width),
+    }))
+  })()
+  check(
+    '拖 Wiki 左分隔条 40px → 左栏 +40、内容列 −40，并落盘 desktop.wikiNavWidth',
+    wikiDrag.nav === wikiRails.nav + 40 &&
+      wikiDrag.feed === wikiRails.feed - 40 &&
+      wikiDrag.flush === wikiRails.flush &&
+      wikiDrag.stored === String(wikiDrag.nav),
+    `${wikiRails.nav}/${wikiRails.feed} → ${wikiDrag.nav}/${wikiDrag.feed}｜落盘 ${wikiDrag.stored}`,
+  )
+  await p.click('.wiki button:has-text("新手教程")')
+  await p.waitForTimeout(500)
+  const guideRails = await p.evaluate(() => {
+    const grid = document.querySelector('.wiki__grid')
+    const feed = document.querySelector('.wiki__feed')
+    return {
+      handles: Array.from(document.querySelectorAll('.width-handle')).map((h) => h.dataset.side),
+      gap: Math.round(feed.getBoundingClientRect().left - grid.getBoundingClientRect().left),
+      columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    }
+  })
+  check(
+    'Wiki 教程区没有左栏：只剩右边那条，且不再留一条空轨道',
+    guideRails.handles.length === 1 &&
+      guideRails.handles[0] === 'right' &&
+      guideRails.gap === 0 &&
+      guideRails.columns === 2,
+    JSON.stringify(guideRails),
+  )
+  await p.click('.wiki button:has-text("资料")')
+  await p.waitForTimeout(400)
+  await p.evaluate(() => {
+    localStorage.removeItem('desktop.wikiNavWidth')
+    localStorage.removeItem('desktop.wikiAsideWidth')
+  })
+
   // 14 任务栏对齐：拖长/加厚之后图标要居中，但不是从左边排起、也不是靠滚动容器居中
   const dockAlign = await p.evaluate(() => {
     const dock = document.querySelector('nav[aria-label="任务栏"]')

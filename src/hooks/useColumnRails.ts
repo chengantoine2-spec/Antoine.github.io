@@ -1,26 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WidthHandleShared } from '../components/program/WidthHandle'
 import {
-  BLOG_ASIDE_DEFAULT,
-  BLOG_ASIDE_MIN,
-  BLOG_NAV_MIN,
   asideCeiling,
   asideRoom,
-  blogColumns,
   clampAside,
   clampNav,
   navCeiling,
   navDefaultWidth,
   navRoom,
-  readAsideWidth,
-  readNavWidth,
-  writeAsideWidth,
-  writeNavWidth,
-  type BlogColumns,
-} from '../lib/blogRails'
+  railColumns,
+  railVar,
+  readRail,
+  writeRail,
+  type RailColumns,
+  type RailSide,
+  type RailSpec,
+} from '../lib/columnRails'
 
-export interface BlogRails {
-  /** 挂在 .blog__grid 上：量的、写的都是它 */
+export interface ColumnRails {
+  /** 挂在网格容器上：量的、写的都是它 */
   gridRef: (node: HTMLDivElement | null) => void
   handles: { nav: boolean; aside: boolean }
   nav: WidthHandleShared
@@ -29,21 +27,24 @@ export interface BlogRails {
 
 interface Geometry {
   container: number
-  columns: BlogColumns
+  columns: RailColumns
   /** 左栏 / 右栏此刻的宽度（按默认宽度兜底，方便算上限） */
   nav: number
   aside: number
+  /** 这个视图里到底有没有这两条栏（教程区就没有左栏） */
+  hasNav: boolean
+  hasAside: boolean
 }
 
 /**
- * 博客首页左右两条侧栏的宽度：把偏好贴成 CSS 变量（`--blog-nav-width` /
- * `--blog-aside-width`），中栏（卡片流）始终 `1fr` 吃满剩余空间。
+ * 「内容列 + 两侧栏」窗口的栏宽：把偏好贴成 `--xxx-nav-width` / `--xxx-aside-width`，
+ * 内容列始终 `1fr` 吃满剩余空间（拖的是分界）。
  *
  * 和文章页一样**不进 React 状态**：拖动时每个 rAF 只改一次 CSS 变量，不重渲染长列表。
- * 几何与钳制规则在 `lib/blogRails.ts`，手柄是共用的 `components/program/WidthHandle.tsx`
- * （这里用 `scale: -1`，也就是"分界跟着指针走"的分隔条模型）。
+ * 几何与范围在 `lib/columnRails.ts`（新窗口加这套只需抄一份 RailSpec），
+ * 手柄是共用的 `components/program/WidthHandle.tsx`（`scale: -1` = 分界跟着指针走）。
  */
-export function useBlogRails(): BlogRails {
+export function useColumnRails(spec: RailSpec): ColumnRails {
   const grid = useRef<HTMLDivElement | null>(null)
   const observer = useRef<ResizeObserver | null>(null)
   /* 拖动期间不重贴（同 AGENTS 坑 6）：否则观察器一回调就把正在拖的宽度覆盖回去 */
@@ -51,65 +52,73 @@ export function useBlogRails(): BlogRails {
   const [visible, setVisible] = useState({ nav: false, aside: false })
   const [navValue, setNavValue] = useState(0)
   const [asideValue, setAsideValue] = useState(0)
-  const [navMax, setNavMax] = useState(BLOG_NAV_MIN)
-  const [asideMax, setAsideMax] = useState(BLOG_ASIDE_MIN)
+  const [navMax, setNavMax] = useState(spec.navMin)
+  const [asideMax, setAsideMax] = useState(spec.asideMin)
 
   const measure = useCallback((): Geometry => {
     const el = grid.current
-    if (el === null) return { container: 0, columns: 1, nav: 0, aside: 0 }
-    const container = el.clientWidth
-    const columns = blogColumns(container)
-    const widthOf = (selector: string) => {
-      const node = el.querySelector(selector)
-      return node instanceof HTMLElement ? Math.round(node.getBoundingClientRect().width) : 0
+    if (el === null) {
+      return { container: 0, columns: 1, nav: 0, aside: 0, hasNav: false, hasAside: false }
     }
+    const container = el.clientWidth
+    const columns = railColumns(spec, container)
+    const node = (selector: string) => {
+      const found = el.querySelector(selector)
+      return found instanceof HTMLElement ? found : null
+    }
+    const navEl = node(spec.navSelector)
+    const asideEl = node(spec.asideSelector)
+    const widthOf = (target: HTMLElement | null) =>
+      target === null ? 0 : Math.round(target.getBoundingClientRect().width)
     /* 栏没显示（量出来是 0）时按该断点的默认宽度算，上限判断才有据可依 */
     return {
       container,
       columns,
-      nav: widthOf('.blog__nav') || (columns >= 2 ? navDefaultWidth(columns) : 0),
-      aside: widthOf('.blog__aside') || (columns >= 3 ? BLOG_ASIDE_DEFAULT : 0),
+      nav: widthOf(navEl) || (columns >= 2 ? navDefaultWidth(spec, columns) : 0),
+      aside: widthOf(asideEl) || (columns >= 3 ? spec.asideDefault : 0),
+      hasNav: navEl !== null,
+      hasAside: asideEl !== null,
     }
-  }, [])
+  }, [spec])
 
   /** 按存下来的偏好重贴一次；没偏好就把变量摘掉，回落到 CSS 里的默认宽度 */
   const publish = useCallback(() => {
     const el = grid.current
     if (el === null || dragging.current) return
     const { container, columns } = measure()
-    const navPref = readNavWidth()
-    const asidePref = readAsideWidth()
+    const navPref = readRail(spec, 'nav')
+    const asidePref = readRail(spec, 'aside')
     /* 算一条栏的上限时，另一条要用"它此刻多宽"（没拖过就是该断点的默认宽度） */
-    const navBase = navPref ?? navDefaultWidth(columns)
-    const asideBase = asidePref ?? BLOG_ASIDE_DEFAULT
+    const navBase = navPref ?? navDefaultWidth(spec, columns)
+    const asideBase = asidePref ?? spec.asideDefault
 
-    if (navPref === null) el.style.removeProperty('--blog-nav-width')
+    if (navPref === null) el.style.removeProperty(spec.navVar)
     else {
       el.style.setProperty(
-        '--blog-nav-width',
-        `${clampNav(navPref, container, asideBase, columns)}px`,
+        spec.navVar,
+        `${clampNav(spec, navPref, container, asideBase, columns)}px`,
       )
     }
-    if (asidePref === null) el.style.removeProperty('--blog-aside-width')
+    if (asidePref === null) el.style.removeProperty(spec.asideVar)
     else {
       el.style.setProperty(
-        '--blog-aside-width',
-        `${clampAside(asidePref, container, navBase, columns)}px`,
+        spec.asideVar,
+        `${clampAside(spec, asidePref, container, navBase, columns)}px`,
       )
     }
 
     /* 写完再量，读到的是最终布局 */
     const now = measure()
     const next = {
-      nav: navRoom(now.container, now.aside, now.columns),
-      aside: asideRoom(now.container, now.nav, now.columns),
+      nav: now.hasNav && navRoom(spec, now.container, now.aside, now.columns),
+      aside: now.hasAside && asideRoom(spec, now.container, now.nav, now.columns),
     }
     setVisible((v) => (v.nav === next.nav && v.aside === next.aside ? v : next))
     setNavValue(now.nav)
     setAsideValue(now.aside)
-    setNavMax(Math.max(BLOG_NAV_MIN, navCeiling(now.container, now.aside, now.columns)))
-    setAsideMax(Math.max(BLOG_ASIDE_MIN, asideCeiling(now.container, now.nav, now.columns)))
-  }, [measure])
+    setNavMax(Math.max(spec.navMin, navCeiling(spec, now.container, now.aside, now.columns)))
+    setAsideMax(Math.max(spec.asideMin, asideCeiling(spec, now.container, now.nav, now.columns)))
+  }, [measure, spec])
 
   const gridRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -129,43 +138,40 @@ export function useBlogRails(): BlogRails {
 
   /** 拖动中只改 CSS 变量，不落盘也不 setState；返回钳制后的值给落盘用 */
   const apply = useCallback(
-    (side: 'nav' | 'aside', width: number): number => {
+    (side: RailSide, width: number): number => {
       const el = grid.current
       if (el === null) return 0
       const { container, columns, nav, aside } = measure()
       if (container <= 0) return 0
-      if (side === 'nav') {
-        const clamped = clampNav(width, container, aside, columns)
-        el.style.setProperty('--blog-nav-width', `${clamped}px`)
-        return clamped
-      }
-      const clamped = clampAside(width, container, nav, columns)
-      el.style.setProperty('--blog-aside-width', `${clamped}px`)
+      const clamped =
+        side === 'nav'
+          ? clampNav(spec, width, container, aside, columns)
+          : clampAside(spec, width, container, nav, columns)
+      el.style.setProperty(railVar(spec, side), `${clamped}px`)
       return clamped
     },
-    [measure],
+    [measure, spec],
   )
 
   const currentWidth = useCallback(
-    (side: 'nav' | 'aside') => {
+    (side: RailSide) => {
       const now = measure()
       return side === 'nav' ? now.nav : now.aside
     },
     [measure],
   )
 
-  const store = useCallback((side: 'nav' | 'aside', width: number) => {
-    if (side === 'nav') {
-      writeNavWidth(width)
-      setNavValue(width)
-    } else {
-      writeAsideWidth(width)
-      setAsideValue(width)
-    }
-  }, [])
+  const store = useCallback(
+    (side: RailSide, width: number) => {
+      writeRail(spec, side, width)
+      if (side === 'nav') setNavValue(width)
+      else setAsideValue(width)
+    },
+    [spec],
+  )
 
   const bundle = useCallback(
-    (side: 'nav' | 'aside', value: number, max: number): WidthHandleShared => ({
+    (side: RailSide, value: number, max: number): WidthHandleShared => ({
       onStart: () => {
         dragging.current = true
         return currentWidth(side)
@@ -183,8 +189,7 @@ export function useBlogRails(): BlogRails {
       },
       onReset: () => {
         /* 清掉这个键 = 回到该断点的默认宽度 */
-        if (side === 'nav') writeNavWidth(null)
-        else writeAsideWidth(null)
+        writeRail(spec, side, null)
         publish()
       },
       onStep: (delta) => {
@@ -194,7 +199,7 @@ export function useBlogRails(): BlogRails {
       value,
       max,
     }),
-    [apply, currentWidth, publish, store],
+    [apply, currentWidth, publish, spec, store],
   )
 
   const nav = useMemo(() => bundle('nav', navValue, navMax), [bundle, navValue, navMax])
