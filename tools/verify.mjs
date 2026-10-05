@@ -1447,6 +1447,24 @@ async function run() {
     JSON.stringify(stripIn),
   )
 
+  /* 用户 2026-10-05：「稍微增大窗口的最小化、删除、全屏的几个图标」——
+     按钮还是 24px，里面的字形从 12px 放大到 14px（– / × 是字号，最大化那个是 svg 的盒子高） */
+  const ctrlGlyphs = await p.evaluate(() => {
+    const win = document.querySelector('section[aria-label="博客 窗口"]')
+    const fs = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0)
+    const svg = win?.querySelector('[data-window-controls] svg')
+    return {
+      minus: fs(win?.querySelector('[data-window-controls] button[aria-label="最小化"]')),
+      close: fs(win?.querySelector('[data-window-controls] button[aria-label="关闭"]')),
+      maximize: Math.round(svg?.getBoundingClientRect().height ?? 0),
+    }
+  })
+  check(
+    '窗口那三个字形够大（– / × 字号 ≥14px、最大化图形 ≥13px）',
+    ctrlGlyphs.minus >= 14 && ctrlGlyphs.close >= 14 && ctrlGlyphs.maximize >= 13,
+    JSON.stringify(ctrlGlyphs),
+  )
+
   /* 拖拽排序：把「关于」标签拖到「博客」右边 */
   const tab0 = await p.locator('[data-tab="about"]').boundingBox()
   const tab1 = await p.locator('[data-tab="blog"]').boundingBox()

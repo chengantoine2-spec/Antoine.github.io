@@ -254,7 +254,10 @@ export function Window({
         >
           <button
             type="button"
-            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-hover hover:text-ink"
+            /* ⚠️ 字形尺寸：`–` / `×` 用 text-sm（14px）、最大化图形给 MaximizeGlyph 传 h-3.5 w-3.5（14px）。
+               用户 2026-10-05：「稍微增大窗口的最小化、删除、全屏的几个图标」—— 按钮本身还是 24px，
+               只把里面的字形放大一档，别动图标美术那边（那是图标负责人的文件） */
+            className="grid h-6 w-6 place-items-center rounded text-sm text-dim hover:bg-hover hover:text-ink"
             aria-label="最小化"
             onClick={() => dispatch({ type: 'minimize', key: win.key })}
           >
@@ -267,12 +270,12 @@ export function Window({
             aria-pressed={win.maximized}
             onClick={() => dispatch({ type: 'toggle-maximize', key: win.key })}
           >
-            {/* 最大化 / 还原的图形在 components/icons/glyphs/MaximizeGlyph.tsx */}
-            <MaximizeGlyph maximized={win.maximized} />
+            {/* 最大化 / 还原的图形在 components/icons/glyphs/MaximizeGlyph.tsx（默认 12px，这里放大到 14px） */}
+            <MaximizeGlyph maximized={win.maximized} className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
-            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-accent hover:text-accent-ink"
+            className="grid h-6 w-6 place-items-center rounded text-sm text-dim hover:bg-accent hover:text-accent-ink"
             aria-label="关闭"
             /* 这一行的 × = 关掉整个框（标签上那个 × 才只关一个标签） */
             onClick={onCloseFrame}

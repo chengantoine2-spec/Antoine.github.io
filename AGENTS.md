@@ -48,6 +48,9 @@
     这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
     **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
     验证里那条检查也叫「整扇窗只有一行」并断言"标签行与窗口按钮同一水平线"
+  - **那个行里三个按钮的字形是 14px**（`–` / `×` 走 `text-sm`，最大化图形给 `MaximizeGlyph` 传
+    `h-3.5 w-3.5`；按钮本身仍是 24px）—— 用户 2026-10-05「稍微增大窗口的最小化、删除、全屏的几个图标」。
+    ⚠️ 想再调大小就在 `Window.tsx` 传 `className`，**别去改 `components/icons/**`**（那是图标负责人的）
   - 手势：**拖标签左右 = 换顺序**（位移超 4px 才算拖动）、**竖直拖出框外 24px = 拆成独立窗口**、
     **拖标签右边的空白 = 移动窗口**、**拖一扇窗到另一扇上 = 合并**（目标框描一圈 `data-merge-target`，
     拖动的那个显示 `data-merge-drop`）。合并与吸附互斥：先判"落在别的框上"，没有再判边缘吸附
@@ -490,7 +493,7 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 79 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 80 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
 - ⚠️ **dev server 一改文件就没了的真凶**（排查过两次）：Vite 的 watcher 会去 watch
   **原子写留下的临时目录**（`.X.tsx.<pid>.<guid>.tmpdir/X.tsx.tmp`），它一被锁住/删掉就抛
