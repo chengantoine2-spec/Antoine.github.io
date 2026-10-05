@@ -151,25 +151,44 @@ async function run() {
     const frame = win.querySelector('[data-dsh-frame]')
     const rect = frame?.getBoundingClientRect()
     const outer = win.getBoundingClientRect()
+    /* 工具条必须只有一行 —— 用户要求"控制条放最上面、中间主体尽量大"；
+       折成两行就白白吃掉 40px */
+    const bar = win.querySelector('[data-embed] > div')
     return {
       embed: win.querySelector('[data-embed]')?.dataset.embed ?? '',
       src: frame?.getAttribute('src') ?? '',
-      /* 内嵌后 iframe 要真的占满窗口正文区（不是 0 高的小盒） */
       w: Math.round(rect?.width ?? 0),
       h: Math.round(rect?.height ?? 0),
       winW: Math.round(outer.width),
       winH: Math.round(outer.height),
       outside: win.contains(frame),
+      /* iframe 与窗口内沿的缝：窗口有 1px 边框，所以右/下/左期望都 ≈1px。
+         底缝曾经是 41px（"窗口底下一条白边"），就是 h-full 没补上父级 p-5 的 40px */
+      gaps: [
+        Math.round(outer.right - (rect?.right ?? 0)),
+        Math.round(outer.bottom - (rect?.bottom ?? 0)),
+        Math.round((rect?.left ?? 0) - outer.left),
+      ],
+      /* 上边距 = 标题栏 36 + 工具条一行的高度（不是缝） */
+      topOffset: Math.round((rect?.top ?? 0) - outer.top),
+      barH: Math.round(bar?.getBoundingClientRect().height ?? 0),
+      /* 工具条里一个按钮的高度：barH 只比它多出内边距+边框 = 一行。
+         折成两行时 barH ≈ 2×btnH（旧版就是 85 vs 24） */
+      btnH: Math.round(bar?.querySelector('button')?.getBoundingClientRect().height ?? 0),
     }
   })
   check(
-    'DSH 就地内嵌在窗口里（iframe 占满正文，不是跳出去）',
+    'DSH 就地内嵌在窗口里（iframe 占满正文、四周不留缝、工具条只占一行）',
     !!dshEmbed &&
       dshEmbed.embed === 'on' &&
       dshEmbed.outside &&
       dshEmbed.src === dsh.address &&
-      dshEmbed.w > dshEmbed.winW - 40 &&
-      dshEmbed.h > dshEmbed.winH * 0.6,
+      dshEmbed.w > dshEmbed.winW - 4 &&
+      dshEmbed.h > dshEmbed.winH * 0.7 &&
+      dshEmbed.gaps.every((gap) => Math.abs(gap) <= 2) &&
+      dshEmbed.btnH > 0 &&
+      dshEmbed.barH - dshEmbed.btnH <= 20 &&
+      Math.abs(dshEmbed.topOffset - (36 + dshEmbed.barH)) <= 2,
     JSON.stringify(dshEmbed),
   )
   await p.click('[aria-label="DSH 窗口"] header button[aria-label="关闭"]')

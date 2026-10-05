@@ -162,50 +162,87 @@ export function DshWindow() {
     </div>
   )
 
+  /* ⚠️ 根容器的高度必须是「父容器内容高 + 上下内边距（2×20px）」：
+     父级（Window 的正文区）是 `p-5`，这里用 `-m-5` 把内边距吃掉、再补回来那 40px，
+     整个正文盒才刚好被填满。只写 h-full 会矮 40px —— 窗口底下留一条 40px 空白
+     （用户看到的"白边"就是这么来的，实测 winBottom - frameBottom = 41px）。
+     verify.mjs 里有一条专门钉这个：iframe 必须一直贴到窗口底。 */
   return (
-    <div className="-m-5 flex h-full min-h-0 flex-col" data-embed={embed ? 'on' : 'off'}>
+    <div
+      className="-m-5 flex h-[calc(100%+2.5rem)] min-h-0 flex-col"
+      data-embed={embed ? 'on' : 'off'}
+    >
       {embed ? (
         <>
-          {/* 内嵌时的工具条：状态 + 地址 + 两个出口，剩下的全给 DSH */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-edge bg-surface-2 px-2.5 py-2">
+          {/* 内嵌时的工具条：**只占一行、不折行**，剩下的高度全给 DSH。
+              地址框 flex-1 min-w-0 会被压缩，按钮 shrink-0 不会被压扁。 */}
+          <div className="flex shrink-0 flex-nowrap items-center gap-1.5 overflow-hidden border-b border-edge bg-surface-2 px-2 py-1.5">
             <span
               data-probe={probe}
-              className={`rounded border px-1.5 py-0.5 text-[11px] ${
+              title={PROBE_HINT[probe]}
+              className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] ${
                 probe === 'online' ? 'border-accent text-ink' : 'border-edge text-dim'
               }`}
             >
               {PROBE_TEXT[probe]}
             </span>
-            {addressRow}
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save()
+              }}
+              aria-label="DSH 地址"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded border border-edge bg-surface px-2 py-1 text-[11px] text-ink placeholder:text-dim focus:border-accent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={save}
+              title="保存地址并刷新"
+              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
+            >
+              保存
+            </button>
             <button
               type="button"
               onClick={reload}
-              className="rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
             >
               刷新
             </button>
             <button
               type="button"
-              onClick={openOutside}
-              className="rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              onClick={reset}
+              title="地址复位成默认"
+              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
             >
-              在独立窗口打开
+              复位
+            </button>
+            <button
+              type="button"
+              onClick={openOutside}
+              title="在独立窗口打开（内嵌有问题的备选）"
+              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
+            >
+              独立窗口
             </button>
             <button
               type="button"
               onClick={() => setEmbed(false)}
-              className="rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              title="回到说明卡"
+              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
             >
-              返回说明
+              返回
             </button>
           </div>
 
           {hostMismatch ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-edge bg-surface-2 px-2.5 py-1.5 text-[11px] text-dim">
-              <span>
-                站点与 DSH 的主机名不一样（一个是 {location.hostname}）—— DSH 的登录 Cookie 是
-                SameSite=Strict，跨主机名不会带上，这里只会显示一行
-                &ldquo;dsh web authentication required&rdquo;。
+            <div className="flex shrink-0 flex-nowrap items-center gap-2 border-b border-edge bg-surface-2 px-2 py-1 text-[11px] text-dim">
+              <span className="min-w-0 flex-1 truncate">
+                站点（{location.hostname}）与 DSH 的主机名不一样 —— 登录 Cookie 是 SameSite=Strict，
+                跨主机名不会带上，这里只会显示一行 &ldquo;dsh web authentication required&rdquo;。
               </span>
               <button
                 type="button"
@@ -213,7 +250,7 @@ export function DshWindow() {
                   apply(alignDshHost(url))
                   reload()
                 }}
-                className="rounded border border-edge px-2 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-ink"
+                className="shrink-0 rounded border border-edge px-2 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-ink"
               >
                 改成一致
               </button>
