@@ -72,13 +72,25 @@
   ⚠️ **菜名千万别塞进 `aria-label`**：`verify.mjs` 与 `verify-dst.mjs` 都按
   `button[aria-label="博客"]` 这类选择器点任务栏按钮，label 一旦变成"博客 · 玉米"，
   两个脚本立刻一起炸（改的时候踩过，当场回滚成"无障碍名 = 窗口名"）
-- **DSH 快捷入口**（`components/program/DshWindow.tsx`，本机专属）：一个**启动器**，不代理任何东西。
+- **DSH 快捷入口**（`components/program/DshWindow.tsx`，本机专属）：**就地内嵌**，不跳出去。
+  - 默认是说明卡（故意不立刻发请求），点「在窗口里打开 DSH」才挂 `iframe`，铺满正文区；
+    工具条上是 状态 / 地址 / 刷新 / 独立窗口 / 返回说明。用户 2026-10-05 明确要求
+    「展示在桌面站窗口之中，而不是在桌面站之外」
   - `localOnly: true` → 线上不挂载。`visibleApps()` 是唯一出口（任务栏、「所有项目」、路由都用它，
     **别再直接 `APPS.map`**）；线上打开 `/dsh` 会落到 `*` 兜底回桌面
+  - **能不能嵌**：实测 DSH 不回 `X-Frame-Options`、也没有 `frame-ancestors` ——
+    在 `127.0.0.1:5173` 页面里挂一个 `http://127.0.0.1:3080/` 的 iframe，`load` 事件照常触发、
+    控制台没有「Refused to display」，只是内容是那行 401 提示。
+    所以线上不能嵌**不是**对面拒绝，而是浏览器自己不让 HTTPS 页加载 `http://127.0.0.1`（混内容 + PNA）
+  - ⚠️ **主机名必须一致**：DSH 的登录 Cookie 是 `HttpOnly; SameSite=Strict`
+    （`@deepseek-ai/dsh-client-connection` 里写死的），而 `localhost` 与 `127.0.0.1` 在浏览器眼里
+    是**两个站点** —— 一边登录、另一边内嵌，Cookie 不带过去，iframe 里只有一行
+    `dsh web authentication required`。所以 `lib/dsh.ts` 的默认地址跟着 `location.hostname` 走，
+    不一致时窗口里会提示并给一个「改成一致」
+  - 首次登录：把 `dsh web` 启动时打印的带 `?token=…` 的地址整段粘到地址框 —— 登录在同一个窗口里完成
   - 本地探活用 `fetch(url, { mode: 'no-cors' })`：DSH 不发 CORS 头，普通 fetch 一定被拦成 TypeError，
-    分不清"没跑"还是"跨域"；no-cors 只要对面回了任何响应（哪怕 401）就算在线
-  - 线上为什么不行的实测依据：HTTPS 页既不能请求 `http://127.0.0.1`（混内容 + Private Network Access），
-    也不能把它嵌进 iframe；DSH 自己也没有 CORS 头（`401`、无 `Access-Control-Allow-Origin`、`OPTIONS` 405）
+    分不清"没跑"还是"跨域"；no-cors 只要对面回了任何响应（哪怕 401）就算在线。
+    ⚠️ iframe 的 `load` 对面是 401 也会触发，**别用 load 假装能判断登录态**（超时只提示"可能没起来"）
   - 地址存 `desktop.dshUrl`（`lib/dsh.ts`），窗口里能改能复位 —— `dsh web` 的 host/port 可改，
     官方桌面端更是用系统分配的端口，**不许写死**
 - **下一步（方案已定，未开工）**：手机端走 **PWA/WebAPK**（零 SDK）+ 声音入口 L1
@@ -94,6 +106,13 @@
 |---|---|---|
 | **主管** | 全站 UI / 交互 / 内容标准：桌面外壳、任务栏、窗口框架、主题令牌、路由、部署、验证脚本 | 除右边那两处以外的**全部** |
 | **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`DstWikiContent.tsx`、`src/data/dst/**`、`src/lib/dst/**`、`tools/verify-dst.mjs`、`docs/**` |
+| **图标设计负责人**（2026-10-05 开工） | 只管**图标美术**：11 个应用图标 + 4 个外壳字形 | `src/components/icons/**`、`design/**` |
+
+**图标设计负责人**的任务书是 **`design/ICON-BRIEF.md`**（自包含，直接丢给新对话即可）。
+接线已经做完：`AppIcon.tsx` 现在只查 `ICON_SET` 表，画全在 `src/components/icons/` 里 ——
+换美术**不需要动外壳、任务栏、窗口**。他的硬约束（不许写死颜色、不许改 `aria-label`、
+不许引依赖、不许改验证脚本、`ICON_SET` 的 11 个键不许改名）都写在任务书里。
+⚠️ 站标 `public/logo.svg`（焦糖布丁）**站主明确要求不动**，别被"全套新图标"顺手换掉。
 
 **当前进度（2026-09-29 更新）**：这个窗口已经**做完并接好线**，不再是种子状态。
 
@@ -199,8 +218,9 @@ npm run typecheck    # 只做类型检查
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
-| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 启动器、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
+| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
+| `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归图标设计负责人** |
+| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
 | `src/lib/` | `apps`（窗口登记表 + `visibleApps()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
@@ -210,6 +230,7 @@ npm run typecheck    # 只做类型检查
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
 | `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
 | `docs/` | `dst-wiki.md`（饥荒 Wiki 的实现说明：数据模型 / 打分规则 / chunk 拆分 / 踩坑）、`dst-guides/`（3 篇新手教程稿件 + 发布脚本 + 说明），**归 wiki 负责人** |
+| `design/` | 图标设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`（三套主题 × 五档尺寸的预览页）。**不参与构建**，归图标设计负责人 |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
@@ -307,7 +328,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 | `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
-| `desktop.dshUrl` | DSH 快捷入口指向的地址，默认 `http://127.0.0.1:3080`（`lib/dsh.ts`）。只在窗口里改过才写；**复位 = 删掉这个键** |
+| `desktop.dshUrl` | DSH 快捷入口指向的地址（`lib/dsh.ts`）。**默认跟着页面的主机名走**：页面是 `127.0.0.1` 就默认 `http://127.0.0.1:3080`，是 `localhost` 就默认 `http://localhost:3080`（DSH 的登录 Cookie 是 SameSite=Strict，主机名不一致就带不过去）。只在窗口里改过才写；**复位 = 删掉这个键** |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -378,12 +399,14 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 61 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 62 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
 - **站名 / 菜名**有 1 项：页面标题、关于窗口、任务栏 `title` 都要是「芹菜耕地」与「X · 菜名」
   （同一条里也钉住了「无障碍名 = 窗口名」这条，见上方菜名那段）
-- **DSH 快捷入口**有 2 项：任务栏里能找到 `DSH · 芹菜`（本机才挂载）；点开后窗口出现、
-  地址可改、探活结果落在 `online` / `offline`（**不要求 `online`** —— 验证机不一定开着 DSH），
+- **DSH 快捷入口**有 3 项：① 任务栏里能找到 `DSH · 芹菜`（本机才挂载）；
+  ② 点开后窗口出现、地址可改、探活结果落在 `online` / `offline`（**不要求 `online`** ——
+  验证机不一定开着 DSH），且**默认是说明卡、还没挂 iframe**；
+  ③ 点「在窗口里打开 DSH」后 iframe 真的挂在窗口**里面**并占满正文区（用户点名要的就这一条）。
   跑完必须切回「关于」再继续，因为它会离开 `/about`
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑

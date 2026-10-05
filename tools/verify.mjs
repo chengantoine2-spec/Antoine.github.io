@@ -118,19 +118,59 @@ async function run() {
       path: location.pathname,
       address: win.querySelector('input[aria-label="DSH 地址"]')?.value ?? '',
       probe: probe?.dataset.probe ?? '',
-      open: Array.from(win.querySelectorAll('button')).some((b) =>
-        (b.textContent ?? '').includes('打开 DSH'),
+      embed: win.querySelector('[data-embed]')?.dataset.embed ?? '',
+      hasFrame: win.querySelector('[data-dsh-frame]') !== null,
+      enter: Array.from(win.querySelectorAll('button')).some((b) =>
+        (b.textContent ?? '').includes('在窗口里打开 DSH'),
+      ),
+      outer: Array.from(win.querySelectorAll('button')).some((b) =>
+        (b.textContent ?? '').includes('在独立窗口打开'),
       ),
     }
   })
   check(
-    'DSH 窗口：地址可改、能探活、有「打开 DSH」按钮',
+    'DSH 窗口：地址可改、能探活、默认是说明卡（还没发请求）',
     !!dsh &&
       dsh.path === '/dsh' &&
       /^https?:\/\/[^\s]+$/.test(dsh.address) &&
       ['online', 'offline'].includes(dsh.probe) &&
-      dsh.open,
+      dsh.embed === 'off' &&
+      !dsh.hasFrame &&
+      dsh.enter &&
+      dsh.outer,
     JSON.stringify(dsh),
+  )
+
+  /* 用户要求：DSH 要展示在桌面站窗口**里面**，不是跳出去。
+     这里点一下就走内嵌 —— 对面没登录/没跑也不影响（我们只验它被挂进了这个窗口）。 */
+  await p.click('[aria-label="DSH 窗口"] button:has-text("在窗口里打开 DSH")')
+  await p.waitForTimeout(700)
+  const dshEmbed = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="DSH 窗口"]')
+    if (!win) return null
+    const frame = win.querySelector('[data-dsh-frame]')
+    const rect = frame?.getBoundingClientRect()
+    const outer = win.getBoundingClientRect()
+    return {
+      embed: win.querySelector('[data-embed]')?.dataset.embed ?? '',
+      src: frame?.getAttribute('src') ?? '',
+      /* 内嵌后 iframe 要真的占满窗口正文区（不是 0 高的小盒） */
+      w: Math.round(rect?.width ?? 0),
+      h: Math.round(rect?.height ?? 0),
+      winW: Math.round(outer.width),
+      winH: Math.round(outer.height),
+      outside: win.contains(frame),
+    }
+  })
+  check(
+    'DSH 就地内嵌在窗口里（iframe 占满正文，不是跳出去）',
+    !!dshEmbed &&
+      dshEmbed.embed === 'on' &&
+      dshEmbed.outside &&
+      dshEmbed.src === dsh.address &&
+      dshEmbed.w > dshEmbed.winW - 40 &&
+      dshEmbed.h > dshEmbed.winH * 0.6,
+    JSON.stringify(dshEmbed),
   )
   await p.click('[aria-label="DSH 窗口"] header button[aria-label="关闭"]')
   await p.waitForTimeout(300)

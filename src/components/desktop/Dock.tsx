@@ -15,8 +15,9 @@ import {
   maxDockThickness,
 } from '../../lib/dock'
 import type { AppId } from '../../types/desktop'
+import { MenuGlyph, PositionGlyph } from '../icons'
 import { AppIcon } from './AppIcon'
-import { DockPositionMenu, PositionGlyph } from './DockPositionMenu'
+import { DockPositionMenu } from './DockPositionMenu'
 import { FullscreenButton } from './FullscreenButton'
 import { StartMenu } from './StartMenu'
 
@@ -348,17 +349,8 @@ export function Dock() {
         menuOpen ? 'bg-accent text-accent-ink' : 'text-chrome-ink'
       }`}
     >
-      <svg viewBox="0 0 24 24" className="h-1/2 w-1/2" fill="currentColor" aria-hidden="true">
-        <circle cx="7" cy="7" r="1.7" />
-        <circle cx="12" cy="7" r="1.7" />
-        <circle cx="17" cy="7" r="1.7" />
-        <circle cx="7" cy="12" r="1.7" />
-        <circle cx="12" cy="12" r="1.7" />
-        <circle cx="17" cy="12" r="1.7" />
-        <circle cx="7" cy="17" r="1.7" />
-        <circle cx="12" cy="17" r="1.7" />
-        <circle cx="17" cy="17" r="1.7" />
-      </svg>
+      {/* 九宫格的画在 components/icons/glyphs/MenuGlyph.tsx */}
+      <MenuGlyph className="h-1/2 w-1/2" />
     </button>
   )
 

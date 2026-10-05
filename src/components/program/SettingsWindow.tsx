@@ -15,7 +15,7 @@ import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import type { DockPosition } from '../../types/desktop'
-import { PositionGlyph } from '../desktop/DockPositionMenu'
+import { PositionGlyph } from '../icons'
 import { FullscreenButton } from '../desktop/FullscreenButton'
 
 const POSITION_LABEL: Record<DockPosition, string> = {

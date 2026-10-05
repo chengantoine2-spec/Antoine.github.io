@@ -1,99 +1,14 @@
 import type { IconName } from '../../types/desktop'
+import { ICON_SET } from '../icons'
 
-/** 自绘图标：不引图标库、不使用第三方图标素材 */
+/**
+ * 应用图标的外壳：把 IconName 翻成真正的图形。
+ *
+ * 画本身在 `src/components/icons/`（一个图标一个文件 + 一张 ICON_SET 登记表），
+ * 这里只做查表 —— 以后换美术不用动外壳、任务栏、窗口。
+ */
 export function AppIcon({ name, className = 'h-6 w-6' }: { name: IconName; className?: string }) {
-  const base = {
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    className,
-    'aria-hidden': true,
-  }
-
-  switch (name) {
-    case 'about':
-      return (
-        <svg {...base}>
-          <circle cx="12" cy="8" r="3.2" />
-          <path d="M5 20c0-3.3 3.1-5.4 7-5.4s7 2.1 7 5.4" />
-        </svg>
-      )
-    case 'projects':
-      return (
-        <svg {...base}>
-          <path d="M3.5 7.5h6l1.6 2h9.4v9.5h-17z" />
-          <path d="M3.5 7.5V5.5h6l1.6 2" />
-        </svg>
-      )
-    case 'blog':
-      return (
-        <svg {...base}>
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          <path d="M8 9h8M8 13h8M8 17h5" />
-        </svg>
-      )
-    case 'skills':
-      return (
-        <svg {...base}>
-          <path d="M12 3l2.6 5.6 6.1.8-4.4 4.2 1.1 6-5.4-3-5.4 3 1.1-6L3.3 9.4l6.1-.8z" />
-        </svg>
-      )
-    case 'contact':
-      return (
-        <svg {...base}>
-          <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
-          <path d="M4 7l8 6 8-6" />
-        </svg>
-      )
-    case 'terminal':
-      return (
-        <svg {...base}>
-          <rect x="3.5" y="5" width="17" height="14" rx="2" />
-          <path d="M7.5 10l2.5 2-2.5 2M12.5 14h4" />
-        </svg>
-      )
-    case 'assets':
-      return (
-        <svg {...base}>
-          <path d="M3.5 8.5l8.5-4 8.5 4-8.5 4z" />
-          <path d="M3.5 8.5v7l8.5 4 8.5-4v-7" />
-        </svg>
-      )
-    case 'write':
-      return (
-        <svg {...base}>
-          <path d="M4 20l4-.9L19.2 7.9a1.9 1.9 0 0 0 0-2.7l-.4-.4a1.9 1.9 0 0 0-2.7 0L4.9 16z" />
-          <path d="M14.5 6.5l3 3" />
-        </svg>
-      )
-    case 'wiki':
-      return (
-        <svg {...base}>
-          <path d="M12 7.4C10.6 6.1 8.7 5.4 6.5 5.4H4v12.2h2.5c2.2 0 4.1.7 5.5 2 1.4-1.3 3.3-2 5.5-2H20V5.4h-2.5c-2.2 0-4.1.7-5.5 2z" />
-          <path d="M12 7.4v12.2" />
-        </svg>
-      )
-    case 'dsh':
-      /* 芹菜：三根茎 + 顶端两片叶（站叫芹菜耕地，DSH 是这块地的入口） */
-      return (
-        <svg {...base}>
-          <path d="M12 20.6V8.4" />
-          <path d="M9.2 20.6c-.5-3.8-.3-7.3.6-10.6" />
-          <path d="M14.8 20.6c.5-3.8.3-7.3-.6-10.6" />
-          <path d="M9.9 9.8 8.1 8a1.5 1.5 0 0 1 2.1-2.1l1.8 1.8 1.8-1.8A1.5 1.5 0 0 1 15.9 8l-1.8 1.8" />
-        </svg>
-      )
-    case 'settings':
-      return (
-        <svg {...base}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" />
-        </svg>
-      )
-    default:
-      return null
-  }
+  const Icon = ICON_SET[name]
+  if (!Icon) return null
+  return <Icon className={className} />
 }

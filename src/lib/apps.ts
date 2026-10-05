@@ -91,12 +91,13 @@ export const APPS: AppDef[] = [
     id: 'dsh',
     name: 'DSH',
     path: '/dsh',
-    source: '本机 DeepSeek Harness（默认 http://127.0.0.1:3080，地址可在窗口里改）',
+    source:
+      '本机 DeepSeek Harness（默认 http://127.0.0.1:3080，地址可在窗口里改）：页面就地内嵌进这个窗口',
     icon: 'dsh',
     /* 田地的本体：站叫芹菜耕地，DSH 就是那块地的入口 */
     veggie: '芹菜',
-    /* 只是个启动器，不用大窗口 */
-    defaultSize: { w: 620, h: 480 },
+    /* 这一窗里放的是整个 DSH 页面，不是一张说明卡 —— 给到能用的尺寸 */
+    defaultSize: { w: 1040, h: 700 },
     /* 只有本机才有意义：线上站点是 HTTPS，够不到 127.0.0.1，也嵌不了 http 的页面 */
     localOnly: true,
   },
