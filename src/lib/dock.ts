@@ -60,6 +60,29 @@ export function wrapLines(crossAvail: number, btn: number): number {
 export function wrapPerLine(count: number, lines: number): number {
   return Math.max(1, Math.ceil(count / lines))
 }
+
+/**
+ * 折行模式要在**主轴起点**补多少内边距 —— 专门修「图标往左偏、不在中间」
+ * （站主 2026-10-05 报的：转成折行老是往左偏，要让图标保持在中间）。
+ *
+ * 根因：任务栏两端的固定按钮**不对称** —— 主轴起点只有一颗「所有项目」，
+ * 终点却是「全屏 + 位置」两颗（竖排还要多一颗「所有项目」），所以图标块的中线天生
+ * 比任务栏中线偏向起点。实测（视口 1280×800、图标 40、横排、length = null）：
+ * 任务栏 626 宽、图标块左留白 **51** / 右留白 **95** → 中线**偏左 22px**。
+ *
+ * 返回值 = 两端固定区的差（横排 88 − 44 = **44**，竖排 132 − 44 = **88**）。
+ * 加在滚动容器的 `padding-inline-start` / `padding-block-start` 上之后：
+ * - **装得下时**：内边距把"居中的自由度"缩小一半，正好把 22px 的偏移抵消 → 图标块居中
+ *   （实测左右留白 95 / 95）；
+ * - **装不下时**：它只是内边距，内容的滚动原点仍在它之后 → 起点那几个图标照样看得见、够得到。
+ *
+ * ⚠️ 别换成 `margin`（会过量一倍）：内边距同时缩小了用于居中的空闲空间，这才是它"正好抵消"的原因。
+ */
+export function wrapSideGap(btn: number, vertical: boolean): number {
+  const start = btn + DOCK_GAP
+  const end = DOCK_GAP + btn + DOCK_GAP + btn + (vertical ? DOCK_GAP + btn : 0)
+  return Math.max(0, end - start)
+}
 /** 折行的长度下限：至少要装得下两端三个固定按钮 + 一个图标 */
 export function wrapMinLength(btn: number): number {
   return btn * 4 + DOCK_GAP * 3 + (DOCK_PAD + DOCK_BORDER) * 2

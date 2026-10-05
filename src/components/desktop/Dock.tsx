@@ -24,6 +24,7 @@ import {
   wheelViewMin,
   wrapLines,
   wrapPerLine,
+  wrapSideGap,
 } from '../../lib/dock'
 import { veggieOfName } from '../../lib/veggies'
 import type { AppId } from '../../types/desktop'
@@ -210,11 +211,29 @@ export function Dock() {
      注意不能只在 length === null 时加 —— 那样拖过长度的任务栏就永远只有一条，只能在一条里滚 */
   const perLine = wrapPerLine(itemCount, lines)
   const lineSize = perLine * btn + (perLine - 1) * GAP
-  const itemsStyle: CSSProperties = {}
+  /* 折行要补在主轴起点的内边距：两端固定按钮不对称（起点一颗、终点两颗），
+     不补的话图标块中线比任务栏中线偏左 22px（站主报的"往左偏"）。见 lib/dock 的 wrapSideGap */
+  const sidePad = mode === 'wrap' ? wrapSideGap(btn, vertical) : 0
+  const itemsStyle: CSSProperties = {
+    /* safe center：装得下时每行居中、**装不下时退化成 start**（左边不会被推到滚动原点之外，
+       起点那几个图标照样看得见、够得到）—— 这正是折行要的语义。
+       ⚠️ 别写成裸 center：溢出时两端同时溢出，左边那半截既看不见也滚不到（坑 5） */
+    justifyContent: 'safe center',
+  }
   if (mode === 'wrap' && lines > 1 && itemCount > 0) {
     if (vertical) itemsStyle.height = lineSize
     else itemsStyle.width = lineSize
   }
+
+  /* 切模式 / 改几何之后把折行的滚动位置**归零**：
+     轮盘与折行是同一个 <div> 节点（React 复用），实测 wheel → wrap 之后 scrollLeft 还留着 200，
+     图标看着就是"往左偏"、起点那几个还够不到。归零之后装得下时正好落在居中态。 */
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    el.scrollLeft = 0
+    el.scrollTop = 0
+  }, [mode, length, position, btn, vertical, itemCount])
 
   /* ── 轮盘模式的几何 ──
      step = 相邻图标中心距；图标区长度 = 给多少算多少（length === null 时按"装下所有图标"自适应，
@@ -792,6 +811,10 @@ export function Dock() {
            视口里放**两份**背靠背的列表，offset 归一化到 [0, N*step)：往一个方向一直拖能绕回起点，
            永远不到头（也不会像滚动那样到头卡住）。中央放大按"离视口中心的距离"衰减。 */
         <div
+          /* key 让两种模式**各用各的 DOM 节点**：轮盘与折行整棵子树结构不同，但外层都是 <div>，
+             不给 key 时 React 会**复用同一个节点**并把它的 `scrollLeft` 一起带过去 ——
+             实测 wheel → wrap 之后残留 110，图标看着往左偏（站主报的"往左偏"里有一半是这个） */
+          key="wheel"
           ref={viewEl}
           data-dock-view=""
           /* 停靠方向挂在这儿，给 CSS 用来设放大原点（`globals.css` 里 `[data-dock-pos]` 那几条）：
@@ -826,6 +849,7 @@ export function Dock() {
         /* ── 折行（wrap）：**完全旧行为**，一个字都没改（最多 3 行、静态、不放大、无拖拽手势）──
            只显示放得下的按钮，其余靠拖动/滚轮查看 */
         <div
+          key="wrap"
           ref={scroller}
           onPointerDown={wrapStartDrag}
           onPointerMove={wrapOnDrag}
@@ -835,7 +859,10 @@ export function Dock() {
           /* 视口本身不设 justify/align —— 居中交给里面那层用 m-auto。
              滚动容器上直接写 justify-center 时，内容一旦超出，超出的那一侧会落到
              滚动原点之外：滚轮和拖动都永远够不到（小任务栏时最左 / 最上的图标就是这么丢的）。
-             max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏 */
+             max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏。
+             主轴起点补 sidePad（两端固定按钮不对称的补偿）——它只是内边距，
+             既能让装得下时图标块居中，又不会把内容推到滚动原点之外 */
+          style={sidePad ? (vertical ? { paddingTop: sidePad } : { paddingLeft: sidePad }) : undefined}
           className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full ${
             length !== null ? 'flex-1' : ''
           } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}

@@ -1753,6 +1753,150 @@ async function run() {
     }),
   )
 
+  /* ── 14g 折行：图标块要待在任务栏「中间」（站主 2026-10-05 报的「转成折行老是往左偏」）─────
+     根因两条，都是实测出来的：
+     ① 两端固定按钮**不对称** —— 主轴起点只有一颗「所有项目」，终点是「全屏 + 位置」两颗；
+        所以图标块的中线天生偏向起点：实测 length=null 时任务栏 626 宽、左留白 **51** / 右留白 **95**
+        → 中线**偏左 22px**（竖排更狠：上下 44 / 132 → 偏 44px）。
+     ② 轮盘与折行**外层都是 `<div>`**，React 会把同一个节点复用，`scrollLeft` 跟着一起带过去：
+        实测 wheel → wrap 之后残留 **110**，图标看着更偏、起点那几个还够不到。
+     修法：折行滚动容器补 `padding-inline-start = 两端固定区之差`（`lib/dock` 的 `wrapSideGap`，
+        内边距同时把"用于居中的空闲"缩小一半，正好抵消偏移）+ 内层 `justify-content: safe center`
+        （装得下每行居中、装不下退化成 start）+ 两个分支各给一个 `key`（各用各的 DOM 节点）。
+     ⚠️ 不能写成裸 `center`：内容溢出时两端同时溢出，左边那半截既看不见也滚不到（坑 5）。 */
+  const wrapCenterProbe = () =>
+    p.evaluate(
+      ({ sel, fixed }) => {
+        const dock = document.querySelector(sel)
+        if (!dock) return null
+        const apps = [...dock.querySelectorAll('button[aria-label]')].filter(
+          (b) => !fixed.includes(b.getAttribute('aria-label')),
+        )
+        const inner = dock.querySelector('.m-auto')
+        const scroller = inner?.parentElement ?? null
+        const dr = dock.getBoundingClientRect()
+        const mid = (dr.left + dr.right) / 2
+        const rows = new Map()
+        for (const b of apps) {
+          const r = b.getBoundingClientRect()
+          const k = Math.round(r.top)
+          if (!rows.has(k)) rows.set(k, [])
+          rows.get(k).push({ l: r.left, r: r.right })
+        }
+        const lines = [...rows.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([top, items]) => {
+            const l = Math.min(...items.map((i) => i.l))
+            const r = Math.max(...items.map((i) => i.r))
+            return { top, n: items.length, off: +((l + r) / 2 - mid).toFixed(1) }
+          })
+        const first = apps.map((b) => b.getBoundingClientRect()).sort((a, b) => a.left - b.left)[0]
+        return {
+          n: apps.length,
+          lines,
+          innerJustify: inner ? getComputedStyle(inner).justifyContent : null,
+          scrollLeft: scroller?.scrollLeft ?? null,
+          overflows: scroller ? scroller.scrollWidth > scroller.clientWidth + 1 : false,
+          firstIconLeftMinusDockLeft: first ? +(first.left - dr.left).toFixed(1) : null,
+          padStart: scroller ? getComputedStyle(scroller).paddingLeft : null,
+          dockW: Math.round(dr.width),
+        }
+      },
+      { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+    )
+  const setDockGeom = async (patch) => {
+    await p.evaluate((patch) => {
+      const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+      Object.assign(raw, { position: 'bottom' }, patch)
+      localStorage.setItem('desktop.dock', JSON.stringify(raw))
+    }, patch)
+    await p.goto(`${BASE}/`, { waitUntil: 'load' })
+    await p.waitForTimeout(800)
+  }
+  await pickDockMode('折行')
+  await setDockGeom({ mode: 'wrap', length: null, thickness: null, iconSize: null })
+  const wrapAuto = await wrapCenterProbe()
+  await setDockGeom({ mode: 'wrap', length: 760, thickness: null, iconSize: null })
+  const wrapWide = await wrapCenterProbe()
+  check(
+    '折行：图标块在任务栏里**居中**（装得下时中线偏差 ≤2px；「长度自适应」与「指定宽度」各量一次）',
+    !!wrapAuto &&
+      !!wrapWide &&
+      wrapAuto.lines.length > 0 &&
+      /* ⚠️ 还要断言「没溢出」：只量中线的话，内容被挤进滚动区、只露一半也算"居中"（假过） */
+      !wrapAuto.overflows &&
+      wrapAuto.lines.every((l) => Math.abs(l.off) <= 2) &&
+      wrapWide.lines.every((l) => Math.abs(l.off) <= 2),
+    JSON.stringify({
+      auto: wrapAuto && { dockW: wrapAuto.dockW, padStart: wrapAuto.padStart, off: wrapAuto.lines.map((l) => l.off), overflows: wrapAuto.overflows },
+      wide: wrapWide && { dockW: wrapWide.dockW, off: wrapWide.lines.map((l) => l.off) },
+    }),
+  )
+  await setDockGeom({ mode: 'wrap', length: 560, thickness: 120, iconSize: 40 })
+  const wrapMulti = await wrapCenterProbe()
+  check(
+    '折行多行时**每一行**都居中（包括不满的最后一行 —— 裸 center 的 flex-start 会把最后一行甩到左边）',
+    !!wrapMulti && wrapMulti.lines.length >= 2 && wrapMulti.lines.every((l) => Math.abs(l.off) <= 2),
+    JSON.stringify({ lines: wrapMulti?.lines }),
+  )
+  await setDockGeom({ mode: 'wrap', length: 200, thickness: null, iconSize: null })
+  const wrapNarrow = await wrapCenterProbe()
+  const reachEnd = await p.evaluate(
+    ({ sel, fixed }) => {
+      const dock = document.querySelector(sel)
+      const scroller = dock?.querySelector('.m-auto')?.parentElement
+      if (!dock || !scroller) return null
+      const apps = [...dock.querySelectorAll('button[aria-label]')].filter(
+        (b) => !fixed.includes(b.getAttribute('aria-label')),
+      )
+      scroller.scrollLeft = 99999
+      const last = apps.map((b) => b.getBoundingClientRect()).sort((a, b) => b.right - a.right)[0]
+      const dr = dock.getBoundingClientRect()
+      return { maxScrollLeft: scroller.scrollLeft, lastRightMinusDockRight: +(last.right - dr.right).toFixed(1) }
+    },
+    { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+  )
+  check(
+    '折行装不下时：起点不被推到滚动原点之外（第一个图标完整可见），且能滚到最后一个',
+    !!wrapNarrow &&
+      wrapNarrow.overflows &&
+      wrapNarrow.firstIconLeftMinusDockLeft >= -1 &&
+      !!reachEnd &&
+      reachEnd.maxScrollLeft > 0 &&
+      reachEnd.lastRightMinusDockRight <= 1,
+    JSON.stringify({
+      first: wrapNarrow?.firstIconLeftMinusDockLeft,
+      overflows: wrapNarrow?.overflows,
+      ...reachEnd,
+    }),
+  )
+  check(
+    '折行内层居中用的是 `safe center`（装不下时自动退化成 start —— 别退回裸 center，坑 5 会回来）',
+    !!wrapNarrow && typeof wrapNarrow.innerJustify === 'string' && wrapNarrow.innerJustify.includes('safe'),
+    JSON.stringify({ justify: wrapNarrow?.innerJustify }),
+  )
+  /* 切模式不许留滚动残值：轮盘与折行外层都是 <div>，不给 key 时 React 会复用节点、把 scrollLeft 带过去 */
+  await p.goto(`${BASE}/settings`, { waitUntil: 'load' })
+  await p.waitForTimeout(700)
+  await p.evaluate((sel) => {
+    const s = document.querySelector(`${sel} .m-auto`)?.parentElement
+    if (s) s.scrollLeft = 200
+  }, DOCK)
+  const scrollBefore = await p.evaluate(
+    (sel) => document.querySelector(`${sel} .m-auto`)?.parentElement?.scrollLeft ?? null,
+    DOCK,
+  )
+  await p.click('button[aria-label="任务栏图标区：循环轮盘"]')
+  await p.waitForTimeout(500)
+  await p.click('button[aria-label="任务栏图标区：折行"]')
+  await p.waitForTimeout(700)
+  const afterSwitch = await wrapCenterProbe()
+  check(
+    '切模式（wheel → wrap）不留滚动残值：scrollLeft 归零',
+    scrollBefore > 0 && !!afterSwitch && afterSwitch.scrollLeft === 0,
+    JSON.stringify({ scrollBefore, after: afterSwitch && { scrollLeft: afterSwitch.scrollLeft, off: afterSwitch.lines.map((l) => l.off) } }),
+  )
+
   /* 收尾：长度回到自适应、模式回到轮盘，别影响后面几段 */
   await setDockLength(null)
   await pickDockMode('循环轮盘')
