@@ -70,9 +70,9 @@ export function Window({
     report.current?.(title)
   }, [title])
 
-  /** 拖动时命中的吸附区 + 目标矩形 + 当时的窗口层尺寸（松手就用它落位） */
+  /** 拖动时命中的吸附区 + 目标矩形（矩形是**窗口层坐标**：算的时候用整个视口，落位前减掉层偏移） */
   const [snapPreview, setSnapPreview] = useState<
-    { zone: SnapZone; rect: Rect; bounds: { w: number; h: number } } | undefined
+    { zone: SnapZone; rect: Rect } | undefined
   >(undefined)
   /** 拖动时指针落在哪个框上（自己的 key 除外）；有值就是"松手会并进去" */
   const [overFrame, setOverFrame] = useState<string | undefined>(undefined)
@@ -146,13 +146,21 @@ export function Window({
       return
     }
 
-    /* 指针靠近窗口层的边缘 → 记下要贴哪儿，并给出预览（松手才落位）。
-       预览与落位用同一个 snapRect，所以"看到哪就贴到哪" */
+    /* 指针靠近**屏幕**边缘 → 记下要贴哪儿，并给出预览（松手才落位）。
+       预览与落位用同一个 snapRect，所以"看到哪就贴到哪"。
+       ⚠️ 基准是**整个视口**，不是 `.desktop__layer` —— 层已经被任务栏让过位，
+       拿它算的话"拖到底边"只能贴到任务栏上沿（用户 2026-10-05 报的就是这个）。
+       窗口的 left/top 是相对层的，所以算完要减掉层的偏移。 */
     const layer = layerBox(e.currentTarget)
     if (layer) {
-      const bounds = { w: layer.width, h: layer.height }
-      const zone = snapZoneAt(e.clientX - layer.left, e.clientY - layer.top, bounds)
-      setSnapPreview(zone ? { zone, rect: snapRect(zone, bounds), bounds } : undefined)
+      const vp = { w: window.innerWidth, h: window.innerHeight }
+      const zone = snapZoneAt(e.clientX, e.clientY, vp)
+      const r = zone ? snapRect(zone, vp) : undefined
+      setSnapPreview(
+        zone && r
+          ? { zone, rect: { x: r.x - layer.left, y: r.y - layer.top, w: r.w, h: r.h } }
+          : undefined,
+      )
     }
   }
 
@@ -161,7 +169,7 @@ export function Window({
     if (drag.current && target) {
       onMergeIn(target)
     } else if (drag.current && snapPreview) {
-      dispatch({ type: 'snap', key: win.key, zone: snapPreview.zone, bounds: snapPreview.bounds })
+      dispatch({ type: 'snap', key: win.key, zone: snapPreview.zone, rect: snapPreview.rect })
     }
     if (mergeTarget.current) onMergeHover(undefined)
     mergeTarget.current = undefined

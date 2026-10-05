@@ -1640,7 +1640,7 @@ async function run() {
       snap: win?.getAttribute('data-snap') ?? '',
       x: Math.round((w?.left ?? -1) - (l?.left ?? 0)),
       w: Math.round(w?.width ?? 0),
-      half: Math.round((l?.width ?? 0) / 2),
+      half: Math.round(window.innerWidth / 2),
     }
   })
   check(
@@ -1658,21 +1658,53 @@ async function run() {
   await p.waitForTimeout(300)
   const snappedTop = await p.evaluate(() => {
     const win = document.querySelector('section[aria-label="设置 窗口"]')
-    const layer = document.querySelector('.desktop__layer')
     const w = win?.getBoundingClientRect()
-    const l = layer?.getBoundingClientRect()
     return {
       snap: win?.getAttribute('data-snap') ?? '',
       w: Math.round(w?.width ?? 0),
       h: Math.round(w?.height ?? 0),
-      lw: Math.round(l?.width ?? 0),
-      lh: Math.round(l?.height ?? 0),
+      vw: window.innerWidth,
+      vh: window.innerHeight,
     }
   })
   check(
-    '拖到上边缘 = 铺满工作区（任务栏仍可见）',
-    snappedTop.snap === 'top' && snappedTop.w === snappedTop.lw && snappedTop.h === snappedTop.lh,
+    '拖到上边缘 = 铺满整个屏幕（含任务栏那一带）',
+    snappedTop.snap === 'top' && snappedTop.w === snappedTop.vw && snappedTop.h === snappedTop.vh,
     JSON.stringify(snappedTop),
+  )
+
+  /* ⚠️ 用户 2026-10-05 报的 bug：吸附基准曾经是「窗口层」（已被任务栏让过位），
+     于是拖到底边只能贴到**任务栏上沿**。现在基准是整个视口 —— 贴底必须真的贴到屏幕底边 */
+  g = await grabSet()
+  await p.mouse.move(g.x, g.y)
+  await p.mouse.down()
+  await p.mouse.move(snapLayer.x + snapLayer.width / 2, 799, { steps: 8 })
+  await p.waitForTimeout(120)
+  const bottomPreview = await p.evaluate(
+    () => document.querySelector('[data-snap-preview]')?.getAttribute('data-snap-preview') ?? '',
+  )
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const snappedBottom = await p.evaluate(() => {
+    const win = document.querySelector('section[aria-label="设置 窗口"]')
+    const r = win?.getBoundingClientRect()
+    return {
+      snap: win?.getAttribute('data-snap') ?? '',
+      bottomGap: Math.round(window.innerHeight - (r?.bottom ?? 0)),
+      h: Math.round(r?.height ?? 0),
+      half: Math.round(window.innerHeight / 2),
+      layerBottom: Math.round(
+        document.querySelector('.desktop__layer')?.getBoundingClientRect().bottom ?? 0,
+      ),
+    }
+  })
+  check(
+    '拖到底边 = 下半屏，而且真的贴到屏幕最底边（不再停在任务栏上沿）',
+    bottomPreview === 'bottom' &&
+      snappedBottom.snap === 'bottom' &&
+      snappedBottom.bottomGap === 0 &&
+      Math.abs(snappedBottom.h - snappedBottom.half) <= 2,
+    JSON.stringify({ bottomPreview, ...snappedBottom }),
   )
 
   /* 从吸附状态拖开 = 解吸附，回到吸附前那个自由尺寸 */
@@ -1690,7 +1722,7 @@ async function run() {
   check(
     '吸附后再拖开 = 解吸附（不再是贴边形状，标记也清掉）',
     unsnapped.snap === '' &&
-      unsnapped.w !== snappedTop.lw &&
+      unsnapped.w !== snappedTop.vw &&
       unsnapped.w !== Math.round(snapLayer.width / 2) &&
       unsnapped.w >= 360,
     JSON.stringify({ ...unsnapped, freeW: Math.round(freeBox.width) }),

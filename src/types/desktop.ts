@@ -132,8 +132,8 @@ export type WindowAction =
   | { type: 'toggle-maximize'; key: string }
   | { type: 'move'; key: string; x: number; y: number }
   | { type: 'resize'; key: string; w: number; h: number }
-  /** 贴到某个吸附区（bounds = 窗口层尺寸，几何由 lib/snap.ts 算） */
-  | { type: 'snap'; key: string; zone: SnapZone; bounds: { w: number; h: number } }
+  /** 贴到某个吸附区（rect = **窗口层坐标**的目标矩形，外壳按整个视口算好再减掉层偏移） */
+  | { type: 'snap'; key: string; zone: SnapZone; rect: { x: number; y: number; w: number; h: number } }
   /**
    * 解吸附：回到 `restore` 里的矩形。
    * 拖动时带上 anchor（指针在标题栏宽度里的相对位置 0~1）与 pointer（指针在窗口层里的坐标），

@@ -1,4 +1,3 @@
-import { snapRect } from './snap'
 import type {
   AppId,
   DesktopState,
@@ -159,14 +158,17 @@ export function windowReducer(state: DesktopState, action: WindowAction): Deskto
     case 'toggle-maximize':
       return patchFrame(state, action.key, (w) => ({ ...w, maximized: !w.maximized }))
 
-    /* 拖到屏幕边缘松手：贴到那一区，并把吸附前的矩形记下来（解吸附时回去） */
+    /* 拖到屏幕边缘松手：贴到那一区，并把吸附前的矩形记下来（解吸附时回去）。
+       目标矩形由外壳按**整个视口**算好（不是窗口层 —— 层被任务栏让过位，贴不到真正的底边） */
     case 'snap': {
       const win = frameOf(state, action.key)
       if (!win) return state
-      const rect = snapRect(action.zone, action.bounds)
       return patchFrame(state, action.key, (w) => ({
         ...w,
-        ...rect,
+        x: Math.max(0, Math.round(action.rect.x)),
+        y: Math.max(0, Math.round(action.rect.y)),
+        w: Math.round(action.rect.w),
+        h: Math.round(action.rect.h),
         snap: action.zone,
         maximized: false,
         /* 已经吸附着再换区，别把"最初的自由尺寸"弄丢 */

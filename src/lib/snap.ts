@@ -23,7 +23,9 @@ const CORNERS: Array<[SnapZone, boolean, boolean]> = [
 
 /**
  * 指针落在哪个吸附区（都没有就返回 undefined）。
- * px / py 是**相对窗口层左上角**的坐标，所以任务栏与标签栏的位置天然被排除在外。
+ * px / py 是**视口坐标**（`clientX/clientY` 直接传进来），bounds 也传**整个视口**的尺寸 ——
+ * ⚠️ 别传 `.desktop__layer` 的矩形：层被任务栏让过位，用它算的话贴底只能贴到任务栏上沿
+ * （用户 2026-10-05 报的 bug：「吸附不到最底边，而是吸附到工具栏上面」）。
  */
 export function snapZoneAt(px: number, py: number, bounds: { w: number; h: number }): SnapZone | undefined {
   const left = px <= SNAP_EDGE
@@ -41,7 +43,7 @@ export function snapZoneAt(px: number, py: number, bounds: { w: number; h: numbe
   return undefined
 }
 
-/** 吸附区 → 目标矩形。四角 = 四分之一，四边 = 对半，**上边 = 铺满工作区**（任务栏留着不盖）。 */
+/** 吸附区 → 目标矩形（**视口坐标**；上边 = 铺满整个屏幕，四角 = 四分之一，其余三边 = 对半） */
 export function snapRect(zone: SnapZone, bounds: { w: number; h: number }): Rect {
   const halfW = Math.round(bounds.w / 2)
   const halfH = Math.round(bounds.h / 2)
@@ -68,7 +70,7 @@ export function snapRect(zone: SnapZone, bounds: { w: number; h: number }): Rect
 export const SNAP_LABEL: Record<SnapZone, string> = {
   left: '左半边',
   right: '右半边',
-  top: '铺满工作区',
+  top: '铺满屏幕',
   bottom: '下半屏',
   tl: '左上四分之一',
   tr: '右上四分之一',
