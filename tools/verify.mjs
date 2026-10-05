@@ -845,17 +845,9 @@ async function run() {
       pressed: btn?.getAttribute('aria-pressed') === 'true',
       isMax: (win?.className ?? '').includes('window--max'),
       shapes: btn ? btn.querySelectorAll('svg rect, svg path').length : 0,
-      /* 标签栏占掉顶上那一条（它是切换窗口的唯一入口，不能被盖住），其余照旧铺满视口 */
-      fillsViewport: (() => {
-        if (!w) return false
-        const bar = document.querySelector('[data-tabs]')
-        const band = bar ? Math.round(bar.getBoundingClientRect().height) : 0
-        return (
-          Math.round(w.width) === window.innerWidth &&
-          Math.round(w.top) === band &&
-          Math.round(w.height) === window.innerHeight - band
-        )
-      })(),
+      /* 标签栏是浮层、不让位，所以最大化照旧铺满整个视口（含任务栏） */
+      fillsViewport:
+        !!w && Math.round(w.width) === window.innerWidth && Math.round(w.height) === window.innerHeight,
       coversDock: !!w && !!d && w.top <= d.top && w.bottom >= d.bottom && w.left <= d.left && w.right >= d.right,
       dockOnTop: !!dock && !!hit && dock.contains(hit),
     }
@@ -1311,9 +1303,12 @@ async function run() {
 
   // 16 多窗口：桌面能同时开好几个窗口（可叠加），像浏览器那样用标签栏切换
   //    用户 2026-10-05：「窗口要可以叠加，可以同时打开多个窗口，显示方式像浏览器一样」
+  /* 先清场：上一节留下的窗口会被「会话记忆」在刷新后原样开回来（第一次跑就踩了：
+     饥荒 Wiki 那扇窗跟着 session 一起回来了，断言"就两个窗口"直接红） */
+  await closeAllWindows()
+  await p.waitForTimeout(200)
   await p.goto(`${BASE}/`, { waitUntil: 'load' })
   await p.evaluate(() => {
-    localStorage.removeItem('desktop.openWindows')
     localStorage.removeItem('desktop.windows')
     localStorage.removeItem('desktop.tabs')
   })
@@ -1357,6 +1352,24 @@ async function run() {
       multi.path === '/blog',
     JSON.stringify(multi),
   )
+
+  /* 标签栏是**浮层**：默认收起（缩到上边界之外），只留一条 12px 热区；
+     鼠标蹭上去才滑下来。这样窗口才能一路拖到最上面（早先它占了一条，把窗口挡在 y=36） */
+  const tabsHidden = await p.evaluate(() => {
+    const bar = document.querySelector('[data-tabs]')
+    const r = bar?.getBoundingClientRect()
+    return {
+      bottom: Math.round(r?.bottom ?? -999),
+      hot: !!document.querySelector('[data-tabs-hot]'),
+    }
+  })
+  check(
+    '标签栏是浮层：默认收起，上边界留一条热区',
+    tabsHidden.hot && tabsHidden.bottom <= 1,
+    JSON.stringify(tabsHidden),
+  )
+  await p.hover('[data-tabs-hot]')
+  await p.waitForTimeout(350)
 
   await p.click('[data-tab="about"] button')
   await p.waitForTimeout(400)
@@ -1416,9 +1429,11 @@ async function run() {
     JSON.stringify(session),
   )
 
-  // 标签栏位置：切到左侧要真的让出一条（窗口层跟着让位），再切回顶部
+  // 标签栏位置：切到左侧后**浮层贴在左边**，而窗口层不再让位（layerLeft 仍是 0）
   await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：左侧"]')
-  await p.waitForTimeout(500)
+  await p.waitForTimeout(400)
+  await p.hover('[data-tabs-hot]')
+  await p.waitForTimeout(300)
   const tabsLeft = await p.evaluate(() => {
     const bar = document.querySelector('[data-tabs]')
     const layer = document.querySelector('.desktop__layer')
@@ -1432,15 +1447,42 @@ async function run() {
     }
   })
   check(
-    '标签栏能移到左侧：左边让出一条，窗口层跟着让位',
+    '标签栏移到左侧：浮层贴左边，窗口层不再给它让位',
     tabsLeft.pos === 'left' &&
       tabsLeft.barLeft === 0 &&
-      tabsLeft.barW > 120 &&
-      tabsLeft.layerLeft >= tabsLeft.barW,
+      tabsLeft.barW >= 180 &&
+      tabsLeft.layerLeft === 0,
     JSON.stringify(tabsLeft),
   )
+
+  /* 用户报的那个问题：窗口拖不到最左 / 最上（标签栏占了一条）。
+     现在把标题栏一直拖到视口左上角，窗口就该老老实实停在 (0, 0)。
+     （此刻开着的是「设置」窗口 —— 「关于」在上一小节被标签的 × 关掉了） */
   await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：顶部"]')
   await p.waitForTimeout(300)
+  const headBox = await p.locator('section[aria-label="设置 窗口"] > header').boundingBox()
+  await p.mouse.move(headBox.x + headBox.width / 2, headBox.y + headBox.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(2, 2, { steps: 12 })
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const corner = await p.evaluate(() => {
+    const win = document.querySelector('[data-window-slot="settings"] section')
+    const layer = document.querySelector('.desktop__layer')
+    const w = win?.getBoundingClientRect()
+    const l = layer?.getBoundingClientRect()
+    return {
+      x: Math.round(w?.left ?? -1),
+      y: Math.round(w?.top ?? -1),
+      layerLeft: Math.round(l?.left ?? -1),
+      layerTop: Math.round(l?.top ?? -1),
+    }
+  })
+  check(
+    '窗口能拖到最左上角（标签栏不再挡路）',
+    corner.x === 0 && corner.y === 0 && corner.layerLeft === 0 && corner.layerTop === 0,
+    JSON.stringify(corner),
+  )
 
   await closeAllWindows()
   await p.waitForTimeout(300)

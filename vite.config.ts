@@ -8,6 +8,13 @@ const base = process.env.VITE_BASE ?? '/'
 export default defineConfig({
   base,
   plugins: [react()],
+  build: {
+    /* 菜图（design/veggies/*.svg，48 张）**不要内联**：它们每个只有一两 KB，
+       默认会被折成 data URI 塞进主包（实测首屏 gzip 101 → 111 KB）。
+       它们是按需出现的（菜单 11 张、关于窗口 49 张），发成独立文件更划算。
+       其余资源返回 undefined = 按 Vite 默认规则走。 */
+    assetsInlineLimit: (filePath) => (/design[\\/]veggies[\\/]/.test(filePath) ? false : undefined),
+  },
   server: {
     port: 5173,
     watch: {

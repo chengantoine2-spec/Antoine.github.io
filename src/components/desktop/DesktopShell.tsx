@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getApp, matchWindowRoute, pathOf, visibleApps } from '../../lib/apps'
 import { dockInsets } from '../../lib/dock'
-import { tabInsets } from '../../lib/tabs'
 import { loadOpenWindows, saveOpenWindows } from '../../lib/windowStore'
 import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
@@ -48,15 +47,13 @@ export function DesktopShell() {
   const [titles, setTitles] = useState<Partial<Record<AppId, string>>>({})
 
   const insets = dockInsets(position, effectiveThickness)
-  const tabs = tabInsets(tabPosition)
-  /* 四边让位随任务栏 / 标签栏的位置与实际厚度变化，用行内变量写进窗口层 */
+  /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层。
+     标签栏**不参与让位**（它是浮层 + 自动隐藏），所以窗口能一路拖到最左 / 最上 */
   const insetVars = {
     '--inset-top': `${insets.top}px`,
     '--inset-right': `${insets.right}px`,
     '--inset-bottom': `${insets.bottom}px`,
     '--inset-left': `${insets.left}px`,
-    '--tabs-top': `${tabs.top}px`,
-    '--tabs-left': `${tabs.left}px`,
   } as CSSProperties
 
   const route = matchWindowRoute(location.pathname)

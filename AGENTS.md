@@ -43,10 +43,15 @@
   - **标签栏** `components/desktop/WindowTabs.tsx`：一条标签 = 一个开着的窗口，点=聚焦、×=关掉，
     高亮=当前窗口，最小化的淡一点。位置在设置里切（`desktop.tabs`：顶部 / 左侧 / 不显示，默认顶部），
     由 `lib/tabs.ts` + `hooks/useTabs.tsx` 管
-  - 标签栏占掉的那一条写进 CSS 变量 `--tabs-top` / `--tabs-left`：`.desktop__layer` 的 inset 与
-    `.window--max` 都按它让位。⚠️ **最大化现在只让标签栏、仍然盖住任务栏** ——
-    标签栏是切窗口的唯一入口，被盖住就切不动了（任务栏同样会被最大化盖住）
-  - 标签栏 z 是 70（最大化窗口层 60、任务栏 50），所以它永远在最上面
+  - ⚠️ **标签栏是浮层 + 自动隐藏，绝不让窗口层让位**：早先给它留一条（顶 36 / 左 190）导致
+    窗口永远贴不到那条边 —— 实测"标签栏在顶部时窗口最上面只能到 y=36、在左侧时最左只能到 x=190"，
+    用户报的就是这个「窗口不能拖到最左边和最上面」。现在窗口层只躲任务栏，
+    标签栏浮在上面、默认收起，鼠标蹭到那条边界（12px 热区 + 一条细拉手）才滑出来；
+    收起时容器 `pointer-events-none`、只有标签自己 `pointer-events-auto`，
+    所以**窗口标题栏被它盖住时依然拖得动**
+  - 因此**最大化照旧铺满整个视口**（含任务栏），不再让出标签栏那一条
+  - 标签栏 z 是 70（最大化窗口层 60、任务栏 50），所以它滑出来时永远在最上面
+  - 标签栏收起时靠任务栏图标切窗口（当前窗口的图标会高亮），这也是它的兜底入口
   - **最小化 = `display:none`，不卸载窗口**：滚动位置、加载好的数据都留着，点任务栏 / 标签就回来
   - 关掉当前聚焦的窗口 → 焦点交给剩下最上面那个（URL 跟着走）；一个不剩就回桌面 `/`
   - 刷新后恢复上次开着的窗口（`desktop.openWindows`，顺序 = 标签栏顺序）
@@ -56,6 +61,17 @@
     博客文章页与 Wiki 的两条（一次选中 4 个，Playwright 直接报 strict mode violation）。
     `verify.mjs` 里备了 `closeAllWindows()`（程序化点关闭，不受遮挡影响），
     进入"只看某一个窗口"的小节前先清场
+- **48 张菜图已经用起来了**（2026-10-05，用户："UI平面设计把图画好了，你来应用"）：
+  - 画在 `design/veggies/*.svg`（设计负责人的），登记表在 **`lib/veggies.ts`**：
+    `VEGGIES`（48 条：文件名 / 中文名 / 分组）、`veggieOfName()`、`dishRows()`、`otherVeggies()`
+  - **对应关系只有一份**：`AppDef.veggie` 存中文菜名 → `veggieOfName()` 查图。
+    `dishRows()` 直接按 `visibleApps()` 生成（顺序 = 任务栏顺序），别再手写第二份表
+  - 用在哪：**「所有项目」菜单**（每行右侧：菜图 + 菜名）、**关于窗口的「这块地里的菜」**
+    （11 张卡片，点一下就把那扇窗开到最上面）+ 折叠区里的另外 37 张（备着以后加窗口）
+  - ⚠️ **图片不内联**：`vite.config.ts` 里 `build.assetsInlineLimit` 把 `/design/veggies/` 排除了 ——
+    默认会把 48 张折成 data URI 塞进主包（实测首屏 gzip 101 → 111 KB），
+    排除后只多 2.6 KB（= 48 个地址字符串），图按需加载
+  - ⚠️ 菜图是**身份层**（哪个窗口是哪样菜），功能图标仍然在 `components/icons/` 里 —— 两套别混
 - 任务栏图标边长：设置里 6 档（跟随厚度 / 32 / 40 / 48 / 56 / 64）。「跟随厚度」时自动值上限 64
   （`Dock.tsx` 的 `BTN_MAX`），再厚就折成最多 3 行；手选的档位会被 clamp 到 32~64。
   **拖长或加厚之后图标组必须居中**：bar 用 `justify-center`；滚动视口里再套一层用 `m-auto`
@@ -255,7 +271,7 @@ npm run typecheck    # 只做类型检查
 | `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归图标设计负责人** |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条），以及 **`views.tsx`＝「窗口 id → 装什么」的登记表** |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useTabs`（标签栏位置）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
-| `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`tabs`（标签栏位置与占位尺寸，`desktop.tabs`）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化） |
+| `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`tabs`（标签栏位置与占位尺寸，`desktop.tabs`）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化）、`veggies`（48 张菜图的登记表与查表：`veggieOfName()` / `dishRows()`） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -263,7 +279,7 @@ npm run typecheck    # 只做类型检查
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
 | `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
 | `docs/` | `dst-wiki.md`（饥荒 Wiki 的实现说明：数据模型 / 打分规则 / chunk 拆分 / 踩坑）、`dst-guides/`（3 篇新手教程稿件 + 发布脚本 + 说明），**归 wiki 负责人** |
-| `design/` | 图标设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`（三套主题 × 五档尺寸的预览页）。**不参与构建**，归图标设计负责人 |
+| `design/` | 设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`、`veggies/*.svg`（48 张菜图）、`veggies.html`、两个 `build-*.mjs`（生成预览页）。**除了 `veggies/*.svg` 被 `lib/veggies.ts` 引用（进构建）以外，其余不参与构建**，归图标设计负责人 |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
@@ -437,12 +453,13 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 68 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 70 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
-- **多窗口**有 5 项：两个窗口同时开着（都可见）+ 标签栏一条一个、点标签切窗口（抬到最上面且 URL 跟着）、
-  关掉当前窗口焦点交给剩下那个（URL 跟着）、**刷新后把上次开着的窗口都开回来**、
-  标签栏切到左侧后窗口层真的让出一条（`layerLeft ≥ 190`）。
-  ⚠️ 小节的全局选择器会串窗口，改测试时记得先 `closeAllWindows()`
+- **多窗口**有 7 项：两个窗口同时开着（都可见）+ 标签栏一条一个、**标签栏默认收起（浮层）且上边界有热区**、
+  点标签切窗口（抬到最上面且 URL 跟着）、关掉当前窗口焦点交给剩下那个（URL 跟着）、
+  **刷新后把上次开着的窗口都开回来**、标签栏切到左侧后浮层贴左边而**窗口层不让位**（`layerLeft === 0`）、
+  **窗口能一路拖到 (0, 0)**（就是用户报的"不能超过最左边和最上面"那条）。
+  ⚠️ 小节之间要先 `closeAllWindows()`：全局选择器会串窗口，而且"会话记忆"会把上一节的窗口开回来
 - **站名 / 菜名**有 1 项：页面标题、关于窗口、任务栏 `title` 都要是「芹菜耕地」与「X · 菜名」
   （同一条里也钉住了「无障碍名 = 窗口名」这条，见上方菜名那段）
 - **DSH 快捷入口**有 4 项：① 任务栏里能找到 `DSH · 芹菜`（本机才挂载）；
@@ -452,8 +469,7 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   工具条是浮层且**默认收起**（收起时它的底 ≤ iframe 顶）；
   ④ 鼠标移到窗口上边界那条热区 → 工具条滑下来，而且**正文高度不变**（证明它是浮层、不占位）。
   跑完必须切回「关于」再继续，因为它会离开 `/about`
-- 最大化那条现在断言「铺满视口 **除标签栏那一条**，并盖住任务栏」——
-  因为标签栏是切窗口的唯一入口，被盖住就切不动了
+- 最大化那条断言「铺满整个视口并盖住任务栏」—— 标签栏是浮层、不让位，所以不再是"除标签栏那一条"
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 - 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、

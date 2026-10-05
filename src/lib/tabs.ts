@@ -13,7 +13,7 @@ export const TAB_LABEL: Record<TabPosition, string> = {
   off: '不显示',
 }
 
-/** 顶部标签栏的高度（px）—— 与 `globals.css` 里的 --tabs-top 对应 */
+/** 顶部标签栏的高度（px）—— WindowTabs 自己用；它**不占窗口层的空间**（浮层 + 自动隐藏） */
 export const TAB_TOP_HEIGHT = 36
 /** 左侧标签栏的宽度（px） */
 export const TAB_LEFT_WIDTH = 190
@@ -36,13 +36,5 @@ export function writeTabPosition(position: TabPosition): void {
     localStorage.setItem(KEY, position)
   } catch {
     /* 写不进去也不影响本次会话 */
-  }
-}
-
-/** 标签栏占掉的横向 / 纵向尺寸，写进 --tabs-top / --tabs-left 给窗口层与最大化用 */
-export function tabInsets(position: TabPosition): { top: number; left: number } {
-  return {
-    top: position === 'top' ? TAB_TOP_HEIGHT : 0,
-    left: position === 'left' ? TAB_LEFT_WIDTH : 0,
   }
 }

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SITE } from '../../data/site'
 import { visibleApps } from '../../lib/apps'
+import { veggieOfName } from '../../lib/veggies'
 import type { DockPosition } from '../../types/desktop'
 import { AppIcon } from './AppIcon'
 
@@ -19,7 +20,8 @@ interface StartMenuProps {
   onClose: () => void
 }
 
-/** 所有项目总览：桌面图标取消后，这里是查看全部入口的地方 */
+/** 所有项目总览：桌面图标取消后，这里是查看全部入口的地方。
+    每行左边是**功能图标**、右边是**这扇窗分到的那棵菜**（菜图来自 design/veggies）。 */
 export function StartMenu({ open, position, onClose }: StartMenuProps) {
   const navigate = useNavigate()
 
@@ -47,25 +49,32 @@ export function StartMenu({ open, position, onClose }: StartMenuProps) {
           <img src={SITE.logo} alt="" width={20} height={20} className="logo-mark h-5 w-5 shrink-0" />
           所有项目
         </p>
-        <ul className="grid grid-cols-2 gap-1">
-          {visibleApps().map((app) => (
-            <li key={app.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  navigate(app.path)
-                  onClose()
-                }}
-                title={`${app.name} · ${app.veggie}`}
-                className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs text-ink hover:bg-hover"
-              >
-                <AppIcon name={app.icon} className="h-4 w-4 shrink-0 text-accent" />
-                <span className="truncate">{app.name}</span>
-                {/* 每个窗口是一样菜（站名：芹菜耕地） */}
-                <span className="ml-auto shrink-0 text-[10px] text-dim">{app.veggie}</span>
-              </button>
-            </li>
-          ))}
+        <ul className="grid gap-1">
+          {visibleApps().map((app) => {
+            const veggie = veggieOfName(app.veggie)
+            return (
+              <li key={app.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate(app.path)
+                    onClose()
+                  }}
+                  title={`${app.name} · ${app.veggie}`}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover"
+                >
+                  <AppIcon name={app.icon} className="h-4 w-4 shrink-0 text-accent" />
+                  <span className="truncate">{app.name}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                    {veggie ? (
+                      <img src={veggie.src} alt="" width={20} height={20} className="h-5 w-5" />
+                    ) : null}
+                    <span className="text-[10px] text-dim">{app.veggie}</span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </>
