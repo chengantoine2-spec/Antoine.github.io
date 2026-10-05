@@ -1447,22 +1447,28 @@ async function run() {
     JSON.stringify(stripIn),
   )
 
-  /* 用户 2026-10-05：「稍微增大窗口的最小化、删除、全屏的几个图标」——
-     按钮还是 24px，里面的字形从 12px 放大到 14px（– / × 是字号，最大化那个是 svg 的盒子高） */
-  const ctrlGlyphs = await p.evaluate(() => {
-    const win = document.querySelector('section[aria-label="博客 窗口"]')
-    const fs = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0)
-    const svg = win?.querySelector('[data-window-controls] svg')
-    return {
-      minus: fs(win?.querySelector('[data-window-controls] button[aria-label="最小化"]')),
-      close: fs(win?.querySelector('[data-window-controls] button[aria-label="关闭"]')),
-      maximize: Math.round(svg?.getBoundingClientRect().height ?? 0),
-    }
-  })
+  /* 用户 2026-10-05：「鼠标到按钮上时应该显示按钮的形状……颜色可以不用那么深」，
+     以及「注意左侧删除窗口的小按钮也要做」—— 三个窗口按钮 + 标签上那个小 × 悬停都要有底色，
+     而且都是同一套**淡**底色（关闭按钮不再是那个很深的强调色）。
+     形状本身是 CSS 的 hover 态，这里量的是"悬停后真的有了背景色" */
+  const hoverBg = async (sel) => {
+    await p.hover(sel)
+    await p.waitForTimeout(120)
+    return p.evaluate((s) => getComputedStyle(document.querySelector(s)).backgroundColor, sel)
+  }
+  const WIN = 'section[aria-label="博客 窗口"] '
+  const ctrlBgs = {
+    minus: await hoverBg(`${WIN}[data-window-controls] button[aria-label="最小化"]`),
+    /* 最大化 / 还原共用一个按钮，用 aria-pressed 认它，免得窗口恰好在最大化态时选不中 */
+    maximize: await hoverBg(`${WIN}[data-window-controls] button[aria-pressed]`),
+    close: await hoverBg(`${WIN}[data-window-controls] button[aria-label="关闭"]`),
+    tabClose: await hoverBg(`${WIN}[data-tab-close]`),
+  }
+  const hasFill = (v) => !!v && v !== 'transparent' && v !== 'rgba(0, 0, 0, 0)'
   check(
-    '窗口那三个字形够大（– / × 字号 ≥14px、最大化图形 ≥13px）',
-    ctrlGlyphs.minus >= 14 && ctrlGlyphs.close >= 14 && ctrlGlyphs.maximize >= 13,
-    JSON.stringify(ctrlGlyphs),
+    '悬停露出按钮形状：三个窗口按钮 + 标签上那个小 × 都有底色，且不是深强调色',
+    Object.values(ctrlBgs).every(hasFill) && ctrlBgs.close === ctrlBgs.minus,
+    JSON.stringify(ctrlBgs),
   )
 
   /* 拖拽排序：把「关于」标签拖到「博客」右边 */

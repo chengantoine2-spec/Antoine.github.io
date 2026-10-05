@@ -171,7 +171,10 @@ export function FrameTabs({
               aria-label={`关闭 ${app.name} 标签`}
               title="关闭这个标签"
               onClick={() => onClose(index)}
-              className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] opacity-60 hover:bg-hover hover:opacity-100"
+              /* 「左侧那个删除窗口的小按钮」：悬停也要露出按钮形状，和标题行那三个同一套
+                 （用户 2026-10-05）。用 --c-control-hover 而不是 --c-hover：后者是给任务栏那种
+                 深色面设计的浅色叠加，在这个浅色标签上几乎看不见 */
+              className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] opacity-60 hover:bg-[var(--c-control-hover)] hover:text-ink hover:opacity-100"
             >
               &#215;
             </button>

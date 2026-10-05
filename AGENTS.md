@@ -48,9 +48,14 @@
     这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
     **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
     验证里那条检查也叫「整扇窗只有一行」并断言"标签行与窗口按钮同一水平线"
-  - **那个行里三个按钮的字形是 14px**（`–` / `×` 走 `text-sm`，最大化图形给 `MaximizeGlyph` 传
-    `h-3.5 w-3.5`；按钮本身仍是 24px）—— 用户 2026-10-05「稍微增大窗口的最小化、删除、全屏的几个图标」。
-    ⚠️ 想再调大小就在 `Window.tsx` 传 `className`，**别去改 `components/icons/**`**（那是图标负责人的）
+  - **那三个按钮和标签上那个小 × 的悬停态是同一套"淡按钮形状"**：`hover:bg-[var(--c-control-hover)]`
+    （比 `--c-hover` 实、比 `--c-accent` 淡）。用户 2026-10-05 的原话是「鼠标到按钮上时应该显示
+    按钮的形状……不过颜色可以不用那么深」+「左侧删除窗口的小按钮也要做」。
+    字形尺寸是**原来的 12px**（`–` / `×` 走 `text-xs`，最大化图形用 `MaximizeGlyph` 的默认尺寸）——
+    中途先放大到 14px 又被用户改回来了，别自作主张再放大。
+    ⚠️ 要调大小就在 `Window.tsx` 传 `className`，**别去改 `components/icons/**`**（那是图标负责人的）
+  - ⚠️ **`--c-hover` 是给任务栏那种深色面设计的浅色叠加**，放到浅色标签 / 标题行上几乎看不见 ——
+    给浅色面上的小按钮做悬停底，用 `--c-control-hover`（三套主题各一份），别再退回 `bg-hover`
   - 手势：**拖标签左右 = 换顺序**（位移超 4px 才算拖动）、**竖直拖出框外 24px = 拆成独立窗口**、
     **拖标签右边的空白 = 移动窗口**、**拖一扇窗到另一扇上 = 合并**（目标框描一圈 `data-merge-target`，
     拖动的那个显示 `data-merge-drop`）。合并与吸附互斥：先判"落在别的框上"，没有再判边缘吸附
@@ -388,7 +393,8 @@ bg-surface / bg-surface-2        窗口、卡片
 border-edge                      所有边框
 text-ink / text-dim              正文 / 次要文字
 bg-accent / text-accent-ink      强调（当前项、主按钮）
-bg-hover                         悬停底色
+bg-hover                         悬停底色（**给任务栏那种深色面用**）
+bg-[var(--c-control-hover)]      窗口标题行小按钮 / 标签上小 × 悬停时的「淡按钮形状」（浅色面用这个）
 rounded-window / rounded-dock    圆角
 logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
 变宽拖动条 / 滚动条滑块           读 --c-scroll-thumb（滑块）、--c-scroll-thumb-hover（悬停与拖动条）

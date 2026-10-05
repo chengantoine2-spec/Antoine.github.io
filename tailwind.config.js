@@ -15,6 +15,9 @@ export default {
         accent: 'var(--c-accent)',
         'accent-ink': 'var(--c-accent-fg)',
         hover: 'var(--c-hover)',
+        /* 注：窗口标题行小按钮悬停那种"淡按钮形状"用的是 --c-control-hover，
+           但组件里走**任意值类** `bg-[var(--c-control-hover)]`（和 --c-scroll-thumb 一样）——
+           加新颜色键要重启 dev server 才生效，任意值不用（踩过） */
       },
       borderRadius: {
         window: 'var(--r-window)',

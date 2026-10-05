@@ -16,6 +16,10 @@
   --c-accent: #a96f44;
   --c-accent-fg: #fff8f0;
   --c-hover: rgba(255, 248, 240, 0.18);
+  /* 窗口标题行那几个小按钮（– □ ×，以及标签上那个小 ×）**悬停时露出的按钮形状**。
+     用户 2026-10-05：「鼠标到按钮上时应该显示按钮的形状……不过颜色可以不用那么深」——
+     所以它比 --c-hover 实、比 --c-accent 淡：一眼看出"这是个按钮"，又不抢眼。 */
+  --c-control-hover: rgba(61, 43, 31, 0.12);
   /* 滚动条滑块（悬停/拖动时更亮的那档同时给正文列宽拖动条用） */
   --c-scroll-thumb: rgba(61, 43, 31, 0.18);
   --c-scroll-thumb-hover: rgba(61, 43, 31, 0.36);
@@ -46,6 +50,7 @@
   --c-accent: #8a6a45;
   --c-accent-fg: #fbf7ee;
   --c-hover: rgba(120, 100, 75, 0.18);
+  --c-control-hover: rgba(58, 50, 38, 0.12);
   --c-scroll-thumb: rgba(58, 50, 38, 0.18);
   --c-scroll-thumb-hover: rgba(58, 50, 38, 0.36);
   --c-celestial-night: #55618f;
@@ -72,6 +77,7 @@
   --c-accent: #c68a5b;
   --c-accent-fg: #1b1d22;
   --c-hover: rgba(255, 255, 255, 0.1);
+  --c-control-hover: rgba(255, 255, 255, 0.12);
   /* 深色面上滑块要用浅色墨水，不然在深底上看不见 */
   --c-scroll-thumb: rgba(232, 230, 225, 0.18);
   --c-scroll-thumb-hover: rgba(232, 230, 225, 0.34);
