@@ -23,11 +23,7 @@ export type IconName =
   | 'wiki'
   | 'dsh'
 
-/** 窗口 id。**通常**就等于它的图标名（所以 `IconName` 是它的一部分），
- *  但**新窗口在等专门图标时可以先借一个图标**、id 单独列在这儿 ——
- *  图标美术归图标设计负责人（`components/icons/**`），不能为了加窗口去改他的 `ICON_SET`。
- *  `assistant`（产品助理）就是这么来的：图标先借 `dsh`，专门的图标等他补。 */
-export type AppId = IconName | 'assistant'
+export type AppId = IconName
 
 export interface AppDef {
   id: AppId

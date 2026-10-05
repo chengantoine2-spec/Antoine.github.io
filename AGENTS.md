@@ -331,13 +331,6 @@ npm run typecheck    # 只做类型检查
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
-> 现有 12 个窗口：about / write / projects / blog / wiki / skills / contact / terminal / **assistant（产品助理）** /
-> assets / settings / dsh。⚠️ **`assistant` 的图标是临时借 `dsh` 的** ——
-> `components/icons/**` 是图标设计负责人的地盘，第 12 个图标（产品助理）还没做，
-> 所以 `AppId` 放宽成了 `IconName | 'assistant'`（窗口 id 通常等于图标名，但等图标时可以单独列）。
-> **他补上图标后**：`ICON_SET` 加一个键、`apps.ts` 的 `icon` 换成新键、`types/desktop.ts` 里把
-> `'assistant'` 从 `AppId` 的并集里去掉。
-
 1. `src/lib/apps.ts` 登记一行：`id / name / path / source / icon`，需要更大窗口再加 `defaultSize`
 2. `src/components/program/<名字>Window.tsx` 写内容
 3. `src/components/program/views.tsx` 的 `VIEWS` 表里挂上（不挂就自动走 `AppPlaceholder`）
@@ -509,15 +502,8 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 82 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 80 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
-- **「产品助理」任务栏入口**有 2 项（用户 2026-10-05：「我想把这个工具放到任务栏中」，
-  同时明确「不要做到 DSH」= **不在 DSH 窗口里加按钮**）：① 任务栏里有 `button[aria-label="产品助理"]`；
-  ② 点开是一扇独立窗口、停在 `/assistant`、默认是说明卡（和 DSH 那一窗同一套组件）。
-  ⚠️ 它靠 `DshWindow` 的 `panel` 参数在 iframe `onLoad` 时给 DSH 页面发
-  `postMessage({type:'dsh:panel',panel},'*')` —— **targetOrigin 必须是 `'*'`**：
-  桌面端 DSH 页面跑在 `dsh-app://`（`location.origin === "null"`），拿它当 targetOrigin 会直接抛错。
-  插件侧只认回环/同页来源、只会 `selectPanel`，拿不到数据（协议见 `PLUGIN-BRIEF.md` 第 8 节）。
 - ⚠️ **dev server 一改文件就没了的真凶**（排查过两次）：Vite 的 watcher 会去 watch
   **原子写留下的临时目录**（`.X.tsx.<pid>.<guid>.tmpdir/X.tsx.tmp`），它一被锁住/删掉就抛
   `EBUSY: resource busy or locked` 并**直接结束进程**。`vite.config.ts` 里已经忽略
