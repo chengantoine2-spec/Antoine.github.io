@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getApp } from '../../lib/apps'
+import { getApp, visibleApps } from '../../lib/apps'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import {
@@ -136,9 +136,12 @@ export function Dock() {
   const crossAvail = (thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2
   const lines = Math.round(clamp(Math.floor((crossAvail + GAP) / (btn + GAP)), 1, MAX_LINES))
 
+  /* 本机专属的窗口（DSH）在线上不挂载：任务栏里也不该露出来，折行计算同样按"看得到的"来 */
+  const shownApps = dockApps.filter((id) => visibleApps().some((app) => app.id === id))
+
   /* 多行时给内层一个主轴上限，折行才会发生（内层才是 flex 容器）。
      注意不能只在 length === null 时加 —— 那样拖过长度的任务栏就永远只有一条，只能在一条里滚 */
-  const itemCount = dockApps.length
+  const itemCount = shownApps.length
   const perLine = Math.max(1, Math.ceil(itemCount / lines))
   const lineSize = perLine * btn + (perLine - 1) * GAP
   const itemsStyle: CSSProperties = {}
@@ -416,38 +419,44 @@ export function Dock() {
             vertical ? 'flex-col' : ''
           }`}
         >
-          {dockApps.map((id) => {
-            const app = getApp(id)
-            const running = windows.some((w) => w.id === app.id)
-            const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
+          {shownApps
+            .map((id) => {
+              const app = getApp(id)
+              const running = windows.some((w) => w.id === app.id)
+              const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
+              /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上 */
+              const label = `${app.name} · ${app.veggie}`
 
-            return (
-              <button
-                key={app.id}
-                type="button"
-                style={btnStyle}
-                title={app.name}
-                aria-label={app.name}
-                aria-current={active ? 'page' : undefined}
-                onClick={() => openApp(app.id)}
-                onMouseEnter={(e) => showName(e.currentTarget, app.name)}
-                onMouseLeave={() => setHover(null)}
-                onFocus={(e) => showName(e.currentTarget, app.name)}
-                onBlur={() => setHover(null)}
-                className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
-                  active ? 'bg-accent text-accent-ink' : ''
-                }`}
-              >
-                <AppIcon name={app.icon} className="h-1/2 w-1/2" />
-                {running ? (
-                  <span
-                    className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={app.id}
+                  type="button"
+                  style={btnStyle}
+                  title={label}
+                  /* ⚠️ 无障碍名**只用窗口名**：验证脚本（verify.mjs / verify-dst.mjs）都按
+                     `button[aria-label="博客"]` 这类选择器点按钮，往里塞"菜名"会把它们全弄坏。
+                     菜名放 title 与悬浮提示里。 */
+                  aria-label={app.name}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => openApp(app.id)}
+                  onMouseEnter={(e) => showName(e.currentTarget, label)}
+                  onMouseLeave={() => setHover(null)}
+                  onFocus={(e) => showName(e.currentTarget, label)}
+                  onBlur={() => setHover(null)}
+                  className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
+                    active ? 'bg-accent text-accent-ink' : ''
+                  }`}
+                >
+                  <AppIcon name={app.icon} className="h-1/2 w-1/2" />
+                  {running ? (
+                    <span
+                      className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </button>
+              )
+            })}
         </div>
       </div>
 

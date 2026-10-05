@@ -76,6 +76,68 @@ async function run() {
   }))
   check('点任务栏「关于」→ 路由 /about 且窗口打开', about.path === '/about' && about.win, about.path)
 
+  // 2b 站名改成「芹菜耕地」，每个窗口是一样菜；DSH 快捷入口只在本机出现
+  const branding = await p.evaluate((dockSel) => ({
+    title: document.title,
+    about: document.querySelector('[aria-label="关于 窗口"]')?.textContent ?? '',
+    /* 无障碍名仍是窗口名（验证脚本靠它点按钮），菜名在 title 里 */
+    dockTitles: Array.from(document.querySelectorAll(`${dockSel} button[title]`)).map((b) =>
+      b.getAttribute('title'),
+    ),
+  }), DOCK)
+  check(
+    '站名是「芹菜耕地」，任务栏每个窗口都带一样菜',
+    branding.title.includes('芹菜耕地') &&
+      branding.about.includes('芹菜耕地') &&
+      branding.dockTitles.includes('博客 · 玉米') &&
+      branding.dockTitles.includes('终端 · 辣椒'),
+    `title=${branding.title}｜${branding.dockTitles.slice(1, 4).join('、')}…`,
+  )
+  check(
+    'DSH 快捷入口在本地出现（就是那棵芹菜）',
+    branding.dockTitles.includes('DSH · 芹菜'),
+    JSON.stringify(branding.dockTitles.filter((label) => label.includes('DSH'))),
+  )
+  await p.click(`${DOCK} button[aria-label="DSH"]`)
+  await p.waitForTimeout(600)
+  /* 探活是异步的：等它从「探测中」落定（本机 DSH 没跑时会是 offline，也算落定） */
+  await p
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('[aria-label="DSH 窗口"] [data-probe]')
+        return el !== null && el.dataset.probe !== 'checking'
+      },
+      { timeout: 4000 },
+    )
+    .catch(() => {})
+  const dsh = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="DSH 窗口"]')
+    if (!win) return null
+    const probe = win.querySelector('[data-probe]')
+    return {
+      path: location.pathname,
+      address: win.querySelector('input[aria-label="DSH 地址"]')?.value ?? '',
+      probe: probe?.dataset.probe ?? '',
+      open: Array.from(win.querySelectorAll('button')).some((b) =>
+        (b.textContent ?? '').includes('打开 DSH'),
+      ),
+    }
+  })
+  check(
+    'DSH 窗口：地址可改、能探活、有「打开 DSH」按钮',
+    !!dsh &&
+      dsh.path === '/dsh' &&
+      /^https?:\/\/[^\s]+$/.test(dsh.address) &&
+      ['online', 'offline'].includes(dsh.probe) &&
+      dsh.open,
+    JSON.stringify(dsh),
+  )
+  await p.click('[aria-label="DSH 窗口"] header button[aria-label="关闭"]')
+  await p.waitForTimeout(300)
+  /* 桌面一次只显示一个窗口（路由驱动），刚才跳到 /dsh 了 —— 回「关于」，后面的几何记忆检查要用它 */
+  await p.click(`${DOCK} button[aria-label="关于"]`)
+  await p.waitForTimeout(400)
+
   // 3 窗口几何记忆
   const before = await p.evaluate(() => {
     const r = document.querySelector('[aria-label="关于 窗口"]').getBoundingClientRect()
@@ -236,7 +298,7 @@ async function run() {
     (sel) => document.querySelector(`${sel} [role="tooltip"]`)?.textContent?.trim() ?? null,
     DOCK,
   )
-  check('鼠标悬停任务栏图标显示名字', tooltip === '博客', `tooltip=${tooltip}`)
+  check('鼠标悬停任务栏图标显示名字（带「一样菜」）', (tooltip ?? '').includes('博客'), `tooltip=${tooltip}`)
 
   // 10b 假 Token 要被明确拒绝（真打一次 GitHub API，但不产生任何写入）
   await p.fill('[aria-label="博客创作 窗口"] input[type="password"]', 'ghp_this_token_is_fake_for_test')

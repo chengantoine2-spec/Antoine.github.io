@@ -1,4 +1,4 @@
-import { APPS } from '../../lib/apps'
+import { visibleApps } from '../../lib/apps'
 import { DOCK_ORDER } from '../../lib/dock'
 import {
   DEFAULT_THEME,
@@ -118,7 +118,7 @@ export function SettingsWindow() {
     length === null &&
     thickness === null &&
     iconSize === null &&
-    dockApps.length === APPS.length
+    dockApps.length === visibleApps().length
 
   function resetAll() {
     resetAppearance()
@@ -252,7 +252,7 @@ export function SettingsWindow() {
 
       <Section title="任务栏显示哪些应用" hint="取消勾选的仍可从「所有项目」进入">
         <ul className="grid gap-1 sm:grid-cols-2">
-          {APPS.map((app) => (
+          {visibleApps().map((app) => (
             <li key={app.id}>
               <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-ink hover:bg-hover">
                 <input

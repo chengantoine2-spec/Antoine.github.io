@@ -21,6 +21,7 @@ export type IconName =
   | 'assets'
   | 'settings'
   | 'wiki'
+  | 'dsh'
 
 export type AppId = IconName
 
@@ -33,8 +34,18 @@ export interface AppDef {
   /** 数据源 */
   source: string
   icon: IconName
+  /**
+   * 这块地里的「一样菜」：站名叫芹菜耕地，每个窗口对应一种蔬菜水果。
+   * 只出现在提示与菜单里（图标仍是自绘线稿），不参与逻辑。
+   */
+  veggie: string
   /** 打开时的默认尺寸；不写就用全局默认 760×520。窗口层放不下会自动缩 */
   defaultSize?: { w: number; h: number }
+  /**
+   * 只在本地（localhost / 127.0.0.1）挂载的窗口：任务栏、所有项目、路由都会跳过它。
+   * 给「必须是本机才有意义」的应用用（比如 DSH 快捷入口 —— 线上站点够不到 127.0.0.1）。
+   */
+  localOnly?: boolean
 }
 
 /** 一个窗口的位置与大小（含最大化状态），用于记忆 */

@@ -6,18 +6,20 @@ import { AppPlaceholder } from './components/program/AppPlaceholder'
 import { BlogDetailWindow } from './components/program/BlogDetailWindow'
 import { BlogWindow } from './components/program/BlogWindow'
 import { DstWikiWindow } from './components/program/DstWikiWindow'
+import { DshWindow } from './components/program/DshWindow'
 import { ProjectDetailWindow } from './components/program/ProjectDetailWindow'
 import { ProjectsWindow } from './components/program/ProjectsWindow'
 import { SettingsWindow } from './components/program/SettingsWindow'
 import { TerminalWindow } from './components/program/TerminalWindow'
 import { WriteWindow } from './components/program/WriteWindow'
-import { APPS } from './lib/apps'
+import { visibleApps } from './lib/apps'
 import type { AppId } from './types/desktop'
 
 /** 已实现的窗口；没登记的仍走 AppPlaceholder */
 const WINDOWS: Partial<Record<AppId, ReactElement>> = {
   about: <AboutWindow />,
   blog: <BlogWindow />,
+  dsh: <DshWindow />,
   projects: <ProjectsWindow />,
   settings: <SettingsWindow />,
   terminal: <TerminalWindow />,
@@ -37,7 +39,8 @@ export const router = createBrowserRouter(
       element: <DesktopShell />,
       children: [
         { index: true, element: null },
-        ...APPS.map((app) => ({
+        /* 本机专属的窗口（DSH）在线上连路由都不挂：/dsh 会落到下面的 * 兜底回桌面 */
+        ...visibleApps().map((app) => ({
           path: app.path.slice(1),
           element: WINDOWS[app.id] ?? <AppPlaceholder id={app.id} />,
         })),

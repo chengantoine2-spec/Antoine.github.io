@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SITE } from '../../data/site'
-import { APPS } from '../../lib/apps'
+import { visibleApps } from '../../lib/apps'
 import type { DockPosition } from '../../types/desktop'
 import { AppIcon } from './AppIcon'
 
@@ -48,7 +48,7 @@ export function StartMenu({ open, position, onClose }: StartMenuProps) {
           所有项目
         </p>
         <ul className="grid grid-cols-2 gap-1">
-          {APPS.map((app) => (
+          {visibleApps().map((app) => (
             <li key={app.id}>
               <button
                 type="button"
@@ -56,10 +56,13 @@ export function StartMenu({ open, position, onClose }: StartMenuProps) {
                   navigate(app.path)
                   onClose()
                 }}
+                title={`${app.name} · ${app.veggie}`}
                 className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs text-ink hover:bg-hover"
               >
-                <AppIcon name={app.icon} className="h-4 w-4 text-accent" />
+                <AppIcon name={app.icon} className="h-4 w-4 shrink-0 text-accent" />
                 <span className="truncate">{app.name}</span>
+                {/* 每个窗口是一样菜（站名：芹菜耕地） */}
+                <span className="ml-auto shrink-0 text-[10px] text-dim">{app.veggie}</span>
               </button>
             </li>
           ))}

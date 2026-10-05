@@ -66,6 +66,25 @@
   状态听 `fullscreenchange`，所以按 Esc / F11 退出也能同步；进全屏时会顺手最大化当前窗口。
   ⚠️ 取舍：全屏后窗口盖住任务栏，那个 ⛶ 自己就点不到了 —— 退出靠 Esc / F11。
   想让"全屏时任务栏仍可点"，把 useFullscreen 里那一步最大化去掉即可
+- **站名「芹菜耕地」+ 每个窗口一样菜**（2026-10-05 改名）：`SITE.name` 一处改，
+  窗口标题栏 / 关于窗口 / 博客右栏都跟着变；每样菜写在 `AppDef.veggie`（`lib/apps.ts`），
+  只出现在**任务栏的 title 与悬浮提示**、以及「所有项目」里。
+  ⚠️ **菜名千万别塞进 `aria-label`**：`verify.mjs` 与 `verify-dst.mjs` 都按
+  `button[aria-label="博客"]` 这类选择器点任务栏按钮，label 一旦变成"博客 · 玉米"，
+  两个脚本立刻一起炸（改的时候踩过，当场回滚成"无障碍名 = 窗口名"）
+- **DSH 快捷入口**（`components/program/DshWindow.tsx`，本机专属）：一个**启动器**，不代理任何东西。
+  - `localOnly: true` → 线上不挂载。`visibleApps()` 是唯一出口（任务栏、「所有项目」、路由都用它，
+    **别再直接 `APPS.map`**）；线上打开 `/dsh` 会落到 `*` 兜底回桌面
+  - 本地探活用 `fetch(url, { mode: 'no-cors' })`：DSH 不发 CORS 头，普通 fetch 一定被拦成 TypeError，
+    分不清"没跑"还是"跨域"；no-cors 只要对面回了任何响应（哪怕 401）就算在线
+  - 线上为什么不行的实测依据：HTTPS 页既不能请求 `http://127.0.0.1`（混内容 + Private Network Access），
+    也不能把它嵌进 iframe；DSH 自己也没有 CORS 头（`401`、无 `Access-Control-Allow-Origin`、`OPTIONS` 405）
+  - 地址存 `desktop.dshUrl`（`lib/dsh.ts`），窗口里能改能复位 —— `dsh web` 的 host/port 可改，
+    官方桌面端更是用系统分配的端口，**不许写死**
+- **下一步（方案已定，未开工）**：手机端走 **PWA/WebAPK**（零 SDK）+ 声音入口 L1
+  （助手短语打开应用 → 应用内语音输入）；手机连电脑走 **Tailscale 私有网络**；
+  落到 DSH 用官方 `@deepseek-ai/dsh-webhook`（把外部 HTTP 请求变成真实 Session，
+  当前 profile 里**尚未挂载**）。本机服务仍然只监听 127.0.0.1 —— 要越出这条线必须先问用户
 
 ## 分工：饥荒 Wiki 窗口（多人 / 多 agent 同时改时看这里）
 
@@ -181,9 +200,9 @@ npm run typecheck    # 只做类型检查
 | 路径 | 职责 |
 |---|---|
 | `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
-| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
+| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 启动器、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
-| `src/lib/` | `apps`（窗口登记表）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/lib/` | `apps`（窗口登记表 + `visibleApps()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -288,6 +307,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 | `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
+| `desktop.dshUrl` | DSH 快捷入口指向的地址，默认 `http://127.0.0.1:3080`（`lib/dsh.ts`）。只在窗口里改过才写；**复位 = 删掉这个键** |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
@@ -358,6 +378,13 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
+  （当前 `verify.mjs` **共 61 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  bare `localhost` 在有些机器上解析成 `::1` 会连不上）
+- **站名 / 菜名**有 1 项：页面标题、关于窗口、任务栏 `title` 都要是「芹菜耕地」与「X · 菜名」
+  （同一条里也钉住了「无障碍名 = 窗口名」这条，见上方菜名那段）
+- **DSH 快捷入口**有 2 项：任务栏里能找到 `DSH · 芹菜`（本机才挂载）；点开后窗口出现、
+  地址可改、探活结果落在 `online` / `offline`（**不要求 `online`** —— 验证机不一定开着 DSH），
+  跑完必须切回「关于」再继续，因为它会离开 `/about`
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 - 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、
