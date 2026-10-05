@@ -60,6 +60,12 @@ export interface WindowGeometry {
   maximized: boolean
 }
 
+/**
+ * 吸附 / 平铺区：拖到屏幕边缘对半分屏，四角是四分之一，上边是最大化。
+ * 拖动时的预览与松手后的落位共用 `lib/snap.ts` 的同一份几何。
+ */
+export type SnapZone = 'left' | 'right' | 'top' | 'bottom' | 'tl' | 'tr' | 'bl' | 'br'
+
 export interface WindowState {
   id: AppId
   x: number
@@ -75,6 +81,10 @@ export interface WindowState {
    * （用户 2026-10-05 定的范围：多窗口 = 不同应用各一个，不做同应用多开）。
    */
   param?: string
+  /** 当前吸附在哪个区（没吸附就是 undefined） */
+  snap?: SnapZone
+  /** 吸附前的矩形：解吸附时回到这里 */
+  restore?: { x: number; y: number; w: number; h: number }
 }
 
 export interface DesktopState {
@@ -103,3 +113,11 @@ export type WindowAction =
   | { type: 'toggle-maximize'; id: AppId }
   | { type: 'move'; id: AppId; x: number; y: number }
   | { type: 'resize'; id: AppId; w: number; h: number }
+  /** 贴到某个吸附区（bounds = 窗口层尺寸，几何由 lib/snap.ts 算） */
+  | { type: 'snap'; id: AppId; zone: SnapZone; bounds: { w: number; h: number } }
+  /**
+   * 解吸附：回到 `restore` 里的矩形。
+   * 拖动时带上 anchor（指针在标题栏宽度里的相对位置 0~1）与 pointer（指针在窗口层里的坐标），
+   * 就能把窗口"摆回指针下面"，不会跳一下。
+   */
+  | { type: 'unsnap'; id: AppId; anchor?: number; pointer?: { x: number; y: number } }

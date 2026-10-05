@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { IS_LOCAL_HOST } from '../../lib/apps'
 import {
   DSH_DEFAULT_URL,
@@ -53,6 +53,30 @@ export function DshWindow() {
   /* 工具条是否露出来：默认收起，鼠标碰到窗口上边界那条热区（或 Tab 聚焦进去）才滑下来。
      用户 2026-10-05：「工具条要和框融合、做大一点，给他一个自动隐藏，鼠标移动到上框边界时再显示」 */
   const [reveal, setReveal] = useState(false)
+  /* 点一下上边界 = 固定在屏幕上（不再自动收起），再点一下取消。
+     用户 2026-10-05：「点击上边框可以保持显示」 */
+  const [pinned, setPinned] = useState(false)
+  const shown = reveal || pinned
+  /* 收起要"晚一点点"：指针从热区移到工具条上（或反过来）时，
+     两个元素的 enter/leave 会在同一次移动里先后触发，立刻收会闪一下。
+     固定住的时候永远不会收。 */
+  const hideTimer = useRef<number | null>(null)
+  const cancelHide = useCallback(() => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current)
+      hideTimer.current = null
+    }
+  }, [])
+  const wake = useCallback(() => {
+    cancelHide()
+    setReveal(true)
+  }, [cancelHide])
+  const sleep = useCallback(() => {
+    if (pinned) return
+    cancelHide()
+    hideTimer.current = window.setTimeout(() => setReveal(false), 180)
+  }, [cancelHide, pinned])
+  useEffect(() => cancelHide, [cancelHide])
 
   const hostMismatch = !sameSiteHost(url)
 
@@ -195,33 +219,44 @@ export function DshWindow() {
             className="absolute inset-0 h-full w-full border-0 bg-surface"
           />
 
-          {/* 上边界热区：一条细拉手，鼠标移到它上面就把工具条放下来 */}
+          {/* 上边界热区：鼠标移到这儿就把工具条放下来；**点一下 = 固定住**（再点取消）。
+              z 比工具条还高，所以固定着的时候也点得到（工具条顶上那 12px 是空的） */}
           <div
             data-dsh-hot=""
-            className="absolute inset-x-0 top-0 z-20 flex h-3 items-start justify-center"
-            onPointerEnter={() => setReveal(true)}
+            data-dsh-pinned={pinned ? 'true' : 'false'}
+            role="button"
+            tabIndex={-1}
+            aria-label={pinned ? '取消固定工具条' : '固定工具条'}
+            title={pinned ? '取消固定（工具条会重新自动隐藏）' : '点一下固定工具条'}
+            className="absolute inset-x-0 top-0 z-40 flex h-3 cursor-pointer items-start justify-center"
+            onPointerEnter={wake}
+            onPointerLeave={sleep}
+            onClick={() => setPinned((v) => !v)}
           >
             <span
               aria-hidden="true"
-              className={`h-[3px] w-10 rounded-full bg-[var(--c-scroll-thumb)] transition-opacity duration-150 ${
-                reveal ? 'opacity-0' : 'opacity-100'
-              }`}
+              className={`h-[3px] w-10 rounded-full transition-opacity duration-150 ${
+                pinned ? 'bg-accent opacity-100' : 'bg-[var(--c-scroll-thumb)]'
+              } ${shown && !pinned ? 'opacity-0' : 'opacity-100'}`}
             />
           </div>
 
           {/* 工具条：跟标题栏同一套底色 + 只留一条下边线，下来时就像标题栏加厚了一层；
-              收起时 pointer-events-none，鼠标照常点到下面的 DSH */}
+              收起时 pointer-events-none，鼠标照常点到下面的 DSH。
+              ⚠️ 半透明（50%）：浮在 DSH 上面时不至于把内容压住；鼠标移上去恢复不透明，
+              固定住时也保持可读（见下面 pinned 分支） */}
           <div
             data-dsh-bar=""
-            className={`absolute inset-x-0 top-0 z-30 border-b border-edge bg-surface-2 shadow-lg transition-transform duration-150 ease-out ${
-              reveal ? 'translate-y-0' : 'pointer-events-none -translate-y-full'
-            }`}
-            onPointerEnter={() => setReveal(true)}
-            onPointerLeave={() => setReveal(false)}
-            onFocusCapture={() => setReveal(true)}
+            data-dsh-pinned={pinned ? 'true' : 'false'}
+            className={`absolute inset-x-0 top-0 z-30 border-b border-edge bg-surface-2 shadow-lg transition-[transform,opacity] duration-150 ease-out ${
+              shown ? 'translate-y-0' : 'pointer-events-none -translate-y-full'
+            } opacity-50 hover:opacity-100`}
+            onPointerEnter={wake}
+            onPointerLeave={sleep}
+            onFocusCapture={wake}
             onBlurCapture={(e) => {
               /* 焦点跑到面板外面才收（点面板里的按钮不该把面板弄没） */
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setReveal(false)
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) sleep()
             }}
           >
             <div className="flex h-12 flex-nowrap items-center gap-2 px-3">

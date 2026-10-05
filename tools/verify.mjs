@@ -217,6 +217,52 @@ async function run() {
     dshReveal.barH >= 44 && dshReveal.drop >= 40 && Math.abs(dshReveal.frameH - frameBefore) <= 2,
     JSON.stringify({ ...dshReveal, frameBefore }),
   )
+
+  /* 用户：「DSH 工具条加 50% 透明度，点击上边框可以保持显示」 */
+  const barOpacity = await p.evaluate(
+    () => getComputedStyle(document.querySelector('[data-dsh-bar]')).opacity,
+  )
+  await p.click('[aria-label="DSH 窗口"] [data-dsh-hot]')
+  await p.waitForTimeout(250)
+  /* 指针挪到窗口中间（远离上边界）：固定住的话工具条不该收 */
+  const dshBox = await p.locator('[aria-label="DSH 窗口"]').boundingBox()
+  await p.mouse.move(dshBox.x + dshBox.width / 2, dshBox.y + dshBox.height / 2)
+  await p.waitForTimeout(400)
+  const dshPinned = await p.evaluate(() => {
+    const bar = document.querySelector('[data-dsh-bar]')
+    const frame = document.querySelector('[data-dsh-frame]')
+    return {
+      pinned: bar?.dataset.dshPinned ?? '',
+      drop: Math.round(
+        (bar?.getBoundingClientRect().bottom ?? 0) - (frame?.getBoundingClientRect().top ?? 0),
+      ),
+    }
+  })
+  check(
+    'DSH 工具条半透明（50%），点一下上边框就固定住',
+    barOpacity === '0.5' && dshPinned.pinned === 'true' && dshPinned.drop >= 40,
+    JSON.stringify({ barOpacity, ...dshPinned }),
+  )
+
+  await p.click('[aria-label="DSH 窗口"] [data-dsh-hot]')
+  await p.waitForTimeout(150)
+  await p.mouse.move(dshBox.x + dshBox.width / 2, dshBox.y + dshBox.height / 2)
+  await p.waitForTimeout(500)
+  const dshUnpinned = await p.evaluate(() => {
+    const bar = document.querySelector('[data-dsh-bar]')
+    const frame = document.querySelector('[data-dsh-frame]')
+    return {
+      pinned: bar?.dataset.dshPinned ?? '',
+      hidden:
+        (bar?.getBoundingClientRect().bottom ?? 0) <=
+        (frame?.getBoundingClientRect().top ?? 0) + 1,
+    }
+  })
+  check(
+    '再点一下取消固定，工具条回到自动隐藏',
+    dshUnpinned.pinned === 'false' && dshUnpinned.hidden,
+    JSON.stringify(dshUnpinned),
+  )
   await p.click('[aria-label="DSH 窗口"] header button[aria-label="关闭"]')
   await p.waitForTimeout(300)
   /* 桌面一次只显示一个窗口（路由驱动），刚才跳到 /dsh 了 —— 回「关于」，后面的几何记忆检查要用它 */
@@ -1482,6 +1528,94 @@ async function run() {
     '窗口能拖到最左上角（标签栏不再挡路）',
     corner.x === 0 && corner.y === 0 && corner.layerLeft === 0 && corner.layerTop === 0,
     JSON.stringify(corner),
+  )
+
+  // 17 吸附 / 平铺：拖到屏幕边缘对半分屏（用户 2026-10-05 要的）
+  const snapLayer = await p.locator('.desktop__layer').boundingBox()
+  const SET_HEAD = 'section[aria-label="设置 窗口"] > header'
+  /* 上一步把窗口一路拖到了 (0,0) —— 那同时也命中了左上角的吸附区，所以它现在是四分之一。
+     先把指针挪到中间（让悬浮的标签栏收回去），再双击标题栏解吸附，回到自由尺寸当基准 */
+  await p.mouse.move(snapLayer.x + snapLayer.width / 2, snapLayer.y + snapLayer.height / 2)
+  await p.waitForTimeout(500)
+  await p.dblclick(SET_HEAD)
+  await p.waitForTimeout(300)
+  const freeBox = await p.locator('section[aria-label="设置 窗口"]').boundingBox()
+  const grabSet = async () => {
+    const h = await p.locator(SET_HEAD).boundingBox()
+    return { x: h.x + h.width / 2, y: h.y + h.height / 2 }
+  }
+
+  /* 拖到左边缘：拖动过程中就该看到预览，松手才落位 */
+  let g = await grabSet()
+  await p.mouse.move(g.x, g.y)
+  await p.mouse.down()
+  await p.mouse.move(snapLayer.x + 6, snapLayer.y + snapLayer.height / 2, { steps: 8 })
+  await p.waitForTimeout(120)
+  const preview = await p.evaluate(
+    () => document.querySelector('[data-snap-preview]')?.getAttribute('data-snap-preview') ?? '',
+  )
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const snapped = await p.evaluate(() => {
+    const win = document.querySelector('[data-window-slot="settings"] section')
+    const layer = document.querySelector('.desktop__layer')
+    const w = win?.getBoundingClientRect()
+    const l = layer?.getBoundingClientRect()
+    return {
+      snap: win?.getAttribute('data-snap') ?? '',
+      x: Math.round((w?.left ?? -1) - (l?.left ?? 0)),
+      w: Math.round(w?.width ?? 0),
+      half: Math.round((l?.width ?? 0) / 2),
+    }
+  })
+  check(
+    '拖动时给吸附预览，松手贴到左半边',
+    preview === 'left' && snapped.snap === 'left' && snapped.x === 0 && Math.abs(snapped.w - snapped.half) <= 2,
+    JSON.stringify({ preview, ...snapped }),
+  )
+
+  /* 拖到上边缘 = 铺满工作区（任务栏那块留着；要连任务栏一起盖住就点 □ 最大化） */
+  g = await grabSet()
+  await p.mouse.move(g.x, g.y)
+  await p.mouse.down()
+  await p.mouse.move(snapLayer.x + snapLayer.width / 2, snapLayer.y + 6, { steps: 8 })
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const snappedTop = await p.evaluate(() => {
+    const win = document.querySelector('[data-window-slot="settings"] section')
+    const layer = document.querySelector('.desktop__layer')
+    const w = win?.getBoundingClientRect()
+    const l = layer?.getBoundingClientRect()
+    return {
+      snap: win?.getAttribute('data-snap') ?? '',
+      w: Math.round(w?.width ?? 0),
+      h: Math.round(w?.height ?? 0),
+      lw: Math.round(l?.width ?? 0),
+      lh: Math.round(l?.height ?? 0),
+    }
+  })
+  check(
+    '拖到上边缘 = 铺满工作区（任务栏仍可见）',
+    snappedTop.snap === 'top' && snappedTop.w === snappedTop.lw && snappedTop.h === snappedTop.lh,
+    JSON.stringify(snappedTop),
+  )
+
+  /* 从吸附状态拖开 = 解吸附，回到吸附前那个自由尺寸 */
+  g = await grabSet()
+  await p.mouse.move(g.x, g.y)
+  await p.mouse.down()
+  await p.mouse.move(snapLayer.x + snapLayer.width / 2, snapLayer.y + snapLayer.height / 2, { steps: 6 })
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const unsnapped = await p.evaluate(() => {
+    const win = document.querySelector('[data-window-slot="settings"] section')
+    const w = win?.getBoundingClientRect()
+    return { snap: win?.getAttribute('data-snap') ?? '', w: Math.round(w?.width ?? 0) }
+  })
+  check(
+    '吸附后再拖开 = 解吸附，回到原来的大小',
+    unsnapped.snap === '' && Math.abs(unsnapped.w - Math.round(freeBox.width)) <= 4,
+    JSON.stringify({ ...unsnapped, freeW: Math.round(freeBox.width) }),
   )
 
   await closeAllWindows()

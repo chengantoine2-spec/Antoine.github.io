@@ -80,8 +80,8 @@ export function WindowTabs({
         onPointerLeave={() => setReveal(false)}
         className={`absolute z-[70] flex gap-1 overflow-auto rounded-dock border border-edge bg-chrome p-1.5 shadow-xl transition-transform duration-150 ease-out ${hidden} ${
           vertical
-            ? 'bottom-[var(--inset-bottom)] left-[var(--inset-left)] top-[var(--inset-top)] flex-col'
-            : 'left-[var(--inset-left)] right-[var(--inset-right)] top-[var(--inset-top)] items-center'
+            ? 'bottom-[var(--inset-bottom)] left-[var(--inset-left)] top-[var(--inset-top)] max-h-[calc(100%-1rem)] flex-col'
+            : 'left-[var(--inset-left)] top-[var(--inset-top)] w-fit max-w-[calc(100%-1rem)] items-center'
         }`}
       >
         {windows.map((win) => {
