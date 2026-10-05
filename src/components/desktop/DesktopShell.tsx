@@ -152,7 +152,19 @@ export function DesktopShell() {
     })
   }, [])
 
-  const anyMaximized = windows.some((w) => w.maximized && !w.minimized)
+  /* 有没有窗口**伸到任务栏那一条上**（最大化、或吸附到屏幕真正的边缘）：
+     有就把窗口层提到任务栏之上（z-60），否则那种窗口会被任务栏挡住一截 ——
+     用户 2026-10-05 报的「任务栏不要挡住窗口」。平时不提级，这样任务栏自己的弹出层
+     （开始菜单、位置菜单）仍然压得住窗口层，否则它们会被一整层盖住、点不动（踩过）。 */
+  const box = layerRef.current?.getBoundingClientRect()
+  const layerW = box?.width ?? window.innerWidth - insets.left - insets.right
+  const layerH = box?.height ?? window.innerHeight - insets.top - insets.bottom
+  const overlapsDock = windows.some(
+    (w) =>
+      !w.minimized &&
+      /* 最大化：几何还是"还原尺寸"，但视觉上铺满视口 —— 得单独算一档 */
+      (w.maximized || w.x < -1 || w.y < -1 || w.x + w.w > layerW + 1 || w.y + w.h > layerH + 1),
+  )
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-chrome" style={insetVars}>
@@ -182,8 +194,9 @@ export function DesktopShell() {
           所以窗口始终压在它上面；最大化时它会整个被盖住，和真桌面挂件一样 */}
       <CelestialClock />
 
-      {/* 有窗口最大化时给窗口层提级：任务栏是 z-50，不压过它就还是会盖在窗口上面 */}
-      <div className={`desktop__layer${anyMaximized ? ' desktop__layer--over' : ''}`} ref={layerRef}>
+      {/* 窗口层平时在任务栏下面（让开始菜单之类的弹出层能压住它）；
+          有窗口伸到任务栏那一条上时才提级，见上面 overlapsDock */}
+      <div className={`desktop__layer${overlapsDock ? ' desktop__layer--over' : ''}`} ref={layerRef}>
         {windows.map((win) => {
           const activeTab = win.tabs[Math.min(win.active, win.tabs.length - 1)]
           return (

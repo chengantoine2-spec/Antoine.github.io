@@ -1707,6 +1707,26 @@ async function run() {
     JSON.stringify({ bottomPreview, ...snappedBottom }),
   )
 
+  /* 用户 2026-10-05：「任务栏不要挡住窗口」—— 窗口层必须压在任务栏之上。
+     此刻正好有一扇贴到底边的窗口盖在任务栏那一条上，拿它当断言样本最合适：
+     任务栏中心点最上面那个元素应该属于窗口，而不是任务栏自己 */
+  const dockOrder = await p.evaluate(() => {
+    const layer = document.querySelector('.desktop__layer')
+    const dock = document.querySelector('nav[aria-label="任务栏"]')
+    const r = dock?.getBoundingClientRect()
+    const top = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null
+    return {
+      layerZ: Number(getComputedStyle(layer).zIndex),
+      dockZ: Number(getComputedStyle(dock).zIndex),
+      dockCoveredByWindow: !!(top && dock && !dock.contains(top)),
+    }
+  })
+  check(
+    '任务栏不挡窗口：窗口层压在任务栏之上（贴底的窗口不会被挡一截）',
+    dockOrder.layerZ > dockOrder.dockZ && dockOrder.dockCoveredByWindow,
+    JSON.stringify(dockOrder),
+  )
+
   /* 从吸附状态拖开 = 解吸附，回到吸附前那个自由尺寸 */
   g = await grabSet()
   await p.mouse.move(g.x, g.y)
