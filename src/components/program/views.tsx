@@ -27,6 +27,8 @@ type ViewFactory = (param?: string) => ReactElement
 const VIEWS: Partial<Record<AppId, ViewFactory>> = {
   about: () => <AboutWindow />,
   blog: (param) => (param ? <BlogDetailWindow id={Number(param)} /> : <BlogWindow />),
+  /* 「产品助理」= 同一个 DSH 内嵌窗口，只是加载完会通知 DSH 切到那一面板（见 DshWindow 的 panel 参数） */
+  assistant: () => <DshWindow panel="product-assistant" />,
   dsh: () => <DshWindow />,
   projects: (param) => (param ? <ProjectDetailWindow id={param} /> : <ProjectsWindow />),
   settings: () => <SettingsWindow />,

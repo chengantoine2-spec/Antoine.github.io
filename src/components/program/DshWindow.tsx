@@ -40,9 +40,11 @@ const PROBE_HINT: Record<Probe, string> = {
  * 2. DSH 的登录 Cookie 是 `SameSite=Strict`，所以**站点与 DSH 的主机名必须一致**
  *    （都 localhost 或都 127.0.0.1）。不一致时下面会出现「改成一致」，否则 iframe 里只有一行 unauthorized。
  */
-export function DshWindow() {
+export function DshWindow({ panel }: { panel?: string } = {}) {
   const [url, setUrl] = useState(readDshUrl)
   const [draft, setDraft] = useState(url)
+  /* 「产品助理」那一窗（panel='product-assistant'）靠它给 DSH 页面发消息切面板 */
+  const frameRef = useRef<HTMLIFrameElement>(null)
   const [probe, setProbe] = useState<Probe>(IS_LOCAL_HOST ? 'checking' : 'blocked')
   /* 内嵌视图开关：默认是说明卡，点「在窗口里打开 DSH」才挂 iframe
      （免得一进窗口就朝对面发请求） */
@@ -207,12 +209,21 @@ export function DshWindow() {
         <>
           <iframe
             key={reloadKey}
+            ref={frameRef}
             src={url}
             title="DeepSeek Harness"
             data-dsh-frame=""
             onLoad={() => {
               setLoaded(true)
               setSlow(false)
+              /* 「产品助理」那一窗：DSH 页面一加载完就通知它切到对应面板。
+                 ⚠️ targetOrigin 必须用 `'*'`：桌面端（Electron）的 DSH 页面跑在 `dsh-app://`
+                 自定义协议下，`location.origin` 是字符串 `"null"`，拿它当 targetOrigin 会**直接抛错**、
+                 消息根本发不出去（插件工程师实测踩过，第一次自检 msg0 就是这个原因）。
+                 插件侧只认**回环 / 同页**来源，收到只会调 selectPanel —— 它拿不到任何数据。 */
+              if (panel) {
+                frameRef.current?.contentWindow?.postMessage({ type: 'dsh:panel', panel }, '*')
+              }
             }}
             /* 只开需要的：DSH 里有复制按钮与语音输入 */
             allow="clipboard-read; clipboard-write; microphone"

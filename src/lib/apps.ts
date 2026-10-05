@@ -102,6 +102,20 @@ export const APPS: AppDef[] = [
     localOnly: true,
   },
   {
+    id: 'assistant',
+    name: '产品助理',
+    path: '/assistant',
+    source: 'DSH 插件 dsh-product-assistant 的面板（本机内嵌 DSH，加载完通知它切到那一面板）',
+    /* ⚠️ **临时**借用 DSH 的图标：专门的「产品助理」图标属于图标设计负责人的 ICON_SET，
+       要向他提一个（第 12 个）。身份层是菜图 —— 菜单里它是"茄子 · 产品助理"，不会和 DSH 混 */
+    icon: 'dsh',
+    /* 田里留着 37 样没上桌的菜，加窗口就从那儿挑一样 */
+    veggie: '茄子',
+    defaultSize: { w: 1040, h: 700 },
+    /* 和 DSH 一样只有本机才有意义 */
+    localOnly: true,
+  },
+  {
     id: 'assets',
     name: '资产库',
     path: '/assets',

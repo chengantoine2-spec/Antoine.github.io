@@ -1786,6 +1786,33 @@ async function run() {
   await closeAllWindows()
   await p.waitForTimeout(300)
 
+  // 18 「产品助理」任务栏入口（用户 2026-10-05：**放在任务栏里**，不做进 DSH 窗口）
+  const assistantBtn = `${DOCK} button[aria-label="产品助理"]`
+  const assistantCount = await p.locator(assistantBtn).count()
+  check(
+    '任务栏里有「产品助理」（和博客/设置并列的独立窗口，本机才有）',
+    assistantCount === 1,
+    JSON.stringify({ count: assistantCount }),
+  )
+  await p.click(assistantBtn)
+  await p.waitForTimeout(600)
+  const assistant = await p.evaluate(() => {
+    const win = document.querySelector('section[aria-label="产品助理 窗口"]')
+    return {
+      win: !!win,
+      /* 默认是说明卡（故意不立刻联网），要点了才挂 iframe —— 和 DSH 那一窗同一套 */
+      embed: win?.querySelector('[data-embed]')?.getAttribute('data-embed') ?? '',
+      path: location.pathname,
+    }
+  })
+  check(
+    '点开「产品助理」：开出一扇窗口、停在 /assistant、默认是说明卡',
+    assistant.win && assistant.path === '/assistant' && assistant.embed === 'off',
+    JSON.stringify(assistant),
+  )
+  await closeAllWindows()
+  await p.waitForTimeout(300)
+
   // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
