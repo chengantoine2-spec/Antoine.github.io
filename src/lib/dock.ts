@@ -1,4 +1,4 @@
-import type { DockMode, DockPosition } from '../types/desktop'
+import type { DockPosition } from '../types/desktop'
 
 /** 任务栏默认厚度：图标 40 + 内边距 12 + 边框 2 */
 export const DOCK_THICKNESS = 54
@@ -84,10 +84,31 @@ export function wheelMinLength(btn: number): number {
   return wheelChrome(btn) + wheelViewMin(btn)
 }
 
-/** 按模式取长度下限 */
-export function dockMinLength(mode: DockMode, btn: number): number {
-  const raw = mode === 'wheel' ? wheelMinLength(btn) : wrapMinLength(btn)
-  return Math.max(DOCK_MIN_LENGTH, raw)
+/**
+ * 长度下限：**两种模式共用一个值**（取更严的那个 = 轮盘那套）。
+ *
+ * ⚠️ 为什么必须共用（2026-10-05 站主报的「转回折行会有图标消失」）：
+ * 以前按模式各算各的（40px 图标时 wheel **274** / wrap **186**），于是**同一个存档 length**
+ * 在两种模式下会被夹到不同的值、渲染出不同的宽度。实测（视口 1280×800、图标 40）：
+ *
+ *   | 存档 length | 轮盘渲染 | 折行渲染 |
+ *   |---|---|---|
+ *   | 186 | 栏 274 / 可视 128（现见 3 个图标） | 栏 **186** / 可视 **40**（现见 **1** 个） |
+ *   | 200 | 栏 274 / 可视 128 | 栏 **200** / 可视 **54** |
+ *   | 240 | 栏 274 / 可视 128 | 栏 **240** / 可视 **94** |
+ *   | ≥274 | 一致 | 一致 |
+ *
+ * 在折行里把任务栏拖短（`Dock.tsx` 的拖动会按**当前模式**的下限夹，写进去的是 186）之后，
+ * 切到轮盘再切回折行，任务栏会**突然缩短最多 88px**、图标区从 128 塌到 40 —— 图标没坏，
+ * 只是被挤到滚动区外面去了，而滚动条是 `.no-scrollbar`（看不出来），看着就是"图标消失"。
+ * 共用下限之后切模式**不再改变任务栏尺寸**，两种模式看到的图标个数也一致。
+ *
+ * 取更严的那个不损失什么：轮盘的下限（图标区至少 3 个图标位）本身就 ≥ 折行那套（4 个图标位）。
+ * ⚠️ 别再改回"按模式各算各的"：回归断言在 `verify.mjs` 的 14f（同一存档 length 下两种模式的
+ * 栏宽 / 可视区宽必须相同、且每个图标都能在某个滚动位置被看见）。
+ */
+export function dockMinLength(btn: number): number {
+  return Math.max(DOCK_MIN_LENGTH, wheelMinLength(btn))
 }
 
 /* 尺寸上限（按屏幕比例）

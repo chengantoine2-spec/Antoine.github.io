@@ -1639,6 +1639,128 @@ async function run() {
   await closeAllWindows()
   await p.waitForTimeout(400)
 
+  /* ── 14f 切模式不许改变任务栏尺寸（站主 2026-10-05 报的「转回折行会有图标消失」的回归）──
+     根因（实测）：长度下限以前**按模式各算各的**（40px 图标时 wheel 274 / wrap 186），
+     于是**同一个存档 length** 会被夹到不同的值、渲染出不同的宽度：
+       存档 186 → 轮盘 栏 274/可视 128（现见 3 个）  折行 栏 186/可视 40（现见 1 个）
+       存档 200 → 轮盘 栏 274/可视 128              折行 栏 200/可视 54
+       存档 240 → 轮盘 栏 274/可视 128              折行 栏 240/可视 94
+     在折行里把任务栏拖短（拖动按**当前模式**的下限夹，写进去 186）之后，切到轮盘（渲染 274）
+     再切回折行（渲染 186），任务栏**突然缩短最多 88px**、图标区从 128 塌到 40 —— 图标没坏，
+     只是被挤进 `.no-scrollbar` 的滚动区外面，看着就是"图标消失"。现在两种模式共用一个下限。
+     ⚠️ 折行本来就是"装不下就滚"（旧行为），所以"没丢"要断成**每个图标都能在某个滚动位置被看见**
+     （逐格取样），而不是"每一刻都在可视区里" —— 后者在折行里根本不成立（11 个图标 480px 宽，
+     短任务栏的可视区只有 128px）。 */
+  const dockProbe = () =>
+    p.evaluate(
+      ({ sel, fixed }) => {
+        const bar = document.querySelector(sel)
+        if (!bar) return null
+        const vis = bar.querySelector('[data-dock-view]') ?? bar.querySelector('.no-scrollbar')
+        if (!vis) return null
+        const btns = [...bar.querySelectorAll('button[aria-label]')].filter(
+          (b) => !fixed.includes(b.getAttribute('aria-label')),
+        )
+        const box = (el) => el.getBoundingClientRect()
+        const hit = (a, b) =>
+          a.right > b.left + 0.5 && a.left < b.right - 0.5 && a.bottom > b.top + 0.5 && a.top < b.bottom - 0.5
+        const vertical = vis.scrollHeight > vis.clientHeight + 1
+        const max = vertical ? vis.scrollHeight - vis.clientHeight : vis.scrollWidth - vis.clientWidth
+        const seen = new Set()
+        for (let s = 0; s <= max + 8; s += 8) {
+          if (vertical) vis.scrollTop = Math.min(s, max)
+          else vis.scrollLeft = Math.min(s, max)
+          const v = box(vis)
+          for (const b of btns) if (hit(box(b), v)) seen.add(b.getAttribute('aria-label'))
+        }
+        if (vertical) vis.scrollTop = 0
+        else vis.scrollLeft = 0
+        const dock = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+        return {
+          mode: dock.mode ?? null,
+          stored: dock.length ?? null,
+          barW: Math.round(box(bar).width),
+          visW: Math.round(box(vis).width),
+          count: btns.length,
+          dockApps: (dock.dockApps ?? []).length,
+          scaled: btns.filter((b) => getComputedStyle(b).transform !== 'none').map((b) => b.getAttribute('aria-label')),
+          never: btns.map((b) => b.getAttribute('aria-label')).filter((l) => !seen.has(l)),
+        }
+      },
+      { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+    )
+  /* 切模式走**路由**打开设置：轮盘里图标会循环，短任务栏时"设置"那个图标可能正好在可视圈外，
+     点它会扑空（clip-path 挡住命中测试，实测踩过） */
+  const pickDockMode = async (label) => {
+    await p.goto(`${BASE}/settings`, { waitUntil: 'load' })
+    await p.waitForTimeout(600)
+    await p.click(`button[aria-label="任务栏图标区：${label}"]`)
+    await p.waitForTimeout(350)
+    await closeAllWindows()
+    await p.waitForTimeout(300)
+  }
+  const setDockLength = async (length) => {
+    await p.evaluate((length) => {
+      const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+      Object.assign(raw, { length, thickness: null, iconSize: null, position: 'bottom' })
+      localStorage.setItem('desktop.dock', JSON.stringify(raw))
+    }, length)
+    await p.goto(`${BASE}/`, { waitUntil: 'load' })
+    await p.waitForTimeout(800)
+  }
+
+  /* 挑一个"旧死区"里的 length（186 < 200 < 274）—— 以前正是这个区间会跳 */
+  await setDockLength(200)
+  await pickDockMode('循环轮盘')
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.waitForTimeout(700)
+  const wheel200 = await dockProbe()
+  await pickDockMode('折行')
+  const wrap200 = await dockProbe()
+  check(
+    '切到「折行」不再改变任务栏尺寸（同一存档 length=200：以前轮盘 274 / 折行 200，突然缩短 74px）',
+    !!wheel200 && !!wrap200 && wheel200.mode === 'wheel' && wrap200.mode === 'wrap' && wheel200.barW === wrap200.barW && wheel200.visW === wrap200.visW,
+    JSON.stringify({ wheel: { barW: wheel200?.barW, visW: wheel200?.visW }, wrap: { barW: wrap200?.barW, visW: wrap200?.visW } }),
+  )
+  check(
+    '折行下渲染的按钮数 == dockApps 条数，且没有残留的内联缩放（轮盘是直接写这几个节点的）',
+    !!wrap200 && wrap200.count === wrap200.dockApps && wrap200.scaled.length === 0,
+    JSON.stringify({ count: wrap200?.count, dockApps: wrap200?.dockApps, scaled: wrap200?.scaled }),
+  )
+  check(
+    '折行下每个图标都能在某个滚动位置被看见（没有图标被留在够不到的地方）',
+    !!wrap200 && wrap200.count > 0 && wrap200.never.length === 0,
+    JSON.stringify({ count: wrap200?.count, never: wrap200?.never }),
+  )
+
+  /* 来回切一次：结论必须不变（第二类残留就该在这一条上现形） */
+  await pickDockMode('循环轮盘')
+  const wheel200b = await dockProbe()
+  await pickDockMode('折行')
+  const wrap200b = await dockProbe()
+  check(
+    '来回切一次（wheel → wrap → wheel → wrap）结论不变：尺寸一致、按钮数一致、仍然一个都不少',
+    !!wheel200b &&
+      !!wrap200b &&
+      wheel200b.barW === wrap200b.barW &&
+      wheel200b.visW === wrap200b.visW &&
+      wrap200b.count === wrap200b.dockApps &&
+      wrap200b.scaled.length === 0 &&
+      wrap200b.never.length === 0,
+    JSON.stringify({
+      wheel: { barW: wheel200b?.barW, visW: wheel200b?.visW },
+      wrap: { barW: wrap200b?.barW, visW: wrap200b?.visW, count: wrap200b?.count, never: wrap200b?.never },
+    }),
+  )
+
+  /* 收尾：长度回到自适应、模式回到轮盘，别影响后面几段 */
+  await setDockLength(null)
+  await pickDockMode('循环轮盘')
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.waitForTimeout(700)
+  await closeAllWindows()
+  await p.waitForTimeout(300)
+
   // 14d 桌面挂件「日月时钟」：随时刻变色（像太阳）、入夜换月亮、按日期显示月相
   const clock = await p.evaluate(() => {
     const el = document.querySelector('.celestial')

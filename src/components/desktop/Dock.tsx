@@ -190,9 +190,10 @@ export function Dock() {
   const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 32, 64))
   const btnStyle: CSSProperties = { width: btn, height: btn }
 
-  /* 长度下限：**两种模式各算各的**（见 lib/dock 的 dockMinLength）。
-     wheel = 三个固定按钮 + 图标区至少 3 个图标位；wrap = 旧的"至少装得下固定按钮 + 一个图标" */
-  const minLength = dockMinLength(mode, btn)
+  /* 长度下限：**两种模式共用一个值**（见 lib/dock 的 dockMinLength）——
+     以前按模式各算各的，同一个存档 length 在两种模式下渲染出的宽度不同，切模式时任务栏
+     会突然缩短、图标被挤到滚动区外面，看着像"图标消失"（站主 2026-10-05 报的 bug）。 */
+  const minLength = dockMinLength(btn)
   /* 拖过长度就按它来，但不允许小于下限；length === null 表示"跟着按钮自适应" */
   const length = rawLength === null ? null : Math.max(rawLength, minLength)
 
