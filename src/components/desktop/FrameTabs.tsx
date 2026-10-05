@@ -121,8 +121,9 @@ export function FrameTabs({
       data-frame-tabs=""
       role="tablist"
       aria-label="窗口标签栏"
-      onDoubleClick={(e) => e.stopPropagation()}
-      className="no-scrollbar flex h-8 w-full items-center gap-1 overflow-x-auto px-1.5"
+      /* 占满这一行剩下的宽度（右边留给窗口按钮）；**空白处的 pointerdown 要冒泡给标题栏**，
+         这样"拖这一行的空档"仍然是移动 / 合并整扇窗（浏览器同款手感） */
+      className="no-scrollbar flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto"
     >
       {tabs.map((tab, index) => {
         const app = getApp(tab.id)
@@ -142,10 +143,12 @@ export function FrameTabs({
               setDropAt(undefined)
               setTearing(false)
             }}
+            /* 双击标签不该最大化窗口（空白处的双击才是） */
+            onDoubleClick={(e) => e.stopPropagation()}
             title={`${app.name} · ${label}`}
-            className={`group flex max-w-[11rem] shrink-0 cursor-default items-center gap-1.5 rounded border px-2 py-1 text-xs ${
+            className={`group flex h-[26px] max-w-[13rem] shrink-0 cursor-default items-center gap-1.5 rounded-md border px-2 text-xs ${
               isActive
-                ? 'border-edge bg-surface text-ink'
+                ? 'border-edge bg-surface text-ink shadow-sm'
                 : 'border-transparent text-dim hover:bg-hover hover:text-ink'
             } ${dropAt === index ? 'border-accent' : ''} ${tearing && drag.current?.index === index ? 'opacity-60' : ''}`}
           >

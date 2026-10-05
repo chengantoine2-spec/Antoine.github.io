@@ -5,7 +5,6 @@ import { useWindows } from '../../hooks/useWindows'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
 import type { AppId, SnapZone, WindowState, WindowTab } from '../../types/desktop'
 import { MaximizeGlyph } from '../icons'
-import { AppIcon } from './AppIcon'
 import { FrameTabs } from './FrameTabs'
 
 interface WindowProps {
@@ -210,11 +209,15 @@ export function Window({
         onActivate?.()
       }}
     >
-      {/* 标题栏：拖动窗口的手柄 + 拖到别的框上就合并；**标签行不在它里面**
-          （宿主契约：`[aria-label="X 窗口"] header button` 必须仍然只有 最小化/还原/关闭 三个） */}
+      {/* **一行到底**（2026-10-05 用户："图一只有一行，为什么我们有两行"）：
+          标签行与窗口按钮同排，跟浏览器一样 —— 不再有"标题栏 + 标签行"两行。
+          - 拖标签 = 换顺序；竖直拖出框外 = 拆成独立窗口
+          - 拖这一行的**空白处** = 移动窗口；拖到别的框上 = 合并
+          宿主契约：那三个窗口按钮放在 `[data-window-controls]` 里 —— 标签按钮也在 `<header>` 里了，
+          所以别再按 `header button` 去数标题栏按钮 */}
       <header
         data-frame-head={win.key}
-        className="flex h-9 shrink-0 cursor-default select-none items-center justify-between gap-2 border-b border-edge bg-surface-2 px-3"
+        className="flex h-9 shrink-0 cursor-default select-none items-center gap-2 border-b border-edge bg-surface-2 pl-1.5 pr-2"
         onPointerDown={startDrag}
         onPointerMove={onDrag}
         onPointerUp={endDrag}
@@ -226,17 +229,21 @@ export function Window({
             : dispatch({ type: 'toggle-maximize', key: win.key })
         }
       >
-        <span className="flex min-w-0 items-center gap-2 text-xs font-medium text-ink">
-          <AppIcon name={app.icon} className="h-4 w-4 shrink-0 text-accent" />
-          <span className="truncate">{title ?? app.name}</span>
-          {win.tabs.length > 1 ? (
-            <span className="shrink-0 rounded border border-edge px-1 text-[10px] text-dim">
-              {win.tabs.length} 个标签
-            </span>
-          ) : null}
-        </span>
+        <FrameTabs
+          tabs={win.tabs}
+          active={win.active}
+          titles={titles ?? {}}
+          onSelect={onSelectTab}
+          onClose={onCloseTab}
+          onReorder={onReorderTab}
+          onDetach={onDetachTab}
+        />
 
-        <span className="flex shrink-0 items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+        <span
+          data-window-controls=""
+          className="flex shrink-0 items-center gap-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-hover hover:text-ink"
@@ -259,26 +266,13 @@ export function Window({
             type="button"
             className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-accent hover:text-accent-ink"
             aria-label="关闭"
-            /* 标题栏这个 × = 关掉整个框（标签上那个 × 才只关一个标签） */
+            /* 这一行的 × = 关掉整个框（标签上那个 × 才只关一个标签） */
             onClick={onCloseFrame}
           >
             &#215;
           </button>
         </span>
       </header>
-
-      {/* 标签行：标题栏**正下面一行**，画在框边框里面 */}
-      <div className="shrink-0 border-b border-edge bg-surface-2">
-        <FrameTabs
-          tabs={win.tabs}
-          active={win.active}
-          titles={titles ?? {}}
-          onSelect={onSelectTab}
-          onClose={onCloseTab}
-          onReorder={onReorderTab}
-          onDetach={onDetachTab}
-        />
-      </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5 text-sm">
         <WindowTitleProvider setTitle={setTitle}>{children}</WindowTitleProvider>

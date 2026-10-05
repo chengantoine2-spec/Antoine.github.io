@@ -189,7 +189,9 @@ async function run() {
       dshEmbed.w > dshEmbed.winW - 4 &&
       dshEmbed.h > dshEmbed.winH * 0.8 &&
       dshEmbed.gaps.every((gap) => Math.abs(gap) <= 2) &&
-      Math.abs(dshEmbed.topOffset - (36 + dshEmbed.tabRowH)) <= 3 &&
+      /* 正文区从框顶往下就是**一行**（标签行与窗口按钮同排，2026-10-05 改的），
+         所以偏移量就是那一行的高度，不再额外加一行标签栏 */
+      Math.abs(dshEmbed.topOffset - 36) <= 3 &&
       dshEmbed.hasHot &&
       dshEmbed.barH >= 44 &&
       dshEmbed.barH - dshEmbed.btnH <= 24 &&
@@ -850,7 +852,9 @@ async function run() {
       document
         .querySelector(`${dockSel} button[aria-label="退出全屏"]`)
         ?.getAttribute('aria-label') ?? '',
-    titleButtons: [...document.querySelectorAll('[aria-label="博客 窗口"] header button')].map((b) =>
+    titleButtons: [
+      ...document.querySelectorAll('[aria-label="博客 窗口"] [data-window-controls] button'),
+    ].map((b) =>
       b.getAttribute('aria-label'),
     ),
   }), DOCK)
@@ -1415,27 +1419,31 @@ async function run() {
     JSON.stringify({ ...merged, mergeHint }),
   )
 
-  /* 标签栏必须画在窗口边框**里面**（用户：「标签栏应该做在窗口的边框里面」）：
-     它是标题栏正下面那一行 —— 横向不越出窗框，纵向紧贴在标题栏下面 */
+  /* 标签行必须画在窗口边框**里面**，而且和窗口按钮**同一行**（用户 2026-10-05：
+     「图一只有一行，为什么我们的有两行」→ 一行到底，跟浏览器一样）。
+     所以这里量三件事：横向不越出窗框、纵向就在标题行里、和右边那三个按钮同一水平线 */
   const stripIn = await p.evaluate(() => {
     const win = document.querySelector('section[aria-label="博客 窗口"]')
     const strip = win?.querySelector('[data-frame-tabs]')
+    const controls = win?.querySelector('[data-window-controls]')
+    const head = win?.querySelector('[data-frame-head]')
     const w = win?.getBoundingClientRect()
     const s = strip?.getBoundingClientRect()
-    if (!w || !s) return null
+    const c = controls?.getBoundingClientRect()
+    const h = head?.getBoundingClientRect()
+    if (!w || !s || !c || !h) return null
+    const mid = (r) => (r.top + r.bottom) / 2
     return {
       stripH: Math.round(s.height),
       gap: Math.round(s.top - w.top),
-      inside:
-        s.left >= w.left - 1 &&
-        s.right <= w.right + 1 &&
-        s.top >= w.top - 1 &&
-        s.bottom <= w.top + 90,
+      sameRow: Math.round(Math.abs(mid(s) - mid(c))) <= 2,
+      inHead: s.top >= h.top - 1 && s.bottom <= h.bottom + 1,
+      inside: s.left >= w.left - 1 && s.right <= w.right + 1 && s.top >= w.top - 1,
     }
   })
   check(
-    '标签栏画在窗口边框里面（标题栏下面一行，不浮在桌面上）',
-    !!stripIn && stripIn.inside && stripIn.stripH <= 34 && stripIn.gap <= 44,
+    '整扇窗只有一行：标签行与窗口按钮同排（不再有第二行标签栏）',
+    !!stripIn && stripIn.inside && stripIn.inHead && stripIn.sameRow && stripIn.stripH <= 40 && stripIn.gap <= 6,
     JSON.stringify(stripIn),
   )
 
@@ -1536,7 +1544,7 @@ async function run() {
   const intoHead = await p
     .locator('section[aria-label="博客 窗口"] [data-frame-head]')
     .boundingBox()
-  await p.mouse.move(beforeMergeHead.x + 60, beforeMergeHead.y + beforeMergeHead.height / 2)
+  await p.mouse.move(beforeMergeHead.x + beforeMergeHead.width - 150, beforeMergeHead.y + beforeMergeHead.height / 2)
   await p.mouse.down()
   await p.mouse.move(intoHead.x + 90, intoHead.y + intoHead.height / 2, { steps: 14 })
   await p.mouse.up()
@@ -1571,9 +1579,9 @@ async function run() {
   const headBox = await p
     .locator('section[aria-label="设置 窗口"] [data-frame-head]')
     .boundingBox()
-  /* ⚠️ 抓标题栏**左段**（跟着图标那一带），别抓 `width - 90` 那一带 ——
-     那里是 `– □ ×` 按钮组，按钮组 pointerdown 会 stopPropagation，拖动起不来（踩过） */
-  await p.mouse.move(headBox.x + 40, headBox.y + headBox.height / 2)
+  /* ⚠️ 抓标题行里**标签右边的空白区**（浏览器里也是拖那块空白移动窗口）：
+     现在整行都是标签行，左边被标签占着，按在标签上那是"拖标签换顺序" */
+  await p.mouse.move(headBox.x + headBox.width - 150, headBox.y + headBox.height / 2)
   await p.mouse.down()
   await p.mouse.move(2, 2, { steps: 12 })
   await p.mouse.up()
@@ -1608,7 +1616,8 @@ async function run() {
   const freeBox = await p.locator('section[aria-label="设置 窗口"]').boundingBox()
   const grabSet = async () => {
     const h = await p.locator(SET_HEAD).boundingBox()
-    return { x: h.x + h.width / 2, y: h.y + h.height / 2 }
+    /* 同前：抓标签右边的空白区，别按在标签上（那是拖标签） */
+    return { x: h.x + h.width - 150, y: h.y + h.height / 2 }
   }
 
   /* 拖到左边缘：拖动过程中就该看到预览，松手才落位 */

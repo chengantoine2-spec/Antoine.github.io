@@ -34,24 +34,35 @@
   拖左右两条「白色长条」可以改这个宽度（复刻 DSH 会话页，见「正文列宽拖动条 / 滚动条」一节）。
   右栏断点别写成 960 —— 博客窗口默认 1000 宽，扣掉内边距只剩 958，卡在 960 上就永远看不到右栏。
   目录 id 由标题文字推导（`lib/toc.ts`），`Markdown.tsx` 给 h2/h3 挂同一个 id，两边不共享计数器
-- 窗口标题栏是 `– □ ×`：最小化 / 最大化（铺满视口，含任务栏）/ 关闭
+- 窗口那**一行**里是：标签们 + `– □ ×` 三个按钮（浏览器那样，**整扇窗只有一行**）
 - **桌面能同时开好几个窗口**（2026-10-05，用户要求"可叠加、像浏览器一样用标签栏切换"）：
   - 窗口列表（`useWindows` 的 `windows[]` + z 序）是唯一事实来源；**路由只表示当前聚焦的那个窗口**
     （`/blog` 打开并聚焦博客窗口、`/blog/17` 还会把它的子页面切到第 17 篇）。深链、刷新、前进后退照旧
   - 窗口内容从 `components/program/views.tsx` 的登记表拿（**不再靠 `<Outlet />`** ——
     一个 Outlet 装不下多窗口）；`router.tsx` 里的子路由是空壳，只负责"让路径匹配得到"
-  - **标签栏** `components/desktop/WindowTabs.tsx`：一条标签 = 一个开着的窗口，点=聚焦、×=关掉，
-    高亮=当前窗口，最小化的淡一点。位置在设置里切（`desktop.tabs`：顶部 / 左侧 / 不显示，默认顶部），
-    由 `lib/tabs.ts` + `hooks/useTabs.tsx` 管
-  - ⚠️ **标签栏是浮层 + 自动隐藏，绝不让窗口层让位**：早先给它留一条（顶 36 / 左 190）导致
-    窗口永远贴不到那条边 —— 实测"标签栏在顶部时窗口最上面只能到 y=36、在左侧时最左只能到 x=190"，
-    用户报的就是这个「窗口不能拖到最左边和最上面」。现在窗口层只躲任务栏，
-    标签栏浮在上面、默认收起，鼠标蹭到那条边界（12px 热区 + 一条细拉手）才滑出来；
-    收起时容器 `pointer-events-none`、只有标签自己 `pointer-events-auto`，
-    所以**窗口标题栏被它盖住时依然拖得动**
-  - 因此**最大化照旧铺满整个视口**（含任务栏），不再让出标签栏那一条
-  - 标签栏 z 是 70（最大化窗口层 60、任务栏 50），所以它滑出来时永远在最上面
-  - 标签栏收起时靠任务栏图标切窗口（当前窗口的图标会高亮），这也是它的兜底入口
+  - **一个窗口框（frame）装 1~N 个标签**（用户："窗口要可以合并，而不是单独显示，标签栏应该做在
+    窗口的边框里面"）：`WindowState { key, tabs: [{id, param}], active, x/y/w/h/z, ... }`，
+    reducer 有 `activate` / `closeTab`（关掉最后一个 = 关掉这个框）/ `merge` / `detach` / `reorder` / `hydrate`
+  - **标签行与窗口按钮同一行**（用户 2026-10-05：「图一只有一行，为什么我们的有两行」
+    → 改成浏览器那样的一行到底）：`components/desktop/FrameTabs.tsx` 就画在 `<header>`
+    这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
+    **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
+    验证里那条检查也叫「整扇窗只有一行」并断言"标签行与窗口按钮同一水平线"
+  - 手势：**拖标签左右 = 换顺序**（位移超 4px 才算拖动）、**竖直拖出框外 24px = 拆成独立窗口**、
+    **拖标签右边的空白 = 移动窗口**、**拖一扇窗到另一扇上 = 合并**（目标框描一圈 `data-merge-target`，
+    拖动的那个显示 `data-merge-drop`）。合并与吸附互斥：先判"落在别的框上"，没有再判边缘吸附
+  - ⚠️ **标签按钮上绝不能在 pointerdown 就 `setPointerCapture`**（"合并之后标签点不动、
+    切不回原来那个窗口"的元凶）：捕获之后浏览器把 `click` 派给被捕获的元素，里层按钮的 `onClick`
+    永远不触发。要等位移超过阈值、确定是拖动了再抓（同「坑 2」）
+  - ⚠️ **引擎盖下两条**：① `onMergeIn` 的参数是**目标框**、发起方是 `win.key` —— 写反就变成
+    "并进自己"，reducer 一看 `fromKey === intoKey` 直接 no-op（表现："怎么拖都不合并"）；
+    ② **新窗口按已开框数层叠错开 32/28**（`centerSpot` 第三个参数）—— 全都正居中时后开的大窗会把
+    先开的小窗整个盖住，下面那扇的标题栏和标签全点不到（用户报的"点不到之前的窗口"有一半是这个）。
+    被盖住时点任务栏图标把它抬到最上面是兜底入口
+  - **桌面顶部那条全局悬浮标签栏已删除**（`WindowTabs.tsx` / `hooks/useTabs.tsx` / `lib/tabs.ts` /
+    设置里那一栏都没了）：标签只活在各自的窗口框里
+  - 会话记忆 `desktop.openWindows` 存「框 + 标签 + 几何」：`{ frames: [{ tabs, active, x, y, w, h, maximized }] }`，
+    读到旧格式（一维数组）按"一框一标签"处理
   - **最小化 = `display:none`，不卸载窗口**：滚动位置、加载好的数据都留着，点任务栏 / 标签就回来
   - 关掉当前聚焦的窗口 → 焦点交给剩下最上面那个（URL 跟着走）；一个不剩就回桌面 `/`
   - 刷新后恢复上次开着的窗口（`desktop.openWindows`，顺序 = 标签栏顺序）
@@ -283,11 +294,11 @@ npm run typecheck    # 只做类型检查
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位+多窗口+路由对齐）、`Window`（窗口框）、`WindowTabs`（标签栏）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
+| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位+多窗口+路由对齐）、`Window`（窗口框：**一行** = 标签 + 窗口按钮）、`FrameTabs`（框里的标签行 / 拖拽排序 / 拖出拆帧）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
 | `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归图标设计负责人** |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条），以及 **`views.tsx`＝「窗口 id → 装什么」的登记表** |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useTabs`（标签栏位置）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
-| `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`tabs`（标签栏位置与占位尺寸，`desktop.tabs`）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化）、`veggies`（48 张菜图的登记表与查表：`veggieOfName()` / `dishRows()`） |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
+| `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`snap`（吸附/平铺的分区几何与预览矩形）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化）、`veggies`（48 张菜图的登记表与查表：`veggieOfName()` / `dishRows()`） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -387,8 +398,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.wallpaperDim` | `0` \| `0.15` \| `0.3` \| `0.45` |
 | `desktop.dock` | `{ position, length, thickness, iconSize, dockApps }` |
 | `desktop.windows` | 窗口几何记忆；**关闭窗口不清除**，下次打开回到原处 |
-| `desktop.openWindows` | **会话记忆**：刷新前开着哪些窗口（`[{ id, param? }]`，顺序 = 标签栏顺序）。启动时照着开回来；坏数据/已下线的应用会被丢掉 |
-| `desktop.tabs` | 窗口标签栏位置：`top` \| `left` \| `off`（默认 `top`） |
+| `desktop.openWindows` | **会话记忆**：刷新前开着哪些框（`{ frames: [{ tabs: [{id, param?}], active, x, y, w, h, maximized }] }`，顺序 = 框的 z 序）。启动时照着开回来（合并过的框仍是一框多标签）；坏数据/已下线的应用会被丢掉 |
 | `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
 | `desktop.ghToken` | **博客创作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
 | `desktop.imgTree` | img 分支图片清单缓存，TTL 10 分钟（浏览图库不需要 Token） |
@@ -469,18 +479,23 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 75 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 77 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
+- ⚠️ **dev server 一改文件就没了的真凶**（排查过两次）：Vite 的 watcher 会去 watch
+  **原子写留下的临时目录**（`.X.tsx.<pid>.<guid>.tmpdir/X.tsx.tmp`），它一被锁住/删掉就抛
+  `EBUSY: resource busy or locked` 并**直接结束进程**。`vite.config.ts` 里已经忽略
+  `**/.*.tmpdir/**` 与 `**/*.tmp`，别再删掉那两条
 - **吸附 / 平铺**有 3 项：拖到左边缘**先出预览**、松手贴成左半边；拖到上边缘铺满工作区；
-  吸附后再拖开 = 解吸附回原来的大小。⚠️ 这一节开始前要先把指针挪到中间让悬浮标签栏收回去 ——
-  指针停在上边界时标签栏是**盖在标题栏上**的，直接去按标题栏会按到标签栏上（第一次就踩了这个）
-- **DSH 工具条**有 6 项（前 4 项在 DSH 那节）：另外两项是**半透明（`opacity === '0.5'`）**、
-  点一下上边界固定住（`data-dsh-pinned` 且指针移开后仍不收）、再点一下取消固定并恢复自动隐藏
-- **多窗口**有 7 项：两个窗口同时开着（都可见）+ 标签栏一条一个、**标签栏默认收起（浮层）且上边界有热区**、
-  点标签切窗口（抬到最上面且 URL 跟着）、关掉当前窗口焦点交给剩下那个（URL 跟着）、
-  **刷新后把上次开着的窗口都开回来**、标签栏切到左侧后浮层贴左边而**窗口层不让位**（`layerLeft === 0`）、
-  **窗口能一路拖到 (0, 0)**（就是用户报的"不能超过最左边和最上面"那条）。
-  ⚠️ 小节之间要先 `closeAllWindows()`：全局选择器会串窗口，而且"会话记忆"会把上一节的窗口开回来
+  吸附后再拖开 = 解吸附（不再是贴边形状、`data-snap` 清空）。
+  ⚠️ 拖动目标框之前先点任务栏图标把它抬到最上面 —— 窗口叠着时被盖住的那个，标题行按不到
+- **合并 / 标签**有 7 项：两个框各一标签 → 拖标题行空白处到另一扇上合并成一框两标签（拖动时给提示）、
+  **整扇窗只有一行（标签行与窗口按钮同排）**、拖标签换顺序、点标签切页面（URL 跟着）、
+  把标签拖出框外拆成两个框、关掉一个标签帧还在（焦点交给同帧另一个标签）、刷新后合并过的框仍是多标签。
+  ⚠️ 顺序有讲究：**先测拆帧再测关标签**（关掉之后那框只剩一个标签，没得拆）；抓标题行要抓
+  **标签右边的空白区**（左边按在标签上那是"拖标签换顺序"，`width - 90` 那一带又是 `– □ ×` 按钮组）
+- **多窗口**还有：窗口能一路拖到 (0, 0)（用户报过的"不能超过最左边和最上面"）、
+  **刷新后把上次开着的窗口都开回来**、`closeAllWindows()` 清场后再跑"只看某一个窗口"的小节
+  ⚠️ 小节之间要先清场：全局选择器会串窗口，而且"会话记忆"会把上一节的窗口开回来
 - **站名 / 菜名**有 1 项：页面标题、关于窗口、任务栏 `title` 都要是「芹菜耕地」与「X · 菜名」
   （同一条里也钉住了「无障碍名 = 窗口名」这条，见上方菜名那段）
 - **DSH 快捷入口**有 4 项：① 任务栏里能找到 `DSH · 芹菜`（本机才挂载）；
@@ -490,7 +505,7 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   工具条是浮层且**默认收起**（收起时它的底 ≤ iframe 顶）；
   ④ 鼠标移到窗口上边界那条热区 → 工具条滑下来，而且**正文高度不变**（证明它是浮层、不占位）。
   跑完必须切回「关于」再继续，因为它会离开 `/about`
-- 最大化那条断言「铺满整个视口并盖住任务栏」—— 标签栏是浮层、不让位，所以不再是"除标签栏那一条"
+- 最大化那条断言「铺满整个视口并盖住任务栏」（标签行现在是窗口框里的**一行**，不占额外空间）
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 - 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、
