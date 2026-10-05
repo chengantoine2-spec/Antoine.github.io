@@ -48,9 +48,11 @@
     这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
     **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
     验证里那条检查也叫「整扇窗只有一行」并断言"标签行与窗口按钮同一水平线"
-  - **那三个按钮和标签上那个小 × 的悬停态是同一套"淡按钮形状"**：`hover:bg-[var(--c-control-hover)]`
-    （比 `--c-hover` 实、比 `--c-accent` 淡）。用户 2026-10-05 的原话是「鼠标到按钮上时应该显示
-    按钮的形状……不过颜色可以不用那么深」+「左侧删除窗口的小按钮也要做」。
+  - **悬停态**：最小化 / 最大化 = 淡按钮形状 `hover:bg-[var(--c-control-hover)]`；
+    **关闭键（标题行的 × 和标签上那个小 ×）悬停是红底** `hover:bg-[var(--c-danger)]` +
+    `hover:text-[var(--c-danger-fg)]` —— 用户 2026-10-05：「删除键要改成红色背景」（破坏性操作给红底，
+    和真桌面一致），同时要求「颜色不用那么深」所以红值是压过的（三套主题各一份，不是纯正红）。
+    ⚠️ 非悬停时关闭键仍是淡色（标签上那个还是 60% 不透明度），一排标签不会到处是红点。
     字形尺寸是**原来的 12px**（`–` / `×` 走 `text-xs`，最大化图形用 `MaximizeGlyph` 的默认尺寸）——
     中途先放大到 14px 又被用户改回来了，别自作主张再放大。
     ⚠️ 要调大小就在 `Window.tsx` 传 `className`，**别去改 `components/icons/**`**（那是图标负责人的）
@@ -395,6 +397,7 @@ text-ink / text-dim              正文 / 次要文字
 bg-accent / text-accent-ink      强调（当前项、主按钮）
 bg-hover                         悬停底色（**给任务栏那种深色面用**）
 bg-[var(--c-control-hover)]      窗口标题行小按钮 / 标签上小 × 悬停时的「淡按钮形状」（浅色面用这个）
+bg-[var(--c-danger)]             关闭 / 删除这类破坏性按钮**悬停时的红底**（配 --c-danger-fg 当字色）
 rounded-window / rounded-dock    圆角
 logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
 变宽拖动条 / 滚动条滑块           读 --c-scroll-thumb（滑块）、--c-scroll-thumb-hover（悬停与拖动条）

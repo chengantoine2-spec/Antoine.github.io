@@ -274,7 +274,9 @@ export function Window({
           </button>
           <button
             type="button"
-            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-[var(--c-control-hover)] hover:text-ink"
+            /* 关闭 = 破坏性操作，悬停给**红底**（用户 2026-10-05：「删除键要改成红色背景」）；
+               红底 + 浅字走 --c-danger / --c-danger-fg，三套主题各一份 */
+            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-[var(--c-danger)] hover:text-[var(--c-danger-fg)]"
             aria-label="关闭"
             /* 这一行的 × = 关掉整个框（标签上那个 × 才只关一个标签） */
             onClick={onCloseFrame}

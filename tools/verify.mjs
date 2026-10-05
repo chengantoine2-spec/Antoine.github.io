@@ -1465,9 +1465,20 @@ async function run() {
     tabClose: await hoverBg(`${WIN}[data-tab-close]`),
   }
   const hasFill = (v) => !!v && v !== 'transparent' && v !== 'rgba(0, 0, 0, 0)'
+  /** 红底判定：红通道明显压过绿蓝（令牌换成别的红也照样过，不钉死具体色值） */
+  const isRed = (v) => {
+    const m = /rgba?\(([^)]+)\)/.exec(v || '')
+    if (!m) return false
+    const [r, g, b] = m[1].split(',').map((n) => parseFloat(n))
+    return r > g + 20 && r > b + 20
+  }
   check(
-    '悬停露出按钮形状：三个窗口按钮 + 标签上那个小 × 都有底色，且不是深强调色',
-    Object.values(ctrlBgs).every(hasFill) && ctrlBgs.close === ctrlBgs.minus,
+    '悬停：最小化 / 最大化是淡按钮形状，关闭键（标题行 + 标签上那个小 ×）是红底',
+    hasFill(ctrlBgs.minus) &&
+      hasFill(ctrlBgs.maximize) &&
+      isRed(ctrlBgs.close) &&
+      isRed(ctrlBgs.tabClose) &&
+      ctrlBgs.close === ctrlBgs.tabClose,
     JSON.stringify(ctrlBgs),
   )
 

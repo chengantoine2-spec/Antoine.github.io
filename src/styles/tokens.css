@@ -15,6 +15,9 @@
   --c-text-dim: #855434;
   --c-accent: #a96f44;
   --c-accent-fg: #fff8f0;
+  /* 关闭 / 删除这类"破坏性"按钮悬停时的红底 + 上面的字色（用户 2026-10-05：删除键要红底） */
+  --c-danger: #c0392b;
+  --c-danger-fg: #fff8f0;
   --c-hover: rgba(255, 248, 240, 0.18);
   /* 窗口标题行那几个小按钮（– □ ×，以及标签上那个小 ×）**悬停时露出的按钮形状**。
      用户 2026-10-05：「鼠标到按钮上时应该显示按钮的形状……不过颜色可以不用那么深」——
@@ -49,6 +52,8 @@
   --c-text-dim: #7a6a52;
   --c-accent: #8a6a45;
   --c-accent-fg: #fbf7ee;
+  --c-danger: #b23a2c;
+  --c-danger-fg: #fbf7ee;
   --c-hover: rgba(120, 100, 75, 0.18);
   --c-control-hover: rgba(58, 50, 38, 0.12);
   --c-scroll-thumb: rgba(58, 50, 38, 0.18);
@@ -76,6 +81,8 @@
   --c-text-dim: #9aa1ac;
   --c-accent: #c68a5b;
   --c-accent-fg: #1b1d22;
+  --c-danger: #b8443a;
+  --c-danger-fg: #f7f7f5;
   --c-hover: rgba(255, 255, 255, 0.1);
   --c-control-hover: rgba(255, 255, 255, 0.12);
   /* 深色面上滑块要用浅色墨水，不然在深底上看不见 */
