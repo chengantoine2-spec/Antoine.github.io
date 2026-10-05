@@ -4,3 +4,6 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+
+# 博客草稿（待发布，不属于站点；图放这儿方便手动上传）
+blog-draft/
