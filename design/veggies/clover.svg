@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="三叶草">
+  <path d="M32 33c0 10 0 15-1 21" fill="none" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <g fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round">
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" />
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" transform="rotate(120 32 33)" />
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" transform="rotate(240 32 33)" />
+  </g>
+  <circle cx="32" cy="33" r="3" fill="#4F7530" />
+</svg>

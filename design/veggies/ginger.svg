@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="姜">
+  <path d="M22 21c6-6 15-6 19 1 5-3 11-1 12 5 1 5-3 9-8 10 0 6-5 11-11 11s-11-4-12-9c-6 0-10-3-10-8s4-8 10-10z" fill="#E0BE86" stroke="#9C7434" stroke-width="2" stroke-linejoin="round" />
+  <path d="M28 22c-3 4-4 10-2 15M40 26c3 4 3 10 0 14" fill="none" stroke="#C29B58" stroke-width="2" stroke-linecap="round" opacity=".8" />
+  <circle cx="18" cy="34" r="3" fill="#E0BE86" stroke="#9C7434" stroke-width="2" />
+  <circle cx="47" cy="22" r="2.6" fill="#E0BE86" stroke="#9C7434" stroke-width="2" />
+  <ellipse cx="26" cy="26" rx="4" ry="3" transform="rotate(-30 26 26)" fill="#fff" opacity=".3" />
+</svg>

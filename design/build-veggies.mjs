@@ -36,8 +36,26 @@ const GROUPS = [
     ],
   },
   {
-    title: '二、水果',
-    note: '后来加的，和 11 样菜同一套画法',
+    title: '二、蔬菜',
+    note: '土豆那 11 样之外的常见菜；和 11 样菜同一套画法',
+    items: [
+      ['carrot', '胡萝卜'],
+      ['eggplant', '茄子'],
+      ['cabbage', '白菜'],
+      ['cucumber', '黄瓜'],
+      ['daikon', '白萝卜'],
+      ['spinach', '菠菜'],
+      ['peas', '豌豆'],
+      ['bell-pepper', '青椒'],
+      ['ginger', '姜'],
+      ['sweet-potato', '红薯'],
+      ['mushroom', '蘑菇'],
+      ['broccoli', '西兰花'],
+    ],
+  },
+  {
+    title: '三、水果',
+    note: '站里那 11 样里葡萄也算水果，这里不重复列',
     items: [
       ['apple', '苹果'],
       ['banana', '香蕉'],
@@ -48,16 +66,28 @@ const GROUPS = [
       ['lemon', '柠檬'],
       ['peach', '桃子'],
       ['cherry', '樱桃'],
+      ['pineapple', '菠萝'],
+      ['mango', '芒果'],
+      ['kiwi', '猕猴桃'],
+      ['blueberry', '蓝莓'],
+      ['pomegranate', '石榴'],
+      ['persimmon', '柿子'],
+      ['lychee', '荔枝'],
+      ['dragon-fruit', '火龙果'],
     ],
   },
   {
-    title: '三、别的常见菜',
-    note: '想要更多（黄瓜 / 白菜 / 菠萝 / 蓝莓…）说一声，照同一套画法加',
+    title: '四、植物',
+    note: '不是吃的那一类：能当装饰、也能当"这块地"的配图',
     items: [
-      ['carrot', '胡萝卜'],
-      ['eggplant', '茄子'],
-      ['mushroom', '蘑菇'],
-      ['broccoli', '西兰花'],
+      ['bamboo', '竹子'],
+      ['cactus', '仙人掌'],
+      ['sunflower', '向日葵'],
+      ['clover', '三叶草'],
+      ['dandelion', '蒲公英'],
+      ['fern', '蕨'],
+      ['aloe', '芦荟'],
+      ['sapling', '小树苗'],
     ],
   },
 ]
@@ -120,11 +150,11 @@ const html = `<!doctype html>
 
 <div id="main"></div>
 
-<h2>四、缩到小尺寸还认得出吗</h2>
+<h2>五、缩到小尺寸还认得出吗</h2>
 <p class="note">每样依次 48px / 32px / 24px（真实尺寸，没放大）</p>
 <div id="sizes"></div>
 
-<h2>五、三套主题的底色下（卡片浅底 / 次面 / 任务栏深底）</h2>
+<h2>六、三套主题的底色下（卡片浅底 / 次面 / 任务栏深底）</h2>
 <p class="note">这些是彩色插画、不走 <code>currentColor</code>：放在深色任务栏上要自己够亮，这一节就是看这个。</p>
 <div id="themes"></div>
 

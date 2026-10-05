@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="向日葵">
+  <g fill="#F2C744" stroke="#B98A1E" stroke-width="2">
+    <ellipse cx="32" cy="9" rx="5" ry="9" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(45 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(90 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(135 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(180 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(225 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(270 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(315 32 24)" />
+  </g>
+  <circle cx="32" cy="24" r="10" fill="#8A5A2B" stroke="#5E3A18" stroke-width="2" />
+  <g fill="#5E3A18" opacity=".6">
+    <circle cx="29" cy="21" r="1.2" />
+    <circle cx="35" cy="22" r="1.2" />
+    <circle cx="31" cy="27" r="1.2" />
+    <circle cx="36" cy="27" r="1.1" />
+    <circle cx="27" cy="26" r="1.1" />
+  </g>
+  <path d="M32 34v22" stroke="#4F7530" stroke-width="3" stroke-linecap="round" />
+  <path d="M32 44c-6-3-11-2-14 2 5 3 11 2 14-2zM32 50c6-3 11-2 14 2-5 3-11 2-14-2z" fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round" />
+</svg>

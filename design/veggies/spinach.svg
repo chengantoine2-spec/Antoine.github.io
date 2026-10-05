@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="菠菜">
+  <path d="M32 36C31 24 24 15 14 13c-1 12 6 22 18 23z" fill="#4F8A3A" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36c1-12 8-21 18-23 1 12-6 22-18 23z" fill="#4F8A3A" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36c-4-10-3-20 3-26 5 8 5 18-3 26z" fill="#5E9A46" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36v16" stroke="#B06A76" stroke-width="3" stroke-linecap="round" />
+  <path d="M18 20l8 8M46 20l-8 8" fill="none" stroke="#8CBF5A" stroke-width="2" stroke-linecap="round" opacity=".7" />
+</svg>

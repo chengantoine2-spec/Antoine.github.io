@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="白萝卜">
+  <path d="M32 18c-2-6-6-10-11-11 1 6 5 11 11 11zM32 18c2-6 6-10 11-11-1 6-5 11-11 11z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 17v-4" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M24 20c0-3 3-5 8-5s8 2 8 5l-4.5 32c-.5 4-6.5 4-7 0z" fill="#F4F1E6" stroke="#A79C7C" stroke-width="2" stroke-linejoin="round" />
+  <path d="M25 28h5M24 37h5M25 46h4" fill="none" stroke="#C9C2A6" stroke-width="2" stroke-linecap="round" />
+  <ellipse cx="30" cy="26" rx="2.6" ry="6" fill="#fff" opacity=".6" />
+</svg>

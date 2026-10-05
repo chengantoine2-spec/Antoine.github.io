@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="仙人掌">
+  <path d="M32 10c4 0 6 3 6 7v7h3c3 0 5 2 5 5v11c0 3-2 5-5 5h-3v8c0 4-2 7-6 7s-6-3-6-7v-8h-3c-3 0-5-2-5-5V29c0-3 2-5 5-5h3v-7c0-4 2-7 6-7z" fill="#5E9A4A" stroke="#356A24" stroke-width="2" stroke-linejoin="round" />
+  <g fill="none" stroke="#2C5420" stroke-width="1.6" stroke-linecap="round" opacity=".7">
+    <path d="M27 24h-2M27 32h-2M27 40h-2M37 24h2M37 32h2M37 40h2M32 44v2M32 52v2M20 30h-2M20 38h-2M44 30h2M44 38h2" />
+  </g>
+  <circle cx="32" cy="8" r="4" fill="#E2567E" stroke="#A82B52" stroke-width="1.8" />
+  <ellipse cx="28" cy="20" rx="2.4" ry="7" transform="rotate(-4 28 20)" fill="#fff" opacity=".2" />
+</svg>

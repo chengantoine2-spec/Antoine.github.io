@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="猕猴桃">
+  <circle cx="32" cy="32" r="21" fill="#8A6A45" stroke="#5E4526" stroke-width="2" />
+  <circle cx="32" cy="32" r="18" fill="#A8C84B" />
+  <circle cx="32" cy="32" r="6.5" fill="#F2F5DC" />
+  <g fill="#3D2B1F">
+    <ellipse cx="32" cy="21" rx="1.1" ry="2" />
+    <ellipse cx="40" cy="24" rx="1.1" ry="2" transform="rotate(40 40 24)" />
+    <ellipse cx="43" cy="32" rx="2" ry="1.1" />
+    <ellipse cx="40" cy="40" rx="1.1" ry="2" transform="rotate(-40 40 40)" />
+    <ellipse cx="32" cy="43" rx="1.1" ry="2" />
+    <ellipse cx="24" cy="40" rx="1.1" ry="2" transform="rotate(40 24 40)" />
+    <ellipse cx="21" cy="32" rx="2" ry="1.1" />
+    <ellipse cx="24" cy="24" rx="1.1" ry="2" transform="rotate(-40 24 24)" />
+  </g>
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#fff" stroke-width="1.6" opacity=".18" />
+</svg>

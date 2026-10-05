@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="蓝莓">
+  <path d="M32 18c-3-6-9-9-14-9 2 6 7 10 14 9z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 18v-6" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <g fill="#4A5CA8" stroke="#2C3768" stroke-width="2">
+    <circle cx="22" cy="36" r="12" />
+    <circle cx="42" cy="38" r="11" />
+    <circle cx="33" cy="22" r="10" />
+  </g>
+  <g fill="none" stroke="#8A9AD8" stroke-width="1.8" stroke-linecap="round">
+    <path d="M22 36l-3-3M22 36l3-3M22 36v-4M42 38l-3-3M42 38l3-3M42 38v-4M33 22l-2.5-2.5M33 22l2.5-2.5M33 22v-3.5" />
+  </g>
+  <g fill="#fff" opacity=".22">
+    <ellipse cx="17" cy="31" rx="3" ry="2" transform="rotate(-30 17 31)" />
+    <ellipse cx="38" cy="33" rx="2.6" ry="1.8" transform="rotate(-30 38 33)" />
+  </g>
+</svg>

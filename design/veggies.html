@@ -27,16 +27,16 @@
 </head>
 <body>
 <h1>蔬菜水果预览 · 芹菜耕地</h1>
-<p class="note">共 <b>24</b> 件，来源就是 <code>design/veggies/*.svg</code>（本页由 <code>node design/build-veggies.mjs</code> 抽出生成）。</p>
+<p class="note">共 <b>48</b> 件，来源就是 <code>design/veggies/*.svg</code>（本页由 <code>node design/build-veggies.mjs</code> 抽出生成）。</p>
 <p class="note">画法：<code>viewBox 0 0 64 64</code>、平涂 + 同色系深色描边、高光用白色低透明度 —— 浅底深底都立得住，缩到 24px 也不糊。</p>
 
 <div id="main"></div>
 
-<h2>四、缩到小尺寸还认得出吗</h2>
+<h2>五、缩到小尺寸还认得出吗</h2>
 <p class="note">每样依次 48px / 32px / 24px（真实尺寸，没放大）</p>
 <div id="sizes"></div>
 
-<h2>五、三套主题的底色下（卡片浅底 / 次面 / 任务栏深底）</h2>
+<h2>六、三套主题的底色下（卡片浅底 / 次面 / 任务栏深底）</h2>
 <p class="note">这些是彩色插画、不走 <code>currentColor</code>：放在深色任务栏上要自己够亮，这一节就是看这个。</p>
 <div id="themes"></div>
 
@@ -96,7 +96,7 @@
     <symbol id="veg-peanut" viewBox="0 0 64 64"><path d="M32 7c8 0 14 5 14 12 0 3-1 5-1 7s1 4 1 7c0 7-6 12-14 12s-14-5-14-12c0-3 1-5 1-7s-1-4-1-7C18 12 24 7 32 7z" fill="#D8B274" stroke="#9C7434" stroke-width="2" stroke-linejoin="round" />
   <path d="M25 17l3 3M39 17l-3 3M24 43l3-3M40 43l-3-3M32 27l3 3M32 35l-3-3" fill="none" stroke="#9C7434" stroke-width="2" stroke-linecap="round" opacity=".45" />
   <ellipse cx="25" cy="20" rx="5" ry="3" transform="rotate(-35 25 20)" fill="#fff" opacity=".25" /></symbol>
-    <symbol id="veg-garlic" viewBox="0 0 64 64"><path d="M32 16c9 0 17 12 17 23 0 8-7 13-17 13s-17-5-17-13c0-11 8-23 17-23z" fill="#F1E6CE" stroke="#A8977A" stroke-width="2" stroke-linejoin="round" />
+    <symbol id="veg-garlic" viewBox="0 0 64 64"><path d="M32 16c9 0 17 12 17 23 0 8-7 13-17 13s-17-5-17-13c0-11 8-23 17-23z" fill="#F1E6CE" stroke="#93815F" stroke-width="2" stroke-linejoin="round" />
   <path d="M32 14v8M24 22c-3 6-4 15-3 24M40 22c3 6 4 15 3 24" fill="none" stroke="#C4B49A" stroke-width="2" stroke-linecap="round" />
   <path d="M32 16v-8" stroke="#8F7F63" stroke-width="3" stroke-linecap="round" />
   <ellipse cx="25" cy="27" rx="4" ry="7" transform="rotate(-14 25 27)" fill="#fff" opacity=".55" /></symbol>
@@ -112,6 +112,81 @@
   <path d="M22 36v16M43 36v16" fill="none" stroke="#D3E8AC" stroke-width="2" stroke-linecap="round" />
   <path d="M33 17c-2-6-7-10-12-10 1 6 6 11 12 10zM33 17c2-6 7-10 12-10-1 6-6 11-12 10z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
   <path d="M33 18v-8" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" /></symbol>
+    <symbol id="veg-carrot" viewBox="0 0 64 64"><path d="M32 17c-2-6-6-9-11-10 1 6 5 10 11 10zM32 17c2-6 6-9 11-10-1 6-5 10-11 10z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 16v-4" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M25 17h14l-4.5 34.6c-.4 3-4.6 3-5 0z" fill="#E8802F" stroke="#A85114" stroke-width="2" stroke-linejoin="round" />
+  <path d="M25 26h9M24 35h8M23 44h5.5" fill="none" stroke="#A85114" stroke-width="2" stroke-linecap="round" opacity=".45" />
+  <ellipse cx="29" cy="24" rx="2.4" ry="5" transform="rotate(-4 29 24)" fill="#fff" opacity=".25" /></symbol>
+    <symbol id="veg-eggplant" viewBox="0 0 64 64"><path d="M32 13V7" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M20 23c2-6 6-10 12-10s10 4 12 10c-4-3-8-4-12-4s-8 1-12 4z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 22c9 0 16 8 16 17s-7 16-16 16-16-7-16-16 7-17 16-17z" fill="#7B4B9E" stroke="#4E2C6B" stroke-width="2" />
+  <path d="M24 30c-3 6-3 14 1 20" fill="none" stroke="#4E2C6B" stroke-width="2" stroke-linecap="round" opacity=".5" />
+  <ellipse cx="27" cy="30" rx="3" ry="6" transform="rotate(-16 27 30)" fill="#fff" opacity=".22" /></symbol>
+    <symbol id="veg-cabbage" viewBox="0 0 64 64"><path d="M32 7c10 0 18 13 18 27 0 12-8 21-18 21s-18-9-18-21C14 20 22 7 32 7z" fill="#CFE3A8" stroke="#7E9B4E" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 12c-4 8-6 20-4 30M32 12c4 8 6 20 4 30M23 17c-4 8-6 18-4 26M41 17c4 8 6 18 4 26" fill="none" stroke="#9CBB6C" stroke-width="2" stroke-linecap="round" />
+  <path d="M26 49h12v7c0 3-3 4-6 4s-6-1-6-4z" fill="#F6F3E4" stroke="#B0A886" stroke-width="2" stroke-linejoin="round" />
+  <ellipse cx="24" cy="20" rx="5" ry="9" transform="rotate(-14 24 20)" fill="#fff" opacity=".35" /></symbol>
+    <symbol id="veg-cucumber" viewBox="0 0 64 64"><ellipse cx="32" cy="32" rx="13" ry="22" transform="rotate(18 32 32)" fill="#6FA845" stroke="#3F6B24" stroke-width="2" />
+  <g fill="#4F7F32" opacity=".45">
+    <ellipse cx="27" cy="22" rx="2" ry="1.4" />
+    <ellipse cx="33" cy="30" rx="2" ry="1.4" />
+    <ellipse cx="25" cy="36" rx="2" ry="1.4" />
+    <ellipse cx="36" cy="42" rx="2" ry="1.4" />
+    <ellipse cx="30" cy="46" rx="2" ry="1.4" />
+    <ellipse cx="38" cy="24" rx="2" ry="1.4" />
+  </g>
+  <path d="M40 12v-5" stroke="#3F6B24" stroke-width="3" stroke-linecap="round" />
+  <ellipse cx="27" cy="24" rx="3" ry="9" transform="rotate(16 27 24)" fill="#fff" opacity=".22" /></symbol>
+    <symbol id="veg-daikon" viewBox="0 0 64 64"><path d="M32 18c-2-6-6-10-11-11 1 6 5 11 11 11zM32 18c2-6 6-10 11-11-1 6-5 11-11 11z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 17v-4" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M24 20c0-3 3-5 8-5s8 2 8 5l-4.5 32c-.5 4-6.5 4-7 0z" fill="#F4F1E6" stroke="#A79C7C" stroke-width="2" stroke-linejoin="round" />
+  <path d="M25 28h5M24 37h5M25 46h4" fill="none" stroke="#C9C2A6" stroke-width="2" stroke-linecap="round" />
+  <ellipse cx="30" cy="26" rx="2.6" ry="6" fill="#fff" opacity=".6" /></symbol>
+    <symbol id="veg-spinach" viewBox="0 0 64 64"><path d="M32 36C31 24 24 15 14 13c-1 12 6 22 18 23z" fill="#4F8A3A" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36c1-12 8-21 18-23 1 12-6 22-18 23z" fill="#4F8A3A" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36c-4-10-3-20 3-26 5 8 5 18-3 26z" fill="#5E9A46" stroke="#2F5A22" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 36v16" stroke="#B06A76" stroke-width="3" stroke-linecap="round" />
+  <path d="M18 20l8 8M46 20l-8 8" fill="none" stroke="#8CBF5A" stroke-width="2" stroke-linecap="round" opacity=".7" /></symbol>
+    <symbol id="veg-peas" viewBox="0 0 64 64"><ellipse cx="32" cy="34" rx="25" ry="13" transform="rotate(-14 32 34)" fill="#9CCF63" stroke="#4F7530" stroke-width="2" />
+  <g fill="#C6E68F" stroke="#6E9A45" stroke-width="2">
+    <circle cx="19" cy="39" r="6.5" />
+    <circle cx="32" cy="35" r="6.5" />
+    <circle cx="45" cy="31" r="6.5" />
+  </g>
+  <path d="M12 30c-3-3-4-6-3-8 3 1 5 4 6 7z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M20 28c6-2 18-4 26-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".35" /></symbol>
+    <symbol id="veg-bell-pepper" viewBox="0 0 64 64"><path d="M32 15v-6" stroke="#4F7530" stroke-width="3" stroke-linecap="round" />
+  <path d="M26 15h12l2 6H24z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M20 24c0-4 5-7 12-7s12 3 12 7c3 4 4 12 3 18-1 6-7 9-15 9s-14-3-15-9c-1-6 0-14 3-18z" fill="#5EA83C" stroke="#356A1E" stroke-width="2" stroke-linejoin="round" />
+  <path d="M24 21c-2 8-2 18 0 26M40 21c2 8 2 18 0 26" fill="none" stroke="#356A1E" stroke-width="2" stroke-linecap="round" opacity=".45" />
+  <ellipse cx="25" cy="28" rx="4" ry="8" transform="rotate(-12 25 28)" fill="#fff" opacity=".25" /></symbol>
+    <symbol id="veg-ginger" viewBox="0 0 64 64"><path d="M22 21c6-6 15-6 19 1 5-3 11-1 12 5 1 5-3 9-8 10 0 6-5 11-11 11s-11-4-12-9c-6 0-10-3-10-8s4-8 10-10z" fill="#E0BE86" stroke="#9C7434" stroke-width="2" stroke-linejoin="round" />
+  <path d="M28 22c-3 4-4 10-2 15M40 26c3 4 3 10 0 14" fill="none" stroke="#C29B58" stroke-width="2" stroke-linecap="round" opacity=".8" />
+  <circle cx="18" cy="34" r="3" fill="#E0BE86" stroke="#9C7434" stroke-width="2" />
+  <circle cx="47" cy="22" r="2.6" fill="#E0BE86" stroke="#9C7434" stroke-width="2" />
+  <ellipse cx="26" cy="26" rx="4" ry="3" transform="rotate(-30 26 26)" fill="#fff" opacity=".3" /></symbol>
+    <symbol id="veg-sweet-potato" viewBox="0 0 64 64"><path d="M12 38c-2-7 4-13 14-16 11-3 23-2 27 4 3 6-2 14-13 17-11 3-26 1-28-5z" fill="#A8546B" stroke="#6E2C40" stroke-width="2" stroke-linejoin="round" />
+  <path d="M48 26c3 1 5 4 4 7" fill="none" stroke="#6E2C40" stroke-width="2" stroke-linecap="round" opacity=".6" />
+  <path d="M22 31c4-2 10-3 15-3M20 41c5 1 12 1 17-1" fill="none" stroke="#8A3F55" stroke-width="2" stroke-linecap="round" opacity=".7" />
+  <ellipse cx="26" cy="27" rx="7" ry="2.6" transform="rotate(-14 26 27)" fill="#fff" opacity=".28" /></symbol>
+    <symbol id="veg-mushroom" viewBox="0 0 64 64"><path d="M25 30h14v14c0 4-3 7-7 7s-7-3-7-7z" fill="#EFE3C8" stroke="#B9AA92" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 12c11 0 20 8 20 18H12c0-10 9-18 20-18z" fill="#A0673C" stroke="#6B3F1E" stroke-width="2" stroke-linejoin="round" />
+  <g fill="#C58A55">
+    <circle cx="24" cy="22" r="2.6" />
+    <circle cx="40" cy="21" r="2.2" />
+    <circle cx="32" cy="26" r="2.4" />
+  </g>
+  <ellipse cx="24" cy="19" rx="6" ry="3" transform="rotate(-25 24 19)" fill="#fff" opacity=".18" /></symbol>
+    <symbol id="veg-broccoli" viewBox="0 0 64 64"><path d="M27 36h10v14c0 3-2 6-5 6s-5-3-5-6z" fill="#C6D9A0" stroke="#8AA05E" stroke-width="2" stroke-linejoin="round" />
+  <g fill="#5E8C3A" stroke="#3F6127" stroke-width="2">
+    <circle cx="24" cy="24" r="9" />
+    <circle cx="40" cy="24" r="9" />
+    <circle cx="32" cy="19" r="10" />
+    <circle cx="19" cy="33" r="8" />
+    <circle cx="45" cy="33" r="8" />
+    <circle cx="32" cy="32" r="10" />
+  </g>
+  <ellipse cx="24" cy="15" rx="5" ry="3" transform="rotate(-25 24 15)" fill="#fff" opacity=".18" /></symbol>
     <symbol id="veg-apple" viewBox="0 0 64 64"><path d="M32 21c-4-5-11-7-16-3-6 5-7 16-3 25 3 7 9 13 14 13 2 0 3-1 5-1s3 1 5 1c5 0 11-6 14-13 4-9 3-20-3-25-5-4-12-2-16 3z" fill="#E2564A" stroke="#A8342B" stroke-width="2" stroke-linejoin="round" />
   <path d="M32 21v-9" stroke="#7B5A3A" stroke-width="2.5" stroke-linecap="round" />
   <path d="M33 15c4-5 11-6 15-4-2 5-9 8-15 6z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
@@ -163,39 +238,183 @@
   <circle cx="43" cy="45" r="11" fill="#C8323C" stroke="#8A1F27" stroke-width="2" />
   <ellipse cx="17" cy="38" rx="2.6" ry="4" transform="rotate(-25 17 38)" fill="#fff" opacity=".3" />
   <ellipse cx="39" cy="40" rx="2.6" ry="4" transform="rotate(-25 39 40)" fill="#fff" opacity=".3" /></symbol>
-    <symbol id="veg-carrot" viewBox="0 0 64 64"><path d="M32 17c-2-6-6-9-11-10 1 6 5 10 11 10zM32 17c2-6 6-9 11-10-1 6-5 10-11 10z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
-  <path d="M32 16v-4" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
-  <path d="M25 17h14l-4.5 34.6c-.4 3-4.6 3-5 0z" fill="#E8802F" stroke="#A85114" stroke-width="2" stroke-linejoin="round" />
-  <path d="M25 26h9M24 35h8M23 44h5.5" fill="none" stroke="#A85114" stroke-width="2" stroke-linecap="round" opacity=".45" />
-  <ellipse cx="29" cy="24" rx="2.4" ry="5" transform="rotate(-4 29 24)" fill="#fff" opacity=".25" /></symbol>
-    <symbol id="veg-eggplant" viewBox="0 0 64 64"><path d="M32 13V7" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
-  <path d="M20 23c2-6 6-10 12-10s10 4 12 10c-4-3-8-4-12-4s-8 1-12 4z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
-  <path d="M32 22c9 0 16 8 16 17s-7 16-16 16-16-7-16-16 7-17 16-17z" fill="#7B4B9E" stroke="#4E2C6B" stroke-width="2" />
-  <path d="M24 30c-3 6-3 14 1 20" fill="none" stroke="#4E2C6B" stroke-width="2" stroke-linecap="round" opacity=".5" />
-  <ellipse cx="27" cy="30" rx="3" ry="6" transform="rotate(-16 27 30)" fill="#fff" opacity=".22" /></symbol>
-    <symbol id="veg-mushroom" viewBox="0 0 64 64"><path d="M25 30h14v14c0 4-3 7-7 7s-7-3-7-7z" fill="#EFE3C8" stroke="#B9AA92" stroke-width="2" stroke-linejoin="round" />
-  <path d="M32 12c11 0 20 8 20 18H12c0-10 9-18 20-18z" fill="#A0673C" stroke="#6B3F1E" stroke-width="2" stroke-linejoin="round" />
-  <g fill="#C58A55">
-    <circle cx="24" cy="22" r="2.6" />
-    <circle cx="40" cy="21" r="2.2" />
-    <circle cx="32" cy="26" r="2.4" />
+    <symbol id="veg-pineapple" viewBox="0 0 64 64"><defs>
+    <clipPath id="pineapple-body"><ellipse cx="32" cy="41" rx="14" ry="17" /></clipPath>
+  </defs>
+  <path d="M32 24c-2-9-6-14-11-16 0 9 5 15 11 16zM32 24c2-9 6-14 11-16 0 9-5 15-11 16zM32 24c-5-7-6-14-3-19 4 5 5 13 3 19z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <ellipse cx="32" cy="41" rx="14" ry="17" fill="#E8B33C" stroke="#A87A1E" stroke-width="2" />
+  <g clip-path="url(#pineapple-body)" stroke="#A87A1E" stroke-width="1.6" opacity=".5">
+    <path d="M14 30l38 26M14 40l38 26M14 50l30 20M14 58l20 14M50 30L12 56M50 40L12 66M50 50l-30 20" />
   </g>
-  <ellipse cx="24" cy="19" rx="6" ry="3" transform="rotate(-25 24 19)" fill="#fff" opacity=".18" /></symbol>
-    <symbol id="veg-broccoli" viewBox="0 0 64 64"><path d="M27 36h10v14c0 3-2 6-5 6s-5-3-5-6z" fill="#C6D9A0" stroke="#8AA05E" stroke-width="2" stroke-linejoin="round" />
-  <g fill="#5E8C3A" stroke="#3F6127" stroke-width="2">
-    <circle cx="24" cy="24" r="9" />
-    <circle cx="40" cy="24" r="9" />
-    <circle cx="32" cy="19" r="10" />
-    <circle cx="19" cy="33" r="8" />
-    <circle cx="45" cy="33" r="8" />
-    <circle cx="32" cy="32" r="10" />
+  <ellipse cx="26" cy="32" rx="4" ry="7" transform="rotate(-16 26 32)" fill="#fff" opacity=".22" /></symbol>
+    <symbol id="veg-mango" viewBox="0 0 64 64"><path d="M23 17c10-6 22-1 24 11 2 12-6 24-17 25-10 1-18-8-17-19 1-8 5-14 10-17z" fill="#F0A03C" stroke="#B06414" stroke-width="2" stroke-linejoin="round" />
+  <path d="M31 17c6 0 11 4 13 9-6-5-14-7-22-4 2-3 5-5 9-5z" fill="#E2564A" opacity=".4" />
+  <path d="M32 14v-6" stroke="#7B5A3A" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M33 11c4-5 10-6 14-4-2 5-8 8-14 6z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <ellipse cx="26" cy="26" rx="5" ry="8" transform="rotate(-25 26 26)" fill="#fff" opacity=".28" /></symbol>
+    <symbol id="veg-kiwi" viewBox="0 0 64 64"><circle cx="32" cy="32" r="21" fill="#8A6A45" stroke="#5E4526" stroke-width="2" />
+  <circle cx="32" cy="32" r="18" fill="#A8C84B" />
+  <circle cx="32" cy="32" r="6.5" fill="#F2F5DC" />
+  <g fill="#3D2B1F">
+    <ellipse cx="32" cy="21" rx="1.1" ry="2" />
+    <ellipse cx="40" cy="24" rx="1.1" ry="2" transform="rotate(40 40 24)" />
+    <ellipse cx="43" cy="32" rx="2" ry="1.1" />
+    <ellipse cx="40" cy="40" rx="1.1" ry="2" transform="rotate(-40 40 40)" />
+    <ellipse cx="32" cy="43" rx="1.1" ry="2" />
+    <ellipse cx="24" cy="40" rx="1.1" ry="2" transform="rotate(40 24 40)" />
+    <ellipse cx="21" cy="32" rx="2" ry="1.1" />
+    <ellipse cx="24" cy="24" rx="1.1" ry="2" transform="rotate(-40 24 24)" />
   </g>
-  <ellipse cx="24" cy="15" rx="5" ry="3" transform="rotate(-25 24 15)" fill="#fff" opacity=".18" /></symbol>
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#fff" stroke-width="1.6" opacity=".18" /></symbol>
+    <symbol id="veg-blueberry" viewBox="0 0 64 64"><path d="M32 18c-3-6-9-9-14-9 2 6 7 10 14 9z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 18v-6" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <g fill="#4A5CA8" stroke="#2C3768" stroke-width="2">
+    <circle cx="22" cy="36" r="12" />
+    <circle cx="42" cy="38" r="11" />
+    <circle cx="33" cy="22" r="10" />
+  </g>
+  <g fill="none" stroke="#8A9AD8" stroke-width="1.8" stroke-linecap="round">
+    <path d="M22 36l-3-3M22 36l3-3M22 36v-4M42 38l-3-3M42 38l3-3M42 38v-4M33 22l-2.5-2.5M33 22l2.5-2.5M33 22v-3.5" />
+  </g>
+  <g fill="#fff" opacity=".22">
+    <ellipse cx="17" cy="31" rx="3" ry="2" transform="rotate(-30 17 31)" />
+    <ellipse cx="38" cy="33" rx="2.6" ry="1.8" transform="rotate(-30 38 33)" />
+  </g></symbol>
+    <symbol id="veg-pomegranate" viewBox="0 0 64 64"><path d="M25 17l-2-9 5 5 4-6 4 6 5-5-2 9z" fill="#A8262E" stroke="#7A161C" stroke-width="2" stroke-linejoin="round" />
+  <circle cx="32" cy="37" r="19" fill="#C8323C" stroke="#8A1F27" stroke-width="2" />
+  <g fill="#E2697A" opacity=".55">
+    <circle cx="25" cy="34" r="2.6" />
+    <circle cx="36" cy="30" r="2.4" />
+    <circle cx="33" cy="43" r="2.6" />
+    <circle cx="42" cy="38" r="2.2" />
+    <circle cx="24" cy="44" r="2.2" />
+  </g>
+  <ellipse cx="23" cy="28" rx="5" ry="7" transform="rotate(-25 23 28)" fill="#fff" opacity=".25" /></symbol>
+    <symbol id="veg-persimmon" viewBox="0 0 64 64"><ellipse cx="32" cy="37" rx="20" ry="16" fill="#EE8A2E" stroke="#A85414" stroke-width="2" />
+  <path d="M32 23c-1-5-4-8-8-9 0 5 3 9 8 9zM32 23c1-5 4-8 8-9 0 5-3 9-8 9zM32 23c-5-2-10-1-13 2 4 2 10 2 13-2zM32 23c5-2 10-1 13 2-4 2-10 2-13-2z" fill="#6E9A45" stroke="#4F7530" stroke-width="1.8" stroke-linejoin="round" />
+  <path d="M32 22v-5" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <ellipse cx="24" cy="31" rx="6" ry="3.4" transform="rotate(-25 24 31)" fill="#fff" opacity=".28" /></symbol>
+    <symbol id="veg-lychee" viewBox="0 0 64 64"><path d="M32 20v-8" stroke="#7B5A3A" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M33 14c4-5 10-6 14-4-2 5-8 8-14 6z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <circle cx="32" cy="38" r="19" fill="#D8404F" stroke="#96202E" stroke-width="2" />
+  <g fill="#E2697A" opacity=".65">
+    <circle cx="24" cy="30" r="2" />
+    <circle cx="34" cy="26" r="1.8" />
+    <circle cx="42" cy="34" r="2" />
+    <circle cx="30" cy="40" r="2" />
+    <circle cx="40" cy="44" r="1.8" />
+    <circle cx="24" cy="45" r="2" />
+    <circle cx="32" cy="51" r="1.8" />
+  </g>
+  <ellipse cx="23" cy="30" rx="5" ry="7" transform="rotate(-25 23 30)" fill="#fff" opacity=".22" /></symbol>
+    <symbol id="veg-dragon-fruit" viewBox="0 0 64 64"><ellipse cx="32" cy="34" rx="16" ry="21" fill="#E2567E" stroke="#A82B52" stroke-width="2" />
+  <g fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round">
+    <path d="M17 22c-5-2-8-6-8-10 5 1 9 5 9 10z" />
+    <path d="M17 36c-6-1-10-4-11-8 6 0 11 3 12 8z" />
+    <path d="M47 22c5-2 8-6 8-10-5 1-9 5-9 10z" />
+    <path d="M47 36c6-1 10-4 11-8-6 0-11 3-12 8z" />
+    <path d="M32 12c-3-4-3-8-1-11 3 3 4 8 1 11z" />
+  </g>
+  <ellipse cx="25" cy="26" rx="4" ry="9" transform="rotate(-14 25 26)" fill="#fff" opacity=".25" /></symbol>
+    <symbol id="veg-bamboo" viewBox="0 0 64 64"><g fill="#8CBF5A" stroke="#4F7530" stroke-width="2">
+    <rect x="12" y="20" width="9" height="38" rx="4" />
+    <rect x="28" y="12" width="10" height="46" rx="5" />
+    <rect x="44" y="26" width="8" height="32" rx="4" />
+  </g>
+  <g fill="none" stroke="#4F7530" stroke-width="2" stroke-linecap="round">
+    <path d="M12 32h9M12 44h9M28 24h10M28 36h10M28 48h10M44 38h8M44 50h8" />
+  </g>
+  <path d="M33 14c2-8 8-12 14-12-1 8-6 13-14 12zM33 20c6-6 13-6 18-2-5 5-12 6-18 2zM32 26c-5-6-12-7-18-4 4 6 12 8 18 4z" fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round" /></symbol>
+    <symbol id="veg-cactus" viewBox="0 0 64 64"><path d="M32 10c4 0 6 3 6 7v7h3c3 0 5 2 5 5v11c0 3-2 5-5 5h-3v8c0 4-2 7-6 7s-6-3-6-7v-8h-3c-3 0-5-2-5-5V29c0-3 2-5 5-5h3v-7c0-4 2-7 6-7z" fill="#5E9A4A" stroke="#356A24" stroke-width="2" stroke-linejoin="round" />
+  <g fill="none" stroke="#2C5420" stroke-width="1.6" stroke-linecap="round" opacity=".7">
+    <path d="M27 24h-2M27 32h-2M27 40h-2M37 24h2M37 32h2M37 40h2M32 44v2M32 52v2M20 30h-2M20 38h-2M44 30h2M44 38h2" />
+  </g>
+  <circle cx="32" cy="8" r="4" fill="#E2567E" stroke="#A82B52" stroke-width="1.8" />
+  <ellipse cx="28" cy="20" rx="2.4" ry="7" transform="rotate(-4 28 20)" fill="#fff" opacity=".2" /></symbol>
+    <symbol id="veg-sunflower" viewBox="0 0 64 64"><g fill="#F2C744" stroke="#B98A1E" stroke-width="2">
+    <ellipse cx="32" cy="9" rx="5" ry="9" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(45 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(90 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(135 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(180 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(225 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(270 32 24)" />
+    <ellipse cx="32" cy="9" rx="5" ry="9" transform="rotate(315 32 24)" />
+  </g>
+  <circle cx="32" cy="24" r="10" fill="#8A5A2B" stroke="#5E3A18" stroke-width="2" />
+  <g fill="#5E3A18" opacity=".6">
+    <circle cx="29" cy="21" r="1.2" />
+    <circle cx="35" cy="22" r="1.2" />
+    <circle cx="31" cy="27" r="1.2" />
+    <circle cx="36" cy="27" r="1.1" />
+    <circle cx="27" cy="26" r="1.1" />
+  </g>
+  <path d="M32 34v22" stroke="#4F7530" stroke-width="3" stroke-linecap="round" />
+  <path d="M32 44c-6-3-11-2-14 2 5 3 11 2 14-2zM32 50c6-3 11-2 14 2-5 3-11 2-14-2z" fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round" /></symbol>
+    <symbol id="veg-clover" viewBox="0 0 64 64"><path d="M32 33c0 10 0 15-1 21" fill="none" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <g fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round">
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" />
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" transform="rotate(120 32 33)" />
+    <path d="M32 33c-6-5-13-8-13-14a6.5 6.5 0 0 1 13-3.5 6.5 6.5 0 0 1 13 3.5c0 6-7 9-13 14z" transform="rotate(240 32 33)" />
+  </g>
+  <circle cx="32" cy="33" r="3" fill="#4F7530" /></symbol>
+    <symbol id="veg-dandelion" viewBox="0 0 64 64"><circle cx="32" cy="22" r="14" fill="#F6F3E4" opacity=".9" />
+  <g stroke="#C9C2A6" stroke-width="1.6" stroke-linecap="round">
+    <path d="M32 22V7M32 22l10.6-10.6M32 22h15M32 22l10.6 10.6M32 22l-10.6-10.6M32 22h-15M32 22l-10.6 10.6M32 22v15" />
+  </g>
+  <g fill="#F6F3E4" stroke="#C9C2A6" stroke-width="1.4">
+    <circle cx="32" cy="6" r="2.4" />
+    <circle cx="43" cy="11" r="2.4" />
+    <circle cx="48" cy="22" r="2.4" />
+    <circle cx="43" cy="33" r="2.4" />
+    <circle cx="21" cy="11" r="2.4" />
+    <circle cx="16" cy="22" r="2.4" />
+    <circle cx="21" cy="33" r="2.4" />
+    <circle cx="32" cy="38" r="2.4" />
+  </g>
+  <path d="M32 38v18" stroke="#6E9A45" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M32 50c-7-3-13-1-16 4 6 2 13 0 16-4z" fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round" /></symbol>
+    <symbol id="veg-fern" viewBox="0 0 64 64"><path d="M31 57C32 44 33 24 34 7" fill="none" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+  <g fill="#6E9A45" stroke="#3F6127" stroke-width="1.6">
+    <ellipse cx="20" cy="50" rx="9" ry="3.4" transform="rotate(-18 20 50)" />
+    <ellipse cx="44" cy="50" rx="9" ry="3.4" transform="rotate(18 44 50)" />
+    <ellipse cx="19" cy="43" rx="9.5" ry="3.4" transform="rotate(-20 19 43)" />
+    <ellipse cx="45" cy="43" rx="9.5" ry="3.4" transform="rotate(20 45 43)" />
+    <ellipse cx="20" cy="36" rx="9" ry="3.2" transform="rotate(-22 20 36)" />
+    <ellipse cx="45" cy="36" rx="9" ry="3.2" transform="rotate(22 45 36)" />
+    <ellipse cx="22" cy="29" rx="8" ry="3" transform="rotate(-24 22 29)" />
+    <ellipse cx="45" cy="29" rx="8" ry="3" transform="rotate(24 45 29)" />
+    <ellipse cx="24" cy="22" rx="7" ry="2.8" transform="rotate(-26 24 22)" />
+    <ellipse cx="44" cy="22" rx="7" ry="2.8" transform="rotate(26 44 22)" />
+    <ellipse cx="27" cy="15" rx="5.5" ry="2.4" transform="rotate(-30 27 15)" />
+    <ellipse cx="42" cy="15" rx="5.5" ry="2.4" transform="rotate(30 42 15)" />
+  </g></symbol>
+    <symbol id="veg-aloe" viewBox="0 0 64 64"><g fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round">
+    <path d="M32 56c-4-12-4-30 0-44 4 14 4 32 0 44z" transform="rotate(-62 32 56)" />
+    <path d="M32 56c-4-12-4-30 0-44 4 14 4 32 0 44z" transform="rotate(62 32 56)" />
+    <path d="M32 56c-4-12-4-30 0-44 4 14 4 32 0 44z" transform="rotate(-32 32 56)" />
+    <path d="M32 56c-4-12-4-30 0-44 4 14 4 32 0 44z" transform="rotate(32 32 56)" />
+    <path d="M32 56c-4-12-4-30 0-44 4 14 4 32 0 44z" />
+  </g>
+  <g fill="none" stroke="#A8CE73" stroke-width="1.6" stroke-linecap="round" opacity=".7">
+    <path d="M32 50V20M22 46l6-20M42 46l-6-20M26 50l4-22M38 50l-4-22" />
+  </g></symbol>
+    <symbol id="veg-sapling" viewBox="0 0 64 64"><path d="M29 57V37h6v20z" fill="#A0673C" stroke="#6B3F1E" stroke-width="2" stroke-linejoin="round" />
+  <g fill="#6E9A45" stroke="#3F6127" stroke-width="2">
+    <circle cx="32" cy="22" r="13" />
+    <circle cx="20" cy="31" r="9" />
+    <circle cx="44" cy="31" r="9" />
+  </g>
+  <g fill="#8CBF5A" opacity=".5">
+    <circle cx="27" cy="17" r="3" />
+    <circle cx="36" cy="22" r="2.4" />
+    <circle cx="19" cy="29" r="2" />
+  </g></symbol>
 </defs></svg>
 
 <script>
 (function () {
-  var DATA = [{"title":"一、站里的 11 样菜","note":"每样菜对应一个窗口（菜名只出现在任务栏提示与「所有项目」里，图标本身不画菜 —— DSH 除外）","items":[{"id":"potato","name":"土豆","app":"关于"},{"id":"pumpkin","name":"南瓜","app":"项目"},{"id":"corn","name":"玉米","app":"博客"},{"id":"tomato","name":"番茄","app":"博客创作"},{"id":"bamboo-shoot","name":"竹笋","app":"技能"},{"id":"grape","name":"葡萄","app":"联系"},{"id":"chili","name":"辣椒","app":"终端"},{"id":"peanut","name":"花生","app":"资产库"},{"id":"garlic","name":"大蒜","app":"设置"},{"id":"onion","name":"洋葱","app":"饥荒 Wiki"},{"id":"celery","name":"芹菜","app":"DSH"}]},{"title":"二、水果","note":"后来加的，和 11 样菜同一套画法","items":[{"id":"apple","name":"苹果","app":null},{"id":"banana","name":"香蕉","app":null},{"id":"orange","name":"橙子","app":null},{"id":"strawberry","name":"草莓","app":null},{"id":"watermelon","name":"西瓜","app":null},{"id":"pear","name":"梨","app":null},{"id":"lemon","name":"柠檬","app":null},{"id":"peach","name":"桃子","app":null},{"id":"cherry","name":"樱桃","app":null}]},{"title":"三、别的常见菜","note":"想要更多（黄瓜 / 白菜 / 菠萝 / 蓝莓…）说一声，照同一套画法加","items":[{"id":"carrot","name":"胡萝卜","app":null},{"id":"eggplant","name":"茄子","app":null},{"id":"mushroom","name":"蘑菇","app":null},{"id":"broccoli","name":"西兰花","app":null}]}]
+  var DATA = [{"title":"一、站里的 11 样菜","note":"每样菜对应一个窗口（菜名只出现在任务栏提示与「所有项目」里，图标本身不画菜 —— DSH 除外）","items":[{"id":"potato","name":"土豆","app":"关于"},{"id":"pumpkin","name":"南瓜","app":"项目"},{"id":"corn","name":"玉米","app":"博客"},{"id":"tomato","name":"番茄","app":"博客创作"},{"id":"bamboo-shoot","name":"竹笋","app":"技能"},{"id":"grape","name":"葡萄","app":"联系"},{"id":"chili","name":"辣椒","app":"终端"},{"id":"peanut","name":"花生","app":"资产库"},{"id":"garlic","name":"大蒜","app":"设置"},{"id":"onion","name":"洋葱","app":"饥荒 Wiki"},{"id":"celery","name":"芹菜","app":"DSH"}]},{"title":"二、蔬菜","note":"土豆那 11 样之外的常见菜；和 11 样菜同一套画法","items":[{"id":"carrot","name":"胡萝卜","app":null},{"id":"eggplant","name":"茄子","app":null},{"id":"cabbage","name":"白菜","app":null},{"id":"cucumber","name":"黄瓜","app":null},{"id":"daikon","name":"白萝卜","app":null},{"id":"spinach","name":"菠菜","app":null},{"id":"peas","name":"豌豆","app":null},{"id":"bell-pepper","name":"青椒","app":null},{"id":"ginger","name":"姜","app":null},{"id":"sweet-potato","name":"红薯","app":null},{"id":"mushroom","name":"蘑菇","app":null},{"id":"broccoli","name":"西兰花","app":null}]},{"title":"三、水果","note":"站里那 11 样里葡萄也算水果，这里不重复列","items":[{"id":"apple","name":"苹果","app":null},{"id":"banana","name":"香蕉","app":null},{"id":"orange","name":"橙子","app":null},{"id":"strawberry","name":"草莓","app":null},{"id":"watermelon","name":"西瓜","app":null},{"id":"pear","name":"梨","app":null},{"id":"lemon","name":"柠檬","app":null},{"id":"peach","name":"桃子","app":null},{"id":"cherry","name":"樱桃","app":null},{"id":"pineapple","name":"菠萝","app":null},{"id":"mango","name":"芒果","app":null},{"id":"kiwi","name":"猕猴桃","app":null},{"id":"blueberry","name":"蓝莓","app":null},{"id":"pomegranate","name":"石榴","app":null},{"id":"persimmon","name":"柿子","app":null},{"id":"lychee","name":"荔枝","app":null},{"id":"dragon-fruit","name":"火龙果","app":null}]},{"title":"四、植物","note":"不是吃的那一类：能当装饰、也能当\"这块地\"的配图","items":[{"id":"bamboo","name":"竹子","app":null},{"id":"cactus","name":"仙人掌","app":null},{"id":"sunflower","name":"向日葵","app":null},{"id":"clover","name":"三叶草","app":null},{"id":"dandelion","name":"蒲公英","app":null},{"id":"fern","name":"蕨","app":null},{"id":"aloe","name":"芦荟","app":null},{"id":"sapling","name":"小树苗","app":null}]}]
   var THEMES = [
     { key: 'caramel', label: 'caramel · 焦糖', surface: '#fff8f0', surface2: '#f7e6d0', edge: '#efd3b0', text: '#3d2b1f', chrome: 'rgba(61,43,31,.82)' },
     { key: 'linen', label: 'linen · 亚麻', surface: '#fbf7ee', surface2: '#f1e8d8', edge: '#dccdb4', text: '#3a3226', chrome: 'rgba(74,63,50,.78)' },

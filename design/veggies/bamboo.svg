@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="竹子">
+  <g fill="#8CBF5A" stroke="#4F7530" stroke-width="2">
+    <rect x="12" y="20" width="9" height="38" rx="4" />
+    <rect x="28" y="12" width="10" height="46" rx="5" />
+    <rect x="44" y="26" width="8" height="32" rx="4" />
+  </g>
+  <g fill="none" stroke="#4F7530" stroke-width="2" stroke-linecap="round">
+    <path d="M12 32h9M12 44h9M28 24h10M28 36h10M28 48h10M44 38h8M44 50h8" />
+  </g>
+  <path d="M33 14c2-8 8-12 14-12-1 8-6 13-14 12zM33 20c6-6 13-6 18-2-5 5-12 6-18 2zM32 26c-5-6-12-7-18-4 4 6 12 8 18 4z" fill="#6E9A45" stroke="#3F6127" stroke-width="2" stroke-linejoin="round" />
+</svg>

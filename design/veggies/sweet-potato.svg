@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="红薯">
+  <path d="M12 38c-2-7 4-13 14-16 11-3 23-2 27 4 3 6-2 14-13 17-11 3-26 1-28-5z" fill="#A8546B" stroke="#6E2C40" stroke-width="2" stroke-linejoin="round" />
+  <path d="M48 26c3 1 5 4 4 7" fill="none" stroke="#6E2C40" stroke-width="2" stroke-linecap="round" opacity=".6" />
+  <path d="M22 31c4-2 10-3 15-3M20 41c5 1 12 1 17-1" fill="none" stroke="#8A3F55" stroke-width="2" stroke-linecap="round" opacity=".7" />
+  <ellipse cx="26" cy="27" rx="7" ry="2.6" transform="rotate(-14 26 27)" fill="#fff" opacity=".28" />
+</svg>
