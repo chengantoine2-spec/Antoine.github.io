@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="竹笋">
+  <!-- 竹笋（技能） -->
+  <path d="M32 8c7 9 11 21 11 30 0 10-5 18-11 18s-11-8-11-18c0-9 4-21 11-30z" fill="#E6D9A0" stroke="#9A8B4E" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 9c3 4 5 8 6 13-4-2-8-2-12 0 1-5 3-9 6-13z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M21 27c7 2 15 2 22 0M20 37c8 2 16 2 24 0M23 46c6 2 12 2 18 0" fill="none" stroke="#9A8B4E" stroke-width="2" stroke-linecap="round" opacity=".75" />
+  <ellipse cx="26" cy="30" rx="3" ry="6" transform="rotate(-10 26 30)" fill="#fff" opacity=".2" />
+</svg>

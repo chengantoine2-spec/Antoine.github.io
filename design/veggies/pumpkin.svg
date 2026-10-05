@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="南瓜">
+  <!-- 南瓜（项目） -->
+  <path d="M32 8c3 0 5 3 5 7v3h-10v-3c0-4 2-7 5-7z" fill="#6E9A45" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <ellipse cx="32" cy="34" rx="22" ry="18" fill="#E07B39" stroke="#A94E14" stroke-width="2" />
+  <path d="M32 16v36M17 21c-5 8-5 22 2 31M47 21c5 8 5 22-2 31" fill="none" stroke="#A94E14" stroke-width="2" stroke-linecap="round" opacity=".5" />
+  <ellipse cx="22" cy="26" rx="6" ry="4" transform="rotate(-30 22 26)" fill="#fff" opacity=".2" />
+</svg>

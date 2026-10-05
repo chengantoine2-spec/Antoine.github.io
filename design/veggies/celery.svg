@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="芹菜">
+  <!-- 芹菜（DSH）· 站名里那一样菜，所以画得比别的细一点：三根带叶的茎 -->
+  <g fill="#A8CE73" stroke="#5F8A37" stroke-width="2" stroke-linejoin="round">
+    <path d="M30 56V23c0-4 1-6 3-6s3 2 3 6v33z" />
+    <path d="M18 56V29c0-4 1-6 3-6s3 2 3 6v27z" />
+    <path d="M40 56V29c0-4 1-6 3-6s3 2 3 6v27z" />
+  </g>
+  <path d="M22 36v16M43 36v16" fill="none" stroke="#D3E8AC" stroke-width="2" stroke-linecap="round" />
+  <path d="M33 17c-2-6-7-10-12-10 1 6 6 11 12 10zM33 17c2-6 7-10 12-10-1 6-6 11-12 10z" fill="#8CBF5A" stroke="#4F7530" stroke-width="2" stroke-linejoin="round" />
+  <path d="M33 18v-8" stroke="#4F7530" stroke-width="2.5" stroke-linecap="round" />
+</svg>

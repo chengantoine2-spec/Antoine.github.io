@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="花生">
+  <!-- 花生（资产库）· 一颗两节的壳 -->
+  <path d="M32 7c8 0 14 5 14 12 0 3-1 5-1 7s1 4 1 7c0 7-6 12-14 12s-14-5-14-12c0-3 1-5 1-7s-1-4-1-7C18 12 24 7 32 7z" fill="#D8B274" stroke="#9C7434" stroke-width="2" stroke-linejoin="round" />
+  <path d="M25 17l3 3M39 17l-3 3M24 43l3-3M40 43l-3-3M32 27l3 3M32 35l-3-3" fill="none" stroke="#9C7434" stroke-width="2" stroke-linecap="round" opacity=".45" />
+  <ellipse cx="25" cy="20" rx="5" ry="3" transform="rotate(-35 25 20)" fill="#fff" opacity=".25" />
+</svg>

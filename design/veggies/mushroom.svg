@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="蘑菇">
+  <path d="M25 30h14v14c0 4-3 7-7 7s-7-3-7-7z" fill="#EFE3C8" stroke="#B9AA92" stroke-width="2" stroke-linejoin="round" />
+  <path d="M32 12c11 0 20 8 20 18H12c0-10 9-18 20-18z" fill="#A0673C" stroke="#6B3F1E" stroke-width="2" stroke-linejoin="round" />
+  <g fill="#C58A55">
+    <circle cx="24" cy="22" r="2.6" />
+    <circle cx="40" cy="21" r="2.2" />
+    <circle cx="32" cy="26" r="2.4" />
+  </g>
+  <ellipse cx="24" cy="19" rx="6" ry="3" transform="rotate(-25 24 19)" fill="#fff" opacity=".18" />
+</svg>

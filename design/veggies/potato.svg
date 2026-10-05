@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="土豆">
+  <!-- 土豆（关于）· 平涂 + 同色系描边 -->
+  <ellipse cx="32" cy="33" rx="21" ry="17" transform="rotate(-8 32 33)" fill="#C89A63" stroke="#8A5F32" stroke-width="2" stroke-linejoin="round" />
+  <path d="M15 24c4-6 11-9 19-9" fill="none" stroke="#A87B45" stroke-width="2" stroke-linecap="round" />
+  <g fill="#8A5F32" opacity=".5">
+    <circle cx="24" cy="28" r="1.7" />
+    <circle cx="39" cy="26" r="1.5" />
+    <circle cx="30" cy="42" r="1.6" />
+    <circle cx="43" cy="38" r="1.4" />
+  </g>
+  <ellipse cx="24" cy="24" rx="6" ry="3.5" transform="rotate(-25 24 24)" fill="#fff" opacity=".22" />
+</svg>
