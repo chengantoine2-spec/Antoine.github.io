@@ -881,6 +881,23 @@
 .dock__view--v {
   clip-path: inset(0 -999px 0 -999px);
 }
+/* 放大原点：**贴在栏那一侧的边上** → 2× 的图标把整个增量都长到栏外（macOS 那种"从栏里长出来"），
+   而贴栏那条边**原地不动**。
+   ⚠️ 别改回默认的 `center`（对称放大）：那样只有半个增量露在栏外（实测凸出只有 13px），
+   站主 2026-10-05 明确要更大的凸出量，所以按停靠方向给原点。
+   ⚠️ 左右两条别写反：**左**栏的图标往**右**长（贴屏幕边的是左边 → 原点 `left`），右栏往左长（原点 `right`）。 */
+[data-dock-pos='bottom'] .dock__item {
+  transform-origin: center bottom;
+}
+[data-dock-pos='top'] .dock__item {
+  transform-origin: center top;
+}
+[data-dock-pos='left'] .dock__item {
+  transform-origin: left center;
+}
+[data-dock-pos='right'] .dock__item {
+  transform-origin: right center;
+}
 .dock__track {
   display: flex;
   flex-wrap: nowrap;

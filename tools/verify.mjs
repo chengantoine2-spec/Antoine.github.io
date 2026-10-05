@@ -1121,6 +1121,23 @@ async function run() {
           const hit = document.elementFromPoint(r.x + r.width / 2, bar.getBoundingClientRect().top - 4)
           return !!hit && (el === hit || el.contains(hit))
         })(),
+        /* 贴栏那条边**原地不动**：把 transform 摘掉量一次（布局盒）、再装回去量一次（渲染盒）——
+           同一个 evaluate 里同步做完，不触发绘制，所以不会闪。
+           底栏贴栏的是**下边**（默认几何就是底栏）。对称放大的话这条边会往栏里沉半个增量。 */
+        edge: (() => {
+          const el = primary.find((b) => b.dataset.dockItem === byDistance[0]?.id)
+          if (!el) return { drift: 999, grew: 0, baseH: 0 }
+          const saved = el.style.transform
+          el.style.transform = ''
+          const base = el.getBoundingClientRect()
+          el.style.transform = saved
+          const cur = el.getBoundingClientRect()
+          return {
+            drift: Number(Math.abs(cur.bottom - base.bottom).toFixed(1)),
+            grew: Number((cur.height - base.height).toFixed(1)),
+            baseH: Math.round(base.height),
+          }
+        })(),
         mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
       }
     }, DOCK)
@@ -1183,9 +1200,18 @@ async function run() {
   /* 允许凸出（站主："中间扩大的图标允许溢出，一种凸出任务栏的夸张感"）：
      不是把裁剪框撑大把 2× 装进去，而是图标从栏边凸出来。 */
   check(
-    '放大的中心图标凸出任务栏（底栏：图标顶边高于栏顶边），凸出来那一截真的看得见、不被容器裁',
-    wheel0.protrude > 6 && wheel0.protrudeHit,
-    JSON.stringify({ 凸出量: wheel0.protrude, 凸出处命中图标: wheel0.protrudeHit }),
+    '放大的中心图标凸出任务栏 ≥ 整个放大增量（不是对称放大的一半），且贴栏那条边原地不动（≤2px）',
+    wheel0.protrude >= 0.75 * wheel0.edge.baseH &&
+      wheel0.edge.grew > 4 &&
+      wheel0.edge.drift <= 2 &&
+      wheel0.protrudeHit,
+    JSON.stringify({
+      凸出量: wheel0.protrude,
+      图标边长: wheel0.edge.baseH,
+      放大后长高: wheel0.edge.grew,
+      贴栏边漂移: wheel0.edge.drift,
+      凸出处命中图标: wheel0.protrudeHit,
+    }),
   )
   check(
     '图标区只裁主轴（clip-path ≠ none）：可视区左右两侧外面的点命不中任何图标（循环的第二份仍藏着）',
@@ -1677,7 +1703,12 @@ async function run() {
       clock.illum <= 100 &&
       (clock.moon !== '满月' || clock.illum >= 95) &&
       (clock.moon !== '新月' || clock.illum <= 5) &&
-      (!['上弦月', '下弦月'].includes(clock.moon) || Math.abs(clock.illum - 50) <= 13),
+      /* 四分之一相（上/下弦）的照亮区间是**推导出来的**，不是拍的：
+         八相各占 45°（±22.5°，即相角 67.5°~112.5°），照亮 = (1 − cosθ)/2
+         → 0.309 ~ 0.691，也就是 50% ± 19。原来写 ±13 会在真实月亮走到 36%~37% 时
+         无端判红（2026-10-05 实测就红在这 1 个百分点上，而且只跟当天日期有关）。
+         ⚠️ 别再收窄回去；要更严就改成按相位角判定，别用照亮百分比卡。 */
+      (!['上弦月', '下弦月'].includes(clock.moon) || Math.abs(clock.illum - 50) <= 19),
     JSON.stringify({ moon: clock?.moon, illum: clock?.illum }),
   )
 

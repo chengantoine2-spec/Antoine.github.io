@@ -793,6 +793,9 @@ export function Dock() {
         <div
           ref={viewEl}
           data-dock-view=""
+          /* 停靠方向挂在这儿，给 CSS 用来设放大原点（`globals.css` 里 `[data-dock-pos]` 那几条）：
+             原点贴在**栏那一侧**的边上，2× 的图标就把整个增量都长到栏外（见那几条的注释） */
+          data-dock-pos={position}
           onPointerDown={wheelDown}
           onPointerMove={wheelMove}
           onPointerUp={wheelUp}
