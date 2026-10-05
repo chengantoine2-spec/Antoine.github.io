@@ -1,6 +1,10 @@
 /** 标题栏的「最大化 / 还原」。
     用矢量而不是 □ 字形：字形里没有可靠的"两个叠起来的方块"，而且矢量能跟着
-    text-dim / hover:text-ink 走，不写死颜色。 */
+    text-dim / hover:text-ink 走，不写死颜色。
+
+    ⚠️ 走 12 网格 / 线宽 1.2（和 FullscreenGlyph、PositionGlyph 一套），圆头圆角。
+    ⚠️ **还原态必须是两个图形**：verify.mjs 会数 `svg rect, svg path` 的个数并断言 = 2，
+       别改成三个（比如"两个方块 + 一条线"）。 */
 export function MaximizeGlyph({
   maximized,
   className = 'h-3 w-3',
@@ -17,6 +21,8 @@ export function MaximizeGlyph({
       fill="none"
       stroke="currentColor"
       strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
       {maximized ? (
         <>

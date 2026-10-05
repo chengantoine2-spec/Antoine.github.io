@@ -1,4 +1,8 @@
-/** 浏览器全屏 / 退出全屏：四角朝外 = 进全屏，四角朝内 = 退出（一眼能看出当前状态） */
+/** 浏览器全屏 / 退出全屏：四角朝外 = 进全屏，四角朝内 = 退出（一眼能看出当前状态）。
+    和 MaximizeGlyph、PositionGlyph 一套：**12 网格 / 线宽 1.2 / 圆头圆角**。
+
+    ⚠️ 四个角之间的空隙是 2.4 格，别收到 2 格以内：16px 下线宽折合 1.6px，
+       空隙小于线宽时四个角会糊成一个十字（"已全屏"就认不出来了）。 */
 export function FullscreenGlyph({
   on,
   className = 'h-1/2 w-1/2',
@@ -20,17 +24,17 @@ export function FullscreenGlyph({
     >
       {on ? (
         <>
-          <path d="M5 1.5V5H1.5" />
-          <path d="M7 1.5V5h3.5" />
-          <path d="M5 10.5V7H1.5" />
-          <path d="M7 10.5V7h3.5" />
+          <path d="M4.8 1.5V4.8H1.5" />
+          <path d="M7.2 1.5V4.8H10.5" />
+          <path d="M4.8 10.5V7.2H1.5" />
+          <path d="M7.2 10.5V7.2H10.5" />
         </>
       ) : (
         <>
-          <path d="M1.5 5V1.5H5" />
-          <path d="M10.5 5V1.5H7" />
-          <path d="M1.5 7v3.5H5" />
-          <path d="M10.5 7v3.5H7" />
+          <path d="M1.5 4.8V1.5H4.8" />
+          <path d="M10.5 4.8V1.5H7.2" />
+          <path d="M1.5 7.2v3.3H4.8" />
+          <path d="M10.5 7.2v3.3H7.2" />
         </>
       )}
     </svg>

@@ -1,11 +1,13 @@
 import { iconBase, type IconProps } from './base'
 
-/** 设置：齿轮（现在是"圆 + 八根辐条"的简写） */
+/** 设置：六角螺母（六边形 + 中心孔）。
+    原来是「圆 + 八根辐条」的简写齿轮 —— 八根只有 1.5 格长的小短线在 16px 下糊成一圈光晕，
+    是全套里最花的一张。换成两只元素，形状在小尺寸也立得住 */
 export function SettingsIcon({ className }: IconProps) {
   return (
     <svg {...iconBase(className)}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" />
+      <path d="M12 3.6 20 8v8l-8 4.4L4 16V8z" />
+      <circle cx="12" cy="12" r="2.7" />
     </svg>
   )
 }

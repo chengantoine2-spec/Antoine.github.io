@@ -1,11 +1,11 @@
 import { iconBase, type IconProps } from './base'
 
-/** 饥荒 Wiki：一本摊开的书 */
+/** 饥荒 Wiki：一本摊开的书（书脊 + 两页） */
 export function WikiIcon({ className }: IconProps) {
   return (
     <svg {...iconBase(className)}>
-      <path d="M12 7.4C10.6 6.1 8.7 5.4 6.5 5.4H4v12.2h2.5c2.2 0 4.1.7 5.5 2 1.4-1.3 3.3-2 5.5-2H20V5.4h-2.5c-2.2 0-4.1.7-5.5 2z" />
-      <path d="M12 7.4v12.2" />
+      <path d="M12 7.2C10.7 6 8.8 5.4 6.6 5.4H4.2v12.4h2.4c2.2 0 4.1.6 5.4 1.8 1.3-1.2 3.2-1.8 5.4-1.8h2.4V5.4h-2.4c-2.2 0-4.1.6-5.4 1.8z" />
+      <path d="M12 7.2v12.4" />
     </svg>
   )
 }

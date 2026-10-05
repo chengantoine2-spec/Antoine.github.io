@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 资产库：一个等轴箱子。比现状多一根"前棱"（12,12.1 → 12,20.1）——
+       少了它这图在 16px 下只是个六边形，补上才是一只有盖有棱的箱子 -->
+  <path d="M12 3.9 20.5 8v7.9L12 20.1 3.5 15.9V8z" />
+  <path d="M3.5 8 12 12.1 20.5 8" />
+  <path d="M12 12.1v8" />
+</svg>

@@ -1,11 +1,11 @@
 import { iconBase, type IconProps } from './base'
 
-/** 关于：一个人像（窗口里讲的是"这是谁"） */
+/** 关于：胸像 —— 头 + 整半圆肩线，重心落在 12 上（别改成两段折线，16px 会散） */
 export function AboutIcon({ className }: IconProps) {
   return (
     <svg {...iconBase(className)}>
-      <circle cx="12" cy="8" r="3.2" />
-      <path d="M5 20c0-3.3 3.1-5.4 7-5.4s7 2.1 7 5.4" />
+      <circle cx="12" cy="7.8" r="3.3" />
+      <path d="M5.4 19.8A6.6 6.6 0 0 1 18.6 19.8" />
     </svg>
   )
 }

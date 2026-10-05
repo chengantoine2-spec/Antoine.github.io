@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 设置：六角螺母（原来是"圆 + 八根辐条"，八根 1.5 格的小短线在 16px 下糊成一圈光晕）。
+       换成两只元素：六边形 + 中心孔 —— 墨量回到队里，形状在 16px 也立得住 -->
+  <path d="M12 3.6 20 8v8l-8 4.4L4 16V8z" />
+  <circle cx="12" cy="12" r="2.7" />
+</svg>
