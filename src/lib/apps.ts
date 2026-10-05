@@ -141,3 +141,31 @@ export function matchApp(pathname: string): AppDef | undefined {
   if (app.localOnly && !IS_LOCAL_HOST) return undefined
   return app
 }
+
+export interface WindowRoute {
+  app: AppDef
+  /** 子页面参数：`/blog/17` → `'17'`；应用根就是 undefined */
+  param?: string
+}
+
+/** 路径 → 窗口 + 子页面参数。桌面同时开着多个窗口时，**路由只表示当前聚焦的那个**，
+    窗口里到底渲染什么交给 `components/program/views.tsx`。 */
+export function matchWindowRoute(pathname: string): WindowRoute | undefined {
+  if (pathname === '/') return undefined
+  /* 路径长的先匹配，免得以后出现 /blog 与 /blog/draft 这种前缀关系时抢错 */
+  const apps = [...visibleApps()].sort((a, b) => b.path.length - a.path.length)
+  for (const app of apps) {
+    if (pathname === app.path) return { app }
+    if (pathname.startsWith(`${app.path}/`)) {
+      const param = pathname.slice(app.path.length + 1).replace(/\/+$/, '')
+      if (param) return { app, param }
+    }
+  }
+  return undefined
+}
+
+/** 窗口 → 它的地址（点任务栏 / 点标签 / 进详情都走这里；URL 始终跟着当前聚焦的窗口） */
+export function pathOf(id: AppId, param?: string): string {
+  const app = getApp(id)
+  return param ? `${app.path}/${param}` : app.path
+}

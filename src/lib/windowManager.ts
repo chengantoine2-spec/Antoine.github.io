@@ -52,10 +52,11 @@ export function windowReducer(state: DesktopState, action: WindowAction): Deskto
       const exist = state.windows.find((w) => w.id === action.id)
       const z = state.topZ + 1
       if (exist) {
+        /* 已经开着：抬到最上面、取消最小化，并把页面切到目标子页面 */
         return {
           topZ: z,
           windows: state.windows.map((w) =>
-            w.id === action.id ? { ...w, minimized: false, z } : w,
+            w.id === action.id ? { ...w, minimized: false, z, param: action.param } : w,
           ),
         }
       }
@@ -63,9 +64,18 @@ export function windowReducer(state: DesktopState, action: WindowAction): Deskto
       const spot = action.geometry
         ? clampGeometry(action.geometry, action.bounds)
         : centerSpot(action.bounds, action.size)
-      const win: WindowState = { id: action.id, ...spot, z, minimized: false }
+      const win: WindowState = {
+        id: action.id,
+        ...spot,
+        z,
+        minimized: false,
+        param: action.param,
+      }
       return { topZ: z, windows: [...state.windows, win] }
     }
+
+    case 'setParam':
+      return update(state, action.id, (w) => ({ ...w, param: action.param }))
 
     case 'focus': {
       const z = state.topZ + 1

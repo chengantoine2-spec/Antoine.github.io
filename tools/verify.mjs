@@ -845,8 +845,17 @@ async function run() {
       pressed: btn?.getAttribute('aria-pressed') === 'true',
       isMax: (win?.className ?? '').includes('window--max'),
       shapes: btn ? btn.querySelectorAll('svg rect, svg path').length : 0,
-      fillsViewport:
-        !!w && Math.round(w.width) === window.innerWidth && Math.round(w.height) === window.innerHeight,
+      /* 标签栏占掉顶上那一条（它是切换窗口的唯一入口，不能被盖住），其余照旧铺满视口 */
+      fillsViewport: (() => {
+        if (!w) return false
+        const bar = document.querySelector('[data-tabs]')
+        const band = bar ? Math.round(bar.getBoundingClientRect().height) : 0
+        return (
+          Math.round(w.width) === window.innerWidth &&
+          Math.round(w.top) === band &&
+          Math.round(w.height) === window.innerHeight - band
+        )
+      })(),
       coversDock: !!w && !!d && w.top <= d.top && w.bottom >= d.bottom && w.left <= d.left && w.right >= d.right,
       dockOnTop: !!dock && !!hit && dock.contains(hit),
     }
@@ -876,6 +885,10 @@ async function run() {
 
   // 13 终端窗口：真命令要本机跑 tools/term-server.mjs，所以这里只保证 UI 在、
   //    状态如实（服务在线 / 未运行）。走「所有项目」菜单打开 —— 任务栏里可能没勾选它
+  /* 桌面能同时开好几个窗口了，这里先清场：不然别的窗口里同名的拖动条 / 按钮
+     会被全局选择器一起选中（'.width-handle[data-side="left"]' 就踩过） */
+  await closeAllWindows()
+  await p.waitForTimeout(200)
   await p.click(`${DOCK} button[aria-label="所有项目"]`)
   await p.waitForTimeout(250)
   await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("终端")')
@@ -899,6 +912,10 @@ async function run() {
 
   // 13b 饥荒 Wiki 窗口：内容是 wiki 负责人的，这里只保证外壳能开、
   //     搜索 / 分类 / 条目都渲染出来（外壳属于主管的职责范围）
+  /* 同样先清场：Wiki 的栏宽拖动条和博客文章页那两条是同一套 DOM（.width-handle），
+     两个窗口一起开着时全局选择器会一次选中 4 个 */
+  await closeAllWindows()
+  await p.waitForTimeout(200)
   await p.click(`${DOCK} button[aria-label="所有项目"]`)
   await p.waitForTimeout(250)
   await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("饥荒 Wiki")')
@@ -1275,6 +1292,158 @@ async function run() {
       fullMoon: `${eclipseFull.moon} ${eclipseFull.illum}%`,
     }),
   )
+
+  /* 关掉所有开着的窗口：用**程序化 click**，免得被压在上面的窗口挡住点不到 */
+  async function closeAllWindows() {
+    for (let i = 0; i < 15; i += 1) {
+      const left = await p.evaluate(() => {
+        const btn = document.querySelector(
+          '[data-window-slot] section[aria-label$="窗口"] header button[aria-label="关闭"]',
+        )
+        if (!btn) return 0
+        btn.click()
+        return document.querySelectorAll('[data-window-slot] section[aria-label$="窗口"]').length
+      })
+      if (!left) return
+      await p.waitForTimeout(120)
+    }
+  }
+
+  // 16 多窗口：桌面能同时开好几个窗口（可叠加），像浏览器那样用标签栏切换
+  //    用户 2026-10-05：「窗口要可以叠加，可以同时打开多个窗口，显示方式像浏览器一样」
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.evaluate(() => {
+    localStorage.removeItem('desktop.openWindows')
+    localStorage.removeItem('desktop.windows')
+    localStorage.removeItem('desktop.tabs')
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(700)
+
+  await p.click(`${DOCK} button[aria-label="关于"]`)
+  await p.waitForTimeout(300)
+  await p.click(`${DOCK} button[aria-label="博客"]`)
+  await p.waitForTimeout(400)
+  const multi = await p.evaluate(() => {
+    const slots = [...document.querySelectorAll('[data-window-slot]')].map((s) => ({
+      id: s.dataset.windowSlot,
+      hidden: s.className.includes('hidden'),
+    }))
+    const tabs = [...document.querySelectorAll('[data-tab]')].map((t) => ({
+      id: t.dataset.tab,
+      active: t.dataset.active === 'true',
+    }))
+    const wins = [...document.querySelectorAll('[data-window-slot] section[aria-label$="窗口"]')].map(
+      (w) => ({ label: w.getAttribute('aria-label'), z: Number(w.style.zIndex) }),
+    )
+    return {
+      slots,
+      tabs,
+      wins,
+      path: location.pathname,
+      bar: !!document.querySelector('[data-tabs="top"]'),
+    }
+  })
+  check(
+    '同时开着两个窗口（叠着放），标签栏里一条一个',
+    multi.slots.length === 2 &&
+      multi.slots.every((s) => !s.hidden) &&
+      multi.wins.some((w) => w.label === '关于 窗口') &&
+      multi.wins.some((w) => w.label === '博客 窗口') &&
+      multi.tabs.length === 2 &&
+      multi.tabs.filter((t) => t.active).length === 1 &&
+      multi.tabs.find((t) => t.active)?.id === 'blog' &&
+      multi.bar &&
+      multi.path === '/blog',
+    JSON.stringify(multi),
+  )
+
+  await p.click('[data-tab="about"] button')
+  await p.waitForTimeout(400)
+  const switched = await p.evaluate(() => {
+    const zOf = (id) =>
+      Number(document.querySelector(`[data-window-slot="${id}"] section`).style.zIndex)
+    const el = document.querySelector('[data-window-slot="about"] section')
+    const r = el.getBoundingClientRect()
+    /* 命中测试：标题栏中间那点上最顶层的元素是不是这个窗口 —— 证明它真的在上面 */
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + 10)
+    return {
+      zAbout: zOf('about'),
+      zBlog: zOf('blog'),
+      activeTab: document.querySelector('[data-tab][data-active="true"]')?.dataset.tab ?? '',
+      path: location.pathname,
+      onTop: el.contains(top),
+    }
+  })
+  check(
+    '点标签切窗口：它抬到最上面，URL 跟着它',
+    switched.zAbout > switched.zBlog &&
+      switched.activeTab === 'about' &&
+      switched.path === '/about' &&
+      switched.onTop,
+    JSON.stringify(switched),
+  )
+
+  await p.click('[data-tab="about"] button[aria-label^="关闭"]')
+  await p.waitForTimeout(400)
+  const closedTab = await p.evaluate(() => ({
+    slots: document.querySelectorAll('[data-window-slot]').length,
+    tabs: document.querySelectorAll('[data-tab]').length,
+    path: location.pathname,
+  }))
+  check(
+    '关掉当前窗口：焦点交给剩下的那个，URL 跟着走',
+    closedTab.slots === 1 && closedTab.tabs === 1 && closedTab.path === '/blog',
+    JSON.stringify(closedTab),
+  )
+
+  // 刷新后把上次开着的窗口都开回来（像浏览器恢复标签页）
+  await p.click(`${DOCK} button[aria-label="设置"]`)
+  await p.waitForTimeout(400)
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
+  const session = await p.evaluate(() => ({
+    ids: [...document.querySelectorAll('[data-window-slot]')].map((s) => s.dataset.windowSlot),
+    tabs: document.querySelectorAll('[data-tab]').length,
+    path: location.pathname,
+  }))
+  check(
+    '刷新后把上次开着的窗口都开回来',
+    session.ids.length === 2 &&
+      session.ids.includes('blog') &&
+      session.ids.includes('settings') &&
+      session.tabs === 2,
+    JSON.stringify(session),
+  )
+
+  // 标签栏位置：切到左侧要真的让出一条（窗口层跟着让位），再切回顶部
+  await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：左侧"]')
+  await p.waitForTimeout(500)
+  const tabsLeft = await p.evaluate(() => {
+    const bar = document.querySelector('[data-tabs]')
+    const layer = document.querySelector('.desktop__layer')
+    const b = bar?.getBoundingClientRect()
+    const l = layer?.getBoundingClientRect()
+    return {
+      pos: bar?.dataset.tabs ?? '',
+      barW: Math.round(b?.width ?? 0),
+      barLeft: Math.round(b?.left ?? 0),
+      layerLeft: Math.round(l?.left ?? 0),
+    }
+  })
+  check(
+    '标签栏能移到左侧：左边让出一条，窗口层跟着让位',
+    tabsLeft.pos === 'left' &&
+      tabsLeft.barLeft === 0 &&
+      tabsLeft.barW > 120 &&
+      tabsLeft.layerLeft >= tabsLeft.barW,
+    JSON.stringify(tabsLeft),
+  )
+  await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：顶部"]')
+  await p.waitForTimeout(300)
+
+  await closeAllWindows()
+  await p.waitForTimeout(300)
 
   // 15 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))

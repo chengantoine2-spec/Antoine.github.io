@@ -16,6 +16,8 @@ import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import type { DockPosition } from '../../types/desktop'
 import { PositionGlyph } from '../icons'
+import { TAB_LABEL, TAB_POSITIONS } from '../../lib/tabs'
+import { useTabs } from '../../hooks/useTabs'
 import { FullscreenButton } from '../desktop/FullscreenButton'
 
 const POSITION_LABEL: Record<DockPosition, string> = {
@@ -94,6 +96,7 @@ export function SettingsWindow() {
     setWallpaperDim,
     resetAppearance,
   } = useAppearance()
+  const { position: tabPosition, setPosition: setTabPosition } = useTabs()
   const {
     position,
     length,
@@ -189,6 +192,34 @@ export function SettingsWindow() {
             </button>
           ))}
         </div>
+      </Section>
+
+      <Section
+        title="窗口标签栏"
+        hint="桌面可以同时开好几个窗口；这里选标签栏放哪儿（像浏览器的标签页）"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {TAB_POSITIONS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              aria-label={`窗口标签栏：${TAB_LABEL[item]}`}
+              aria-pressed={tabPosition === item}
+              onClick={() => setTabPosition(item)}
+              className={`rounded border px-3 py-1.5 text-xs ${
+                tabPosition === item
+                  ? 'border-accent bg-accent text-accent-ink'
+                  : 'border-edge text-ink hover:bg-hover'
+              }`}
+            >
+              {TAB_LABEL[item]}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-dim">
+          当前位置：{TAB_LABEL[tabPosition]}｜点标签切窗口，× 关掉那个窗口；
+          关掉窗口不丢内容，最小化也保留窗口本身。
+        </p>
       </Section>
 
       <Section title="任务栏位置">

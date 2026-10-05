@@ -1,5 +1,5 @@
 import { Suspense, lazy, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useArticleWidth } from '../../hooks/useArticleWidth'
 import { useBlogFeed } from '../../hooks/useBlogFeed'
 import { useWindowTitle } from '../../hooks/useWindowTitle'
@@ -21,12 +21,14 @@ const CATEGORY_NAME = new Map<string, string>(CATEGORIES.map((item) => [item.id,
  * 正文列宽还能拖：左右两条白色长条就是 DSH 会话页那两条的复刻
  * （拖动条在 components/program/WidthHandle.tsx，几何在 lib/readingWidth.ts）。
  * 拖过之后列宽写 localStorage，窄栏位置不变、正文只在中间变宽；双击手柄回到 88ch。
+ *
+ * ⚠️ 文章 id 从 props 来（不再是 useParams）：桌面能同时开多个窗口，
+ * 路由只表示"当前聚焦的那个窗口"，各窗口的页面由窗口自己带着。
  */
-export function BlogDetailWindow() {
-  const { id } = useParams<{ id: string }>()
+export function BlogDetailWindow({ id }: { id?: number }) {
   const navigate = useNavigate()
   const { feed, loading } = useBlogFeed()
-  const post = feed?.posts.find((item) => String(item.id) === id)
+  const post = feed?.posts.find((item) => item.id === id)
   const { gridRef, handlesVisible, handles } = useArticleWidth()
 
   useWindowTitle(post?.title ?? '文章')

@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
 import { AppearanceProvider } from './hooks/useAppearance'
 import { DockProvider } from './hooks/useDock'
+import { TabsProvider } from './hooks/useTabs'
 import { WindowsProvider } from './hooks/useWindows'
 import './styles/tokens.css'
 import './styles/globals.css'
@@ -15,9 +16,11 @@ createRoot(container).render(
   <StrictMode>
     <AppearanceProvider>
       <DockProvider>
-        <WindowsProvider>
-          <RouterProvider router={router} />
-        </WindowsProvider>
+        <TabsProvider>
+          <WindowsProvider>
+            <RouterProvider router={router} />
+          </WindowsProvider>
+        </TabsProvider>
       </DockProvider>
     </AppearanceProvider>
   </StrictMode>,

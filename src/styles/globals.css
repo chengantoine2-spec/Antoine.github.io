@@ -220,10 +220,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 窗口层：平时躲开任务栏（靠 inset），并自成层叠上下文，窗口之间只比各自的 z 就行 */
+/* 窗口层：平时躲开任务栏（靠 inset）与标签栏（--tabs-*），并自成层叠上下文，窗口之间只比各自的 z 就行 */
 .desktop__layer {
   position: absolute;
-  inset: var(--inset-top) var(--inset-right) var(--inset-bottom) var(--inset-left);
+  inset: calc(var(--inset-top) + var(--tabs-top, 0px)) var(--inset-right) var(--inset-bottom)
+    calc(var(--inset-left) + var(--tabs-left, 0px));
   z-index: 10;
 }
 
@@ -681,13 +682,16 @@
 /* 最大化：铺满**整个视口**，连任务栏那块一起盖住。
    所以必须用 fixed —— 窗口层的 inset 本来就给任务栏让了位，在里面用绝对定位
    只能铺满"让位之后"的那块区域（表现就是底部留一条任务栏）。
-   fixed 的包含块是视口，不受窗口层 inset 影响；width/height 的 100% 也就是视口尺寸。 */
+   fixed 的包含块是视口，不受窗口层 inset 影响；width/height 的 100% 也就是视口尺寸。
+
+   唯一让位的是**标签栏**：它是切换窗口的唯一入口，被盖住就没法切了
+   （任务栏同样会被盖住，所以不能只靠任务栏）。--tabs-* 由标签栏设置写进桌面根节点。 */
 .window--max {
   position: fixed;
-  left: 0 !important;
-  top: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
+  left: var(--tabs-left, 0px) !important;
+  top: var(--tabs-top, 0px) !important;
+  width: calc(100% - var(--tabs-left, 0px)) !important;
+  height: calc(100% - var(--tabs-top, 0px)) !important;
   border-radius: 0;
 }
 

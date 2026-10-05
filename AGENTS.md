@@ -35,6 +35,27 @@
   右栏断点别写成 960 —— 博客窗口默认 1000 宽，扣掉内边距只剩 958，卡在 960 上就永远看不到右栏。
   目录 id 由标题文字推导（`lib/toc.ts`），`Markdown.tsx` 给 h2/h3 挂同一个 id，两边不共享计数器
 - 窗口标题栏是 `– □ ×`：最小化 / 最大化（铺满视口，含任务栏）/ 关闭
+- **桌面能同时开好几个窗口**（2026-10-05，用户要求"可叠加、像浏览器一样用标签栏切换"）：
+  - 窗口列表（`useWindows` 的 `windows[]` + z 序）是唯一事实来源；**路由只表示当前聚焦的那个窗口**
+    （`/blog` 打开并聚焦博客窗口、`/blog/17` 还会把它的子页面切到第 17 篇）。深链、刷新、前进后退照旧
+  - 窗口内容从 `components/program/views.tsx` 的登记表拿（**不再靠 `<Outlet />`** ——
+    一个 Outlet 装不下多窗口）；`router.tsx` 里的子路由是空壳，只负责"让路径匹配得到"
+  - **标签栏** `components/desktop/WindowTabs.tsx`：一条标签 = 一个开着的窗口，点=聚焦、×=关掉，
+    高亮=当前窗口，最小化的淡一点。位置在设置里切（`desktop.tabs`：顶部 / 左侧 / 不显示，默认顶部），
+    由 `lib/tabs.ts` + `hooks/useTabs.tsx` 管
+  - 标签栏占掉的那一条写进 CSS 变量 `--tabs-top` / `--tabs-left`：`.desktop__layer` 的 inset 与
+    `.window--max` 都按它让位。⚠️ **最大化现在只让标签栏、仍然盖住任务栏** ——
+    标签栏是切窗口的唯一入口，被盖住就切不动了（任务栏同样会被最大化盖住）
+  - 标签栏 z 是 70（最大化窗口层 60、任务栏 50），所以它永远在最上面
+  - **最小化 = `display:none`，不卸载窗口**：滚动位置、加载好的数据都留着，点任务栏 / 标签就回来
+  - 关掉当前聚焦的窗口 → 焦点交给剩下最上面那个（URL 跟着走）；一个不剩就回桌面 `/`
+  - 刷新后恢复上次开着的窗口（`desktop.openWindows`，顺序 = 标签栏顺序）
+  - ⚠️ 详情页（`BlogDetailWindow` / `ProjectDetailWindow`）的参数**从 props 来**（`param`），
+    不再用 `useParams` —— 一个窗口可以停在任意一页，而路由只代表当前窗口
+  - ⚠️ 多窗口后，验证脚本里**全局选择器会串窗口**：`.width-handle[data-side="left"]` 同时命中
+    博客文章页与 Wiki 的两条（一次选中 4 个，Playwright 直接报 strict mode violation）。
+    `verify.mjs` 里备了 `closeAllWindows()`（程序化点关闭，不受遮挡影响），
+    进入"只看某一个窗口"的小节前先清场
 - 任务栏图标边长：设置里 6 档（跟随厚度 / 32 / 40 / 48 / 56 / 64）。「跟随厚度」时自动值上限 64
   （`Dock.tsx` 的 `BTN_MAX`），再厚就折成最多 3 行；手选的档位会被 clamp 到 32~64。
   **拖长或加厚之后图标组必须居中**：bar 用 `justify-center`；滚动视口里再套一层用 `m-auto`
@@ -230,11 +251,11 @@ npm run typecheck    # 只做类型检查
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位）、`Window`（窗口框）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
+| `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位+多窗口+路由对齐）、`Window`（窗口框）、`WindowTabs`（标签栏）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
 | `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归图标设计负责人** |
-| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条） |
-| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
-| `src/lib/` | `apps`（窗口登记表 + `visibleApps()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何持久化） |
+| `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条），以及 **`views.tsx`＝「窗口 id → 装什么」的登记表** |
+| `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useTabs`（标签栏位置）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
+| `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`tabs`（标签栏位置与占位尺寸，`desktop.tabs`）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化） |
 | `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
@@ -248,8 +269,11 @@ npm run typecheck    # 只做类型检查
 
 1. `src/lib/apps.ts` 登记一行：`id / name / path / source / icon`，需要更大窗口再加 `defaultSize`
 2. `src/components/program/<名字>Window.tsx` 写内容
-3. `src/router.tsx` 的 `WINDOWS` 映射里挂上（不挂就自动走 `AppPlaceholder`）
+3. `src/components/program/views.tsx` 的 `VIEWS` 表里挂上（不挂就自动走 `AppPlaceholder`）
 4. 数据源写进 `apps.ts` 的 `source` —— 它是「窗口名 → 路由 → 数据源」的唯一登记处
+
+要带子页面（像 `/blog/:id`）：给 `VIEWS` 的那个工厂函数用 `param`（窗口状态里带着它），
+**别用 `useParams`** —— 路由只代表当前聚焦的那个窗口，别的窗口的页面参数路由里没有。
 
 ## 正文列宽拖动条 / 滚动条（复刻 DSH 会话页）
 
@@ -331,6 +355,8 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.wallpaperDim` | `0` \| `0.15` \| `0.3` \| `0.45` |
 | `desktop.dock` | `{ position, length, thickness, iconSize, dockApps }` |
 | `desktop.windows` | 窗口几何记忆；**关闭窗口不清除**，下次打开回到原处 |
+| `desktop.openWindows` | **会话记忆**：刷新前开着哪些窗口（`[{ id, param? }]`，顺序 = 标签栏顺序）。启动时照着开回来；坏数据/已下线的应用会被丢掉 |
+| `desktop.tabs` | 窗口标签栏位置：`top` \| `left` \| `off`（默认 `top`） |
 | `desktop.blog` | 博客列表缓存 `{ posts, fetchedAt }`，TTL 10 分钟（GitHub 未认证限流 60 次/小时） |
 | `desktop.ghToken` | **博客创作窗口用的 GitHub PAT**。只存本机浏览器，绝不进仓库/代码；同源脚本可读，别在公共电脑上填 |
 | `desktop.imgTree` | img 分支图片清单缓存，TTL 10 分钟（浏览图库不需要 Token） |
@@ -411,8 +437,12 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 63 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  （当前 `verify.mjs` **共 68 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
   bare `localhost` 在有些机器上解析成 `::1` 会连不上）
+- **多窗口**有 5 项：两个窗口同时开着（都可见）+ 标签栏一条一个、点标签切窗口（抬到最上面且 URL 跟着）、
+  关掉当前窗口焦点交给剩下那个（URL 跟着）、**刷新后把上次开着的窗口都开回来**、
+  标签栏切到左侧后窗口层真的让出一条（`layerLeft ≥ 190`）。
+  ⚠️ 小节的全局选择器会串窗口，改测试时记得先 `closeAllWindows()`
 - **站名 / 菜名**有 1 项：页面标题、关于窗口、任务栏 `title` 都要是「芹菜耕地」与「X · 菜名」
   （同一条里也钉住了「无障碍名 = 窗口名」这条，见上方菜名那段）
 - **DSH 快捷入口**有 4 项：① 任务栏里能找到 `DSH · 芹菜`（本机才挂载）；
@@ -422,6 +452,8 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   工具条是浮层且**默认收起**（收起时它的底 ≤ iframe 顶）；
   ④ 鼠标移到窗口上边界那条热区 → 工具条滑下来，而且**正文高度不变**（证明它是浮层、不占位）。
   跑完必须切回「关于」再继续，因为它会离开 `/about`
+- 最大化那条现在断言「铺满视口 **除标签栏那一条**，并盖住任务栏」——
+  因为标签栏是切窗口的唯一入口，被盖住就切不动了
 - 正文列宽那套在 `verify.mjs` 里有 4 项：拖动条位置、**拖 40px = +80px 且落盘**、
   窄栏让位与双击复位、宽窗下先让左栏留住目录。改 `lib/readingWidth.ts` 的常量后一定要跑
 - 博客首页的分隔条有 5 项：两条都在、**正好落在栏间空隙里（不压侧栏/不压卡片）**、

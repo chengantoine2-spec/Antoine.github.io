@@ -1,10 +1,11 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { PROJECTS } from '../../data/projects'
 import { useWindowTitle } from '../../hooks/useWindowTitle'
 
-/** 项目详情：路由 /projects/:id，标题栏文字换成项目名 */
-export function ProjectDetailWindow() {
-  const { id } = useParams<{ id: string }>()
+/** 项目详情：路由 /projects/:id，标题栏文字换成项目名。
+    ⚠️ 参数从 props 来（不再是 useParams）：桌面能同时开多个窗口，
+    路由只表示"当前聚焦的那个窗口"，各窗口的页面由窗口自己带着。 */
+export function ProjectDetailWindow({ id }: { id?: string }) {
   const navigate = useNavigate()
   const project = PROJECTS.find((item) => item.id === id)
 

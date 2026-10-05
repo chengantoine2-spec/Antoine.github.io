@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getApp } from '../../lib/apps'
 import { useWindows } from '../../hooks/useWindows'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
@@ -10,15 +10,26 @@ interface WindowProps {
   win: WindowState
   children: ReactNode
   onClose: () => void
+  /** 被点到（抬到最上面）时通知外壳：外壳靠它把 URL / 地址栏切到这个窗口 */
+  onActivate?: () => void
+  /** 标题变化时上报：标签栏拿它显示文章名 / 项目名 */
+  onTitle?: (title: string | null) => void
 }
 
 /** 窗口框架：拖动 / 缩放 / 最小化 / 最大化；标题栏文字可被窗口内容覆盖 */
-export function Window({ win, children, onClose }: WindowProps) {
+export function Window({ win, children, onClose, onActivate, onTitle }: WindowProps) {
   const { dispatch } = useWindows()
   const app = getApp(win.id)
   const [title, setTitle] = useState<string | null>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const resize = useRef<{ x: number; y: number } | null>(null)
+
+  /* onTitle 每次渲染都可能是新函数，用 ref 兜住，免得"上报 → 外壳 setState → 再上报"转圈 */
+  const report = useRef(onTitle)
+  report.current = onTitle
+  useEffect(() => {
+    report.current?.(title)
+  }, [title])
 
   function startDrag(e: React.PointerEvent<HTMLElement>) {
     if (win.maximized) return
@@ -69,7 +80,10 @@ export function Window({ win, children, onClose }: WindowProps) {
         win.maximized ? 'window--max' : ''
       }`}
       style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}
-      onPointerDown={() => dispatch({ type: 'focus', id: win.id })}
+      onPointerDown={() => {
+        dispatch({ type: 'focus', id: win.id })
+        onActivate?.()
+      }}
     >
       <header
         className="flex h-9 shrink-0 cursor-default select-none items-center justify-between gap-2 border-b border-edge bg-surface-2 px-3"

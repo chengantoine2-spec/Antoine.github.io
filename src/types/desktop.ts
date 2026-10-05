@@ -10,6 +10,9 @@ export type WallpaperFit = 'cover' | 'contain' | 'repeat'
 /** 任务栏停靠位置；左/右为竖排 */
 export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
 
+/** 窗口标签栏（像浏览器的标签页）：顶部一条 / 左侧一条 / 不显示 */
+export type TabPosition = 'top' | 'left' | 'off'
+
 export type IconName =
   | 'about'
   | 'projects'
@@ -66,6 +69,12 @@ export interface WindowState {
   z: number
   minimized: boolean
   maximized: boolean
+  /**
+   * 窗口里的「子页面」参数：博客详情 `/blog/17` → `'17'`，项目详情同理。
+   * 一个应用只有一个窗口，所以同一个应用同时只显示一个页面
+   * （用户 2026-10-05 定的范围：多窗口 = 不同应用各一个，不做同应用多开）。
+   */
+  param?: string
 }
 
 export interface DesktopState {
@@ -81,7 +90,11 @@ export type WindowAction =
       bounds: { w: number; h: number }
       size?: { w: number; h: number }
       geometry?: WindowGeometry
+      /** 目标子页面；**不传 = 回到这个应用的根**（点任务栏图标就该回根） */
+      param?: string
     }
+  /** 只在窗口内部换页（点卡片进详情），不动几何、不重开 */
+  | { type: 'setParam'; id: AppId; param?: string }
   | { type: 'focus'; id: AppId }
   | { type: 'close'; id: AppId }
   | { type: 'closeAll' }
