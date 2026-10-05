@@ -149,11 +149,10 @@ async function run() {
     const win = document.querySelector('[aria-label="DSH 窗口"]')
     if (!win) return null
     const frame = win.querySelector('[data-dsh-frame]')
+    const bar = win.querySelector('[data-dsh-bar]')
     const rect = frame?.getBoundingClientRect()
     const outer = win.getBoundingClientRect()
-    /* 工具条必须只有一行 —— 用户要求"控制条放最上面、中间主体尽量大"；
-       折成两行就白白吃掉 40px */
-    const bar = win.querySelector('[data-embed] > div')
+    const barRect = bar?.getBoundingClientRect()
     return {
       embed: win.querySelector('[data-embed]')?.dataset.embed ?? '',
       src: frame?.getAttribute('src') ?? '',
@@ -169,27 +168,54 @@ async function run() {
         Math.round(outer.bottom - (rect?.bottom ?? 0)),
         Math.round((rect?.left ?? 0) - outer.left),
       ],
-      /* 上边距 = 标题栏 36 + 工具条一行的高度（不是缝） */
+      /* 上边距 = 标题栏 36（工具条是浮层，不占高度） */
       topOffset: Math.round((rect?.top ?? 0) - outer.top),
-      barH: Math.round(bar?.getBoundingClientRect().height ?? 0),
+      barH: Math.round(barRect?.height ?? 0),
+      /* 收起时工具条的底应该在 iframe 顶之上（滑出去了） */
+      barBottom: Math.round((barRect?.bottom ?? 0) - (rect?.top ?? 0)),
       /* 工具条里一个按钮的高度：barH 只比它多出内边距+边框 = 一行。
          折成两行时 barH ≈ 2×btnH（旧版就是 85 vs 24） */
       btnH: Math.round(bar?.querySelector('button')?.getBoundingClientRect().height ?? 0),
+      hasHot: !!win.querySelector('[data-dsh-hot]'),
     }
   })
   check(
-    'DSH 就地内嵌在窗口里（iframe 占满正文、四周不留缝、工具条只占一行）',
+    'DSH 就地内嵌：iframe 占满整个正文，工具条是浮层且默认收起',
     !!dshEmbed &&
       dshEmbed.embed === 'on' &&
       dshEmbed.outside &&
       dshEmbed.src === dsh.address &&
       dshEmbed.w > dshEmbed.winW - 4 &&
-      dshEmbed.h > dshEmbed.winH * 0.7 &&
+      dshEmbed.h > dshEmbed.winH * 0.8 &&
       dshEmbed.gaps.every((gap) => Math.abs(gap) <= 2) &&
-      dshEmbed.btnH > 0 &&
-      dshEmbed.barH - dshEmbed.btnH <= 20 &&
-      Math.abs(dshEmbed.topOffset - (36 + dshEmbed.barH)) <= 2,
+      Math.abs(dshEmbed.topOffset - 36) <= 2 &&
+      dshEmbed.hasHot &&
+      dshEmbed.barH >= 44 &&
+      dshEmbed.barH - dshEmbed.btnH <= 24 &&
+      dshEmbed.barBottom <= 2,
     JSON.stringify(dshEmbed),
+  )
+
+  /* 鼠标碰到窗口上边界那条热区 → 工具条滑下来；这一下不改变正文高度（还是浮层） */
+  await p.hover('[aria-label="DSH 窗口"] [data-dsh-hot]')
+  await p.waitForTimeout(400)
+  const dshReveal = await p.evaluate(() => {
+    const win = document.querySelector('[aria-label="DSH 窗口"]')
+    const frame = win?.querySelector('[data-dsh-frame]')
+    const bar = win?.querySelector('[data-dsh-bar]')
+    const frameRect = frame?.getBoundingClientRect()
+    const barRect = bar?.getBoundingClientRect()
+    return {
+      barH: Math.round(barRect?.height ?? 0),
+      drop: Math.round((barRect?.bottom ?? 0) - (frameRect?.top ?? 0)),
+      frameH: Math.round(frameRect?.height ?? 0),
+    }
+  })
+  const frameBefore = dshEmbed?.h ?? 0
+  check(
+    '鼠标移到窗口上边界才露出工具条（下来时正文高度不变）',
+    dshReveal.barH >= 44 && dshReveal.drop >= 40 && Math.abs(dshReveal.frameH - frameBefore) <= 2,
+    JSON.stringify({ ...dshReveal, frameBefore }),
   )
   await p.click('[aria-label="DSH 窗口"] header button[aria-label="关闭"]')
   await p.waitForTimeout(300)

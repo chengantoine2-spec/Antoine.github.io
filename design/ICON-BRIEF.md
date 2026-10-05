@@ -104,7 +104,7 @@ export function BlogIcon({ className }: IconProps) {
    唯一的颜色来源是 `currentColor`（+ 允许 `fill="currentColor"`）。
    写死 = 换主题时那个图标不变色，直接算不合格。
 3. **不许改 `aria-label`**：验证脚本靠 `button[aria-label="博客"]` 这类选择器点任务栏，
-   无障碍名一旦被动，`verify.mjs`（62 项）与 `verify-dst.mjs`（21 项）会一起炸。
+   无障碍名一旦被动，`verify.mjs`（63 项）与 `verify-dst.mjs`（21 项）会一起炸。
    图标自己是 `aria-hidden`（`iconBase` 已经给了），**不要**在 SVG 里加 `<title>`。
 4. **文本字符→矢量图标**也要保持可读：如果想把某处的 `–` / `×` 换掉，
    那些按钮的 `aria-label` 必须原样保留（`最小化` / `关闭`）。
@@ -178,11 +178,11 @@ npm run dev            # http://127.0.0.1:5173
 ```bash
 npm run typecheck                                  # 类型
 npm run build                                      # tsc --noEmit + vite build
-npm run verify -- http://127.0.0.1:5173            # 全站冒烟：当前基线 62/62
+npm run verify -- http://127.0.0.1:5173            # 全站冒烟：当前基线 63/63
 npm run verify:dst -- http://127.0.0.1:5173        # 饥荒 Wiki：基线 21/21
 ```
 
-- **基线只能保持或更好**：62/62 与 21/21。红了先看是不是自己改的，别去改测试。
+- **基线只能保持或更好**：63/63 与 21/21。红了先看是不是自己改的，别去改测试。
 - ⚠️ 地址要显式写成 `http://127.0.0.1:5173`（裸 `localhost` 在有些机器上解析到 `::1` 会连不上）。
 - 自查写死颜色：`git diff --stat` 后搜一遍 `#`、`rgb(`、`fill="#`、`bg-white`。
 - 肉眼验收：`design/preview.html` 看三套主题 × 五档尺寸；

@@ -50,6 +50,9 @@ export function DshWindow() {
   const [reloadKey, setReloadKey] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [slow, setSlow] = useState(false)
+  /* 工具条是否露出来：默认收起，鼠标碰到窗口上边界那条热区（或 Tab 聚焦进去）才滑下来。
+     用户 2026-10-05：「工具条要和框融合、做大一点，给他一个自动隐藏，鼠标移动到上框边界时再显示」 */
+  const [reveal, setReveal] = useState(false)
 
   const hostMismatch = !sameSiteHost(url)
 
@@ -166,97 +169,18 @@ export function DshWindow() {
      父级（Window 的正文区）是 `p-5`，这里用 `-m-5` 把内边距吃掉、再补回来那 40px，
      整个正文盒才刚好被填满。只写 h-full 会矮 40px —— 窗口底下留一条 40px 空白
      （用户看到的"白边"就是这么来的，实测 winBottom - frameBottom = 41px）。
-     verify.mjs 里有一条专门钉这个：iframe 必须一直贴到窗口底。 */
+     verify.mjs 里有一条专门钉这个：iframe 必须一直贴到窗口底。
+
+     内嵌视图里工具条是**浮层**（absolute），不占高度：默认收在标题栏底下藏起来，
+     鼠标碰到窗口上边界那条热区（`data-dsh-hot`）或键盘 Tab 进去时才滑下来。
+     这样 iframe 永远是整个正文区那么高 —— 用户要的"中间主体尽量大"。 */
   return (
     <div
-      className="-m-5 flex h-[calc(100%+2.5rem)] min-h-0 flex-col"
+      className="relative -m-5 flex h-[calc(100%+2.5rem)] min-h-0 flex-col"
       data-embed={embed ? 'on' : 'off'}
     >
       {embed ? (
         <>
-          {/* 内嵌时的工具条：**只占一行、不折行**，剩下的高度全给 DSH。
-              地址框 flex-1 min-w-0 会被压缩，按钮 shrink-0 不会被压扁。 */}
-          <div className="flex shrink-0 flex-nowrap items-center gap-1.5 overflow-hidden border-b border-edge bg-surface-2 px-2 py-1.5">
-            <span
-              data-probe={probe}
-              title={PROBE_HINT[probe]}
-              className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] ${
-                probe === 'online' ? 'border-accent text-ink' : 'border-edge text-dim'
-              }`}
-            >
-              {PROBE_TEXT[probe]}
-            </span>
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') save()
-              }}
-              aria-label="DSH 地址"
-              spellCheck={false}
-              className="min-w-0 flex-1 rounded border border-edge bg-surface px-2 py-1 text-[11px] text-ink placeholder:text-dim focus:border-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={save}
-              title="保存地址并刷新"
-              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
-            >
-              保存
-            </button>
-            <button
-              type="button"
-              onClick={reload}
-              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
-            >
-              刷新
-            </button>
-            <button
-              type="button"
-              onClick={reset}
-              title="地址复位成默认"
-              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
-            >
-              复位
-            </button>
-            <button
-              type="button"
-              onClick={openOutside}
-              title="在独立窗口打开（内嵌有问题的备选）"
-              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
-            >
-              独立窗口
-            </button>
-            <button
-              type="button"
-              onClick={() => setEmbed(false)}
-              title="回到说明卡"
-              className="shrink-0 rounded border border-edge px-2 py-1 text-[11px] text-dim hover:bg-hover hover:text-ink"
-            >
-              返回
-            </button>
-          </div>
-
-          {hostMismatch ? (
-            <div className="flex shrink-0 flex-nowrap items-center gap-2 border-b border-edge bg-surface-2 px-2 py-1 text-[11px] text-dim">
-              <span className="min-w-0 flex-1 truncate">
-                站点（{location.hostname}）与 DSH 的主机名不一样 —— 登录 Cookie 是 SameSite=Strict，
-                跨主机名不会带上，这里只会显示一行 &ldquo;dsh web authentication required&rdquo;。
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  apply(alignDshHost(url))
-                  reload()
-                }}
-                className="shrink-0 rounded border border-edge px-2 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-ink"
-              >
-                改成一致
-              </button>
-            </div>
-          ) : null}
-
           <iframe
             key={reloadKey}
             src={url}
@@ -268,15 +192,126 @@ export function DshWindow() {
             }}
             /* 只开需要的：DSH 里有复制按钮与语音输入 */
             allow="clipboard-read; clipboard-write; microphone"
-            className="h-full min-h-0 w-full flex-1 border-0 bg-surface"
+            className="absolute inset-0 h-full w-full border-0 bg-surface"
           />
 
-          {slow && !loaded ? (
-            <p className="shrink-0 border-t border-edge bg-surface-2 px-2.5 py-1.5 text-[11px] text-dim">
-              还没加载出来 —— 确认本机跑着 <code className="text-ink">dsh web</code>，
-              或点「在独立窗口打开」看那边的提示。
-            </p>
-          ) : null}
+          {/* 上边界热区：一条细拉手，鼠标移到它上面就把工具条放下来 */}
+          <div
+            data-dsh-hot=""
+            className="absolute inset-x-0 top-0 z-20 flex h-3 items-start justify-center"
+            onPointerEnter={() => setReveal(true)}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-[3px] w-10 rounded-full bg-[var(--c-scroll-thumb)] transition-opacity duration-150 ${
+                reveal ? 'opacity-0' : 'opacity-100'
+              }`}
+            />
+          </div>
+
+          {/* 工具条：跟标题栏同一套底色 + 只留一条下边线，下来时就像标题栏加厚了一层；
+              收起时 pointer-events-none，鼠标照常点到下面的 DSH */}
+          <div
+            data-dsh-bar=""
+            className={`absolute inset-x-0 top-0 z-30 border-b border-edge bg-surface-2 shadow-lg transition-transform duration-150 ease-out ${
+              reveal ? 'translate-y-0' : 'pointer-events-none -translate-y-full'
+            }`}
+            onPointerEnter={() => setReveal(true)}
+            onPointerLeave={() => setReveal(false)}
+            onFocusCapture={() => setReveal(true)}
+            onBlurCapture={(e) => {
+              /* 焦点跑到面板外面才收（点面板里的按钮不该把面板弄没） */
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setReveal(false)
+            }}
+          >
+            <div className="flex h-12 flex-nowrap items-center gap-2 px-3">
+              <span
+                data-probe={probe}
+                title={PROBE_HINT[probe]}
+                className={`shrink-0 rounded border px-2 py-1 text-xs ${
+                  probe === 'online' ? 'border-accent text-ink' : 'border-edge text-dim'
+                }`}
+              >
+                {PROBE_TEXT[probe]}
+              </span>
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') save()
+                }}
+                aria-label="DSH 地址"
+                spellCheck={false}
+                className="min-w-0 flex-1 rounded border border-edge bg-surface px-2.5 py-1.5 text-xs text-ink placeholder:text-dim focus:border-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={save}
+                title="保存地址并刷新"
+                className="shrink-0 rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                onClick={reload}
+                className="shrink-0 rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              >
+                刷新
+              </button>
+              <button
+                type="button"
+                onClick={reset}
+                title="地址复位成默认"
+                className="shrink-0 rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              >
+                复位
+              </button>
+              <button
+                type="button"
+                onClick={openOutside}
+                title="在独立窗口打开（内嵌有问题的备选）"
+                className="shrink-0 rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              >
+                独立窗口
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmbed(false)}
+                title="回到说明卡"
+                className="shrink-0 rounded border border-edge px-2.5 py-1.5 text-xs text-dim hover:bg-hover hover:text-ink"
+              >
+                返回
+              </button>
+            </div>
+
+            {hostMismatch ? (
+              <div className="flex flex-nowrap items-center gap-2 border-t border-edge px-3 py-1.5 text-[11px] text-dim">
+                <span className="min-w-0 flex-1 truncate">
+                  站点（{location.hostname}）与 DSH 的主机名不一样 —— 登录 Cookie 是 SameSite=Strict，
+                  跨主机名不会带上，这里只会显示一行 &ldquo;dsh web authentication required&rdquo;。
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    apply(alignDshHost(url))
+                    reload()
+                  }}
+                  className="shrink-0 rounded border border-edge px-2 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-ink"
+                >
+                  改成一致
+                </button>
+              </div>
+            ) : null}
+
+            {slow && !loaded ? (
+              <p className="border-t border-edge px-3 py-1.5 text-[11px] text-dim">
+                还没加载出来 —— 确认本机跑着 <code className="text-ink">dsh web</code>，
+                或点「独立窗口」看那边的提示。
+              </p>
+            ) : null}
+          </div>
         </>
       ) : (
         <div className="min-h-0 flex-1 space-y-3 overflow-auto p-5">
