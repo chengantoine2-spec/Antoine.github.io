@@ -508,7 +508,8 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 - 写操作一律浏览器直连 `api.github.com`，Token 只在本机 localStorage。
 
 > ⚠️ **测试期标注（2026-09）**：验证时用过一次真实 PAT，该 Token 已出现在会话记录里。
-> 现在按"测试阶段、暂不处理安全"处理，**正式上线前必须撤销并重建**。
+> **站主已决定（2026-10-05）**：PAT 只留在会话记录与本机浏览器（desktop.ghToken），按「测试阶段、暂不处理安全」办 —— **agent 不必再提醒、也不要当成待办事项**。
+> **唯一硬线（每次交付前守一遍）**：**PAT 绝不许进仓库** —— 不写任何文件（含 .env／文档／注释）、不 git add、不进提交信息、不写 git config。自查一行：git log -p origin/main..HEAD | Select-String github_pat_（应无输出）。
 > 影响范围：`desktop.ghToken` 泄露 = 该仓库的 Issues 与 Contents 写入权限。
 
 ## 六个已经踩过的坑（别再踩）
