@@ -845,7 +845,7 @@
   color: var(--c-text-dim);
 }
 
-/* 任务栏放不下时的滚动容器：隐藏滚动条，靠拖动或滚轮滑动 */
+/* 任务栏放不下时的滚动容器：隐藏滚动条，靠拖动或滚轮滑动（**折行模式 wrap 用的，还在**） */
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -853,6 +853,57 @@
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* ── 任务栏图标区：循环轮盘（`desktop.dock.mode === 'wheel'`，用户 2026-10-05 要的）──
+   分量：手势与数学在 `Dock.tsx`（操作 ref + rAF，拖动过程不进 React 状态），
+   这里只管裁剪、缓动与"抬起"的外观。
+   ⚠️ 自定义 CSS 一律写在 `@layer` 之外（见「坑 1」：Tailwind 会把扫不到的规则整条裁掉）。 */
+.dock__view {
+  position: relative;
+  /* 沿轴裁掉跑到视口外的图标；交叉轴的余量靠下面的负外边距 + 等量内边距撑出来 */
+  overflow: hidden;
+  /* 按住拖动是自己算的，别让浏览器的触摸滚动/缩放抢走手势 */
+  touch-action: none;
+  cursor: grab;
+}
+.dock__view:active {
+  cursor: grabbing;
+}
+/* 交叉轴留溢出余量：中央放大到 1.5× 的图标比图标位高出一截，不留就会被裁掉上下两边。
+   负外边距把裁剪框撑大、等量内边距把内容推回原位 —— 图标位置一点没变。 */
+.dock__view--h {
+  margin-top: calc(var(--dock-spill, 12px) * -1);
+  margin-bottom: calc(var(--dock-spill, 12px) * -1);
+  padding-top: var(--dock-spill, 12px);
+  padding-bottom: var(--dock-spill, 12px);
+}
+.dock__view--v {
+  margin-left: calc(var(--dock-spill, 12px) * -1);
+  margin-right: calc(var(--dock-spill, 12px) * -1);
+  padding-left: var(--dock-spill, 12px);
+  padding-right: var(--dock-spill, 12px);
+}
+.dock__track {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  will-change: transform;
+}
+.dock__track--v {
+  flex-direction: column;
+}
+/* 只有"松手吸附 / 滚轮"时才缓动：拖动过程中必须关掉 transition，否则跟手会飘（工作单第四节） */
+.dock__track--anim,
+.dock__track--anim .dock__item {
+  transition: transform 150ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* 换位时被抬起来的那个图标：描一圈强调色 + 一层同色投影，底色取任务栏自己的底色 */
+.dock__item--lift {
+  background: var(--c-chrome);
+  box-shadow: 0 10px 20px -6px var(--c-accent);
+  outline: 1px solid var(--c-accent);
+  outline-offset: -1px;
 }
 
 /* ── 滚动条：复刻 DSH 右侧那个「上下位置指示」──

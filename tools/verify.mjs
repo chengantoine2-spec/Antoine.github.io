@@ -1055,106 +1055,312 @@ async function run() {
     localStorage.removeItem('desktop.wikiAsideWidth')
   })
 
-  // 14 任务栏对齐：拖长/加厚之后图标要居中，但不是从左边排起、也不是靠滚动容器居中
-  const dockAlign = await p.evaluate(() => {
-    const dock = document.querySelector('nav[aria-label="任务栏"]')
-    const scroller = dock?.querySelector('.no-scrollbar')
-    const inner = scroller?.firstElementChild
-    const innerStyle = inner ? getComputedStyle(inner) : null
-    return {
-      dockJustify: dock ? getComputedStyle(dock).justifyContent : '',
-      scrollerJustify: scroller ? getComputedStyle(scroller).justifyContent : '',
-      /* 用类名判断：auto 外边距的 computed 值会按有没有富余空间解析成 0px / 具体值 */
-      innerClass: inner ? String(inner.className) : '',
-    }
-  })
+  /* ── 14 任务栏图标区：默认是「循环轮盘」（wheel，用户 2026-10-05 要的）──────────
+     行为：永远单行 + 首尾相接循环 + 中央放大 + 按住拖动浏览 + 竖拖 44px 换位；
+     三个固定按钮（开始 / 全屏 / 位置）钉在两端，不参与循环与放大。
+     旧的折行行为保留成设置里的可选项（wrap），那套断言在 14e 那一段。 */
+  const wheelProbe = () =>
+    p.evaluate((sel) => {
+      const bar = document.querySelector(sel)
+      const view = bar?.querySelector('[data-dock-view]')
+      const track = bar?.querySelector('[data-dock-track]')
+      const items = [...(track?.querySelectorAll('[data-dock-item]') ?? [])]
+      const primary = items.filter((b) => b.getAttribute('data-dock-copy') === '1')
+      const vr = view?.getBoundingClientRect()
+      const mid = vr ? vr.x + vr.width / 2 : 0
+      const byDistance = primary
+        .map((b) => {
+          const r = b.getBoundingClientRect()
+          const m = new DOMMatrixReadOnly(getComputedStyle(b).transform)
+          return { id: b.dataset.dockItem, d: Math.abs(r.x + r.width / 2 - mid), s: m.a }
+        })
+        .sort((a, b) => a.d - b.d)
+      return {
+        hasView: !!view,
+        hasTrack: !!track,
+        items: items.length,
+        apps: primary.length,
+        copies: new Set(items.map((b) => b.getAttribute('data-dock-copy'))).size,
+        /* 单行判定用**布局** top（offsetTop），不能用 rect —— 放大后的 rect 每个都不一样 */
+        rows: new Set(items.map((b) => Math.round(b.offsetTop))).size,
+        named: items.filter((b) => b.hasAttribute('aria-label')).length,
+        viewW: vr ? vr.width : 0,
+        centerScale: Number((byDistance[0]?.s ?? 0).toFixed(3)),
+        centerD: Number((byDistance[0]?.d ?? 0).toFixed(1)),
+        secondScale: Number((byDistance[2]?.s ?? 0).toFixed(3)),
+        edgeScale: Number((byDistance[byDistance.length - 1]?.s ?? 0).toFixed(3)),
+        /* 放大到 1.5× 的中心图标必须仍然完整待在图标区的裁剪框里 ——
+           交叉轴不留溢出余量的话，它上下会被裁掉一截（工作单第四节那条取舍） */
+        clipInside: (() => {
+          if (!vr) return false
+          const near = byDistance[0]?.id
+          const el = primary.find((b) => b.dataset.dockItem === near)
+          if (!el) return false
+          const r = el.getBoundingClientRect()
+          return r.top >= vr.top - 0.5 && r.bottom <= vr.bottom + 0.5
+        })(),
+        mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
+      }
+    }, DOCK)
+  const wheel0 = await wheelProbe()
   check(
-    '任务栏居中靠「内层 m-auto」（滚动容器上写 justify-center 会让两端滚不到）',
-    dockAlign.dockJustify === 'center' &&
-      dockAlign.scrollerJustify !== 'center' &&
-      dockAlign.innerClass.includes('m-auto'),
-    JSON.stringify(dockAlign),
+    '任务栏图标区：永远单行（所有图标同一个布局 top），图标区是循环视口',
+    wheel0.rows === 1 && wheel0.hasView && wheel0.hasTrack && wheel0.apps > 1,
+    JSON.stringify({ rows: wheel0.rows, view: wheel0.hasView, track: wheel0.hasTrack, apps: wheel0.apps }),
+  )
+  check(
+    '循环：渲染两份背靠背的列表，且只有正本带无障碍名（副本带 aria-label 会让所有窗口按钮选择器命中两个）',
+    wheel0.copies === 2 && wheel0.items === wheel0.apps * 2 && wheel0.named === wheel0.apps,
+    JSON.stringify({ copies: wheel0.copies, items: wheel0.items, named: wheel0.named, apps: wheel0.apps }),
+  )
+  /* 放大公式：t = 1 - d/R，scale = 1 + AMP·t²，AMP = 0.5、R = 图标区可视长的 40%。
+     格子是离散的，中心未必正好落在某个图标上，所以不硬要求"正好 1.5"，
+     而是**按实测距离反算公式值**（既验了 AMP，也验了 R），再要求单调衰减。 */
+  const magnifyWant = (() => {
+    const R = wheel0.viewW * 0.4
+    const t = Math.max(0, 1 - wheel0.centerD / R)
+    return Number((1 + 0.5 * t * t).toFixed(3))
+  })()
+  check(
+    '中央放大：越靠图标区中心越大、外侧回到 1.0×，与 scale = 1 + 0.5·(1−d/R)² 吻合（R = 可视长 40%），且放大后不被裁',
+    Math.abs(wheel0.centerScale - magnifyWant) <= 0.02 &&
+      wheel0.centerScale >= 1.3 &&
+      wheel0.secondScale < wheel0.centerScale &&
+      wheel0.edgeScale <= 1.01 &&
+      wheel0.clipInside,
+    JSON.stringify({
+      center: wheel0.centerScale,
+      公式值: magnifyWant,
+      d: wheel0.centerD,
+      second: wheel0.secondScale,
+      edge: wheel0.edgeScale,
+      放大后仍在框内: wheel0.clipInside,
+    }),
   )
 
-  // 14b 任务栏被压小 / 加厚时的行为。三条都验：
-  //     · 两端都要滚得到（曾经把 justify-center 写在滚动容器上，超出的那侧永远够不到）
-  //     · 两端固定的三个按钮不能被顶出任务栏边界（长度下限要装得下它们）
-  //     · 加厚 + 拖过长度之后仍要折成多行（折行的尺寸上限不能只在 length === null 时加）
-  const dockBefore = await p.evaluate(() => {
-    const raw = localStorage.getItem('desktop.dock')
-    const dock = raw ? JSON.parse(raw) : {}
-    dock.position = 'bottom'
-    dock.length = 260
-    dock.thickness = 150
-    dock.iconSize = null
-    localStorage.setItem('desktop.dock', JSON.stringify(dock))
-    return raw
+  /* 14b 拖拽浏览：按住沿轴拖 120px 跟手；松手吸附到最近的整数格；往一个方向一直拖不到头 */
+  const trackState = () =>
+    p.evaluate((sel) => {
+      const bar = document.querySelector(sel)
+      const view = bar?.querySelector('[data-dock-view]')
+      const track = bar?.querySelector('[data-dock-track]')
+      const items = [...(track?.querySelectorAll('[data-dock-item]') ?? [])]
+      const primary = items.filter((b) => b.getAttribute('data-dock-copy') === '1')
+      const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+      const vr = view?.getBoundingClientRect()
+      return {
+        tx: m ? Math.round(m.e) : 0,
+        step: primary.length > 1 ? primary[1].offsetLeft - primary[0].offsetLeft : 0,
+        cycle: primary.length > 1 ? primary.length * (primary[1].offsetLeft - primary[0].offsetLeft) : 0,
+        /* 可视区里"有事发生"的格数：**两份都要数** —— 循环接不上时这里会少于可视区能装的格数 */
+        cover: vr
+          ? items.filter((b) => {
+              const r = b.getBoundingClientRect()
+              return r.right > vr.x - 1 && r.x < vr.right + 1
+            }).length
+          : 0,
+        viewW: vr ? Math.round(vr.width) : 0,
+      }
+    }, DOCK)
+  const wheelCenter = await p.evaluate((sel) => {
+    const r = document.querySelector(`${sel} [data-dock-view]`)?.getBoundingClientRect()
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null
+  }, DOCK)
+  const track0 = await trackState()
+  await p.mouse.move(wheelCenter.x, wheelCenter.y)
+  await p.mouse.down()
+  for (let i = 1; i <= 12; i += 1) await p.mouse.move(wheelCenter.x + i * 10, wheelCenter.y)
+  const trackDrag = await trackState()
+  await p.mouse.up()
+  await p.waitForTimeout(400)
+  const trackSnap = await trackState()
+  check(
+    '拖拽浏览：按住沿轴拖 120px，图标区跟着指针走（偏移按一个 cycle 取模后正好差 120）',
+    (() => {
+      if (!(trackDrag.cycle > 0)) return false
+      const mod = (v) => ((v % trackDrag.cycle) + trackDrag.cycle) % trackDrag.cycle
+      const delta = mod(trackDrag.tx - track0.tx)
+      /* 指针往右拖 120px ⇒ 内容跟着往右 120px ⇒ translateX 增加 120（tx 是 -offset）。
+         平移一个 cycle 画面完全一样，所以只能按 cycle 取模比 */
+      const want = mod(120)
+      return Math.abs(delta - want) <= 4
+    })(),
+    JSON.stringify({ before: track0.tx, during: trackDrag.tx, cycle: trackDrag.cycle }),
+  )
+  check(
+    '松手吸附到最近的格子（偏移是 step 的整数倍）',
+    trackSnap.step > 0 && trackSnap.tx % trackSnap.step === 0,
+    JSON.stringify({ tx: trackSnap.tx, step: trackSnap.step }),
+  )
+  /* 再往左连拖两段（约 2.5 个 cycle）：一直拖不会到头，图标始终铺满可视区 */
+  for (let k = 0; k < 2; k += 1) {
+    await p.mouse.move(wheelCenter.x, wheelCenter.y)
+    await p.mouse.down()
+    for (let i = 1; i <= 10; i += 1) await p.mouse.move(wheelCenter.x - i * 60, wheelCenter.y)
+    await p.mouse.up()
+    await p.waitForTimeout(320)
+  }
+  const trackFar = await trackState()
+  check(
+    '循环：往一个方向一直拖不会到头（图标始终铺满可视区，偏移归一化回一个 cycle 内）',
+    trackFar.cover >= Math.floor(trackFar.viewW / trackFar.step) &&
+      Math.abs(trackFar.tx) <= trackFar.cycle,
+    JSON.stringify({ cover: trackFar.cover, need: Math.floor(trackFar.viewW / trackFar.step), tx: trackFar.tx, cycle: trackFar.cycle }),
+  )
+
+  /* 14c 竖拖 = 移动图标：只对"按在图标上"的拖动生效，门槛 44px；判定成浏览就锁死本次手势 */
+  const pickIcon = () =>
+    p.evaluate((sel) => {
+      const view = document.querySelector(`${sel} [data-dock-view]`)
+      const vr = view.getBoundingClientRect()
+      const mid = vr.x + vr.width / 2
+      const rows = []
+      for (const b of document.querySelectorAll(`${sel} [data-dock-item][data-dock-copy="1"]`)) {
+        const r = b.getBoundingClientRect()
+        const cx = r.x + r.width / 2
+        /* 别挑最边上那个：往外的方向要留出至少一格，否则测不了"越过邻居" */
+        if (cx < vr.x + 60 || cx > vr.right - 60) continue
+        rows.push({ d: Math.abs(cx - mid), x: cx, y: r.y + r.height / 2, id: b.dataset.dockItem })
+      }
+      rows.sort((a, b) => a.d - b.d)
+      return rows[Math.min(1, rows.length - 1)] ?? null
+    }, DOCK)
+  const savedOrder = () =>
+    p.evaluate(() => JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').dockApps ?? [])
+  const orderBefore = await savedOrder()
+  const iconA = await pickIcon()
+  await p.mouse.move(iconA.x, iconA.y)
+  await p.mouse.down()
+  await p.mouse.move(iconA.x + 60, iconA.y, { steps: 6 })
+  await p.mouse.move(iconA.x + 60, iconA.y - 20, { steps: 4 })
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const orderAfterSmall = await savedOrder()
+  check(
+    '横拖之后再竖拖 20px：手势已经锁定为「浏览」，不会误触发换位（顺序不变）',
+    JSON.stringify(orderBefore) === JSON.stringify(orderAfterSmall),
+    JSON.stringify({ 前: orderBefore.slice(0, 6), 后: orderAfterSmall.slice(0, 6) }),
+  )
+  const iconB = await pickIcon()
+  const liftedProbe = await p.evaluate((sel) => {
+    const view = document.querySelector(`${sel} [data-dock-view]`)
+    return !!view
+  }, DOCK)
+  void liftedProbe
+  await p.mouse.move(iconB.x, iconB.y)
+  await p.mouse.down()
+  await p.mouse.move(iconB.x, iconB.y - 70, { steps: 10 })
+  const lifted = await p.evaluate(() => document.querySelectorAll('.dock__item--lift').length)
+  await p.mouse.move(iconB.x + 70, iconB.y - 70, { steps: 10 })
+  await p.mouse.up()
+  await p.waitForTimeout(400)
+  const orderAfterMove = await savedOrder()
+  check(
+    '竖拖 60px 进入移动模式（图标被抬起），越过邻居后松手 → desktop.dock.dockApps 顺序真的变了',
+    lifted === 1 && JSON.stringify(orderBefore) !== JSON.stringify(orderAfterMove),
+    JSON.stringify({ lifted, 前: orderBefore.slice(0, 6), 后: orderAfterMove.slice(0, 6) }),
+  )
+
+  /* 14d 三个固定按钮：钉在两端，不在循环轨道里（循环转不走它们） */
+  const fixedProbe = await p.evaluate((sel) => {
+    const bar = document.querySelector(sel)
+    const track = bar?.querySelector('[data-dock-track]')
+    const barBox = bar.getBoundingClientRect()
+    const find = (s) => bar.querySelector(s)
+    const btns = {
+      menu: find('button[aria-label="所有项目"]'),
+      full: find('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
+      pos: find('button[aria-label="任务栏位置"]'),
+    }
+    const out = {}
+    for (const [k, b] of Object.entries(btns)) {
+      if (!b) {
+        out[k] = null
+        continue
+      }
+      const r = b.getBoundingClientRect()
+      const cx = r.x + r.width / 2
+      const cy = r.y + r.height / 2
+      const hit = document.elementFromPoint(cx, cy)
+      out[k] = {
+        inBar: r.x >= barBox.x - 1 && r.right <= barBox.right + 1,
+        inTrack: !!track && track.contains(b),
+        clickable: !!hit && (b === hit || b.contains(hit)),
+      }
+    }
+    return out
+  }, DOCK)
+  check(
+    '三个固定按钮钉在两端：都在栏内、都不在循环轨道里、都点得到',
+    !!fixedProbe.menu &&
+      !!fixedProbe.full &&
+      !!fixedProbe.pos &&
+      Object.values(fixedProbe).every((v) => v.inBar && !v.inTrack && v.clickable),
+    JSON.stringify(fixedProbe),
+  )
+
+  /* 14d 竖排（左/右停靠）也必须是"单列轮盘"：整套代码按轴参数化，但布局与裁剪走的是另一条分支
+     （`.dock__view--v` / `dock__track--v`、用 offsetTop/height 而不是 offsetLeft/width），
+     所以横排过了不代表竖排也对，单独断言一遍 */
+  const posBefore = await p.evaluate(() => localStorage.getItem('desktop.dock'))
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+    raw.position = 'left'
+    raw.length = null
+    raw.thickness = null
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
   })
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(900)
-  const dockProbe = await p.evaluate(() => {
-    const bar = document.querySelector('nav[aria-label="任务栏"]')
-    const scroller = bar?.querySelector('.no-scrollbar')
-    const items = scroller?.firstElementChild
-    if (!bar || !scroller || !items) return null
-    const icons = [...items.querySelectorAll('button[aria-label]')]
-    const box = scroller.getBoundingClientRect()
-    const barBox = bar.getBoundingClientRect()
-    const fixed = [
-      bar.querySelector('button[aria-label="所有项目"]'),
-      bar.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
-      bar.querySelector('button[aria-label="任务栏位置"]'),
-    ].filter(Boolean)
-
-    const firstAtStart = icons[0].getBoundingClientRect().left - box.left
-    scroller.scrollLeft = 99999
-    const maxScroll = Math.round(scroller.scrollLeft)
-    const lastAtEnd = icons[icons.length - 1].getBoundingClientRect().right - box.left
-    scroller.scrollLeft = 0
-
-    return {
-      viewport: Math.round(box.width),
-      content: scroller.scrollWidth,
-      maxScroll,
-      firstReachable: firstAtStart >= -1,
-      lastReachable: lastAtEnd <= box.width + 1,
-      fixedInside: fixed.every((b) => {
+  const verticalWheel = await p.evaluate((sel) => {
+    const bar = document.querySelector(sel)
+    const view = bar?.querySelector('[data-dock-view]')
+    const track = bar?.querySelector('[data-dock-track]')
+    const items = [...(track?.querySelectorAll('[data-dock-item][data-dock-copy="1"]') ?? [])]
+    const vr = view?.getBoundingClientRect()
+    const mid = vr ? vr.y + vr.height / 2 : 0
+    const scales = items
+      .map((b) => {
         const r = b.getBoundingClientRect()
-        return r.left >= barBox.left - 1 && r.right <= barBox.right + 1
-      }),
-      rows: new Set(icons.map((b) => Math.round(b.getBoundingClientRect().top))).size,
-      iconHeight: Math.round(icons[0].getBoundingClientRect().height),
-      itemsHeight: Math.round(items.getBoundingClientRect().height),
+        return { d: Math.abs(r.y + r.height / 2 - mid), s: new DOMMatrixReadOnly(getComputedStyle(b).transform).a }
+      })
+      .sort((a, b) => a.d - b.d)
+    const bb = bar.getBoundingClientRect()
+    return {
+      verticalBar: bb.height > bb.width,
+      cols: new Set(items.map((b) => Math.round(b.offsetLeft))).size,
+      hasView: !!view,
+      viewV: !!view?.classList.contains('dock__view--v'),
+      trackV: !!track?.classList.contains('dock__track--v'),
+      items: items.length,
+      copies: new Set([...(track?.querySelectorAll('[data-dock-item]') ?? [])].map((b) => b.getAttribute('data-dock-copy'))).size,
+      center: Number((scales[0]?.s ?? 0).toFixed(2)),
+      edge: Number((scales[scales.length - 1]?.s ?? 0).toFixed(2)),
     }
-  })
+  }, DOCK)
   check(
-    '小任务栏：两端都滚得到，且三个固定按钮不越界',
-    !!dockProbe &&
-      dockProbe.maxScroll > 0 &&
-      dockProbe.firstReachable &&
-      dockProbe.lastReachable &&
-      dockProbe.fixedInside,
-    JSON.stringify(dockProbe),
+    '左停靠 = 单列轮盘：图标同一列、有垂直的循环轨道、中央一样放大、两份列表都在',
+    verticalWheel.verticalBar &&
+      verticalWheel.cols === 1 &&
+      verticalWheel.hasView &&
+      verticalWheel.viewV &&
+      verticalWheel.trackV &&
+      verticalWheel.copies === 2 &&
+      verticalWheel.center >= 1.3 &&
+      verticalWheel.edge <= 1.01,
+    JSON.stringify(verticalWheel),
   )
-  check(
-    '加厚 + 拖过长度之后仍折成多行',
-    !!dockProbe && dockProbe.rows > 1 && dockProbe.itemsHeight >= dockProbe.iconHeight * 2,
-    JSON.stringify({
-      rows: dockProbe?.rows,
-      itemsHeight: dockProbe?.itemsHeight,
-      iconHeight: dockProbe?.iconHeight,
-    }),
-  )
-  /* 还原任务栏设置并重新加载，别影响后面的检查 */
   await p.evaluate((raw) => {
     if (raw === null) localStorage.removeItem('desktop.dock')
     else localStorage.setItem('desktop.dock', raw)
-  }, dockBefore)
+  }, posBefore)
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(700)
 
   // 14c 固定图标尺寸时，厚度下限要跟着图标走。
-  //     曾经是写死的 48：选了 64 的图标再把厚度拖薄，10 个图标会全被裁掉一截
+  //     曾经是写死的 48：选了 64 的图标再把厚度拖薄，图标会被裁掉一截。
+  //     ⚠️ 这里量的是**布局盒**（offsetHeight）而不是 rect：轮盘模式下中央图标带 scale，
+  //        rect 会比布局盒大一圈，那是"故意溢出的放大"，不是被裁。
   const iconBefore = await p.evaluate(() => {
     const raw = localStorage.getItem('desktop.dock')
     const dock = raw ? JSON.parse(raw) : {}
@@ -1167,32 +1373,24 @@ async function run() {
   })
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(800)
-  const iconFit = await p.evaluate(() => {
-    const bar = document.querySelector('nav[aria-label="任务栏"]')
-    const inner = bar?.querySelector('.no-scrollbar')
-    if (!bar || !inner) return null
-    const barBox = bar.getBoundingClientRect()
-    const innerBox = inner.getBoundingClientRect()
-    const icons = [...inner.querySelectorAll('button[aria-label]')]
-    const outside = (box) =>
-      icons.filter((b) => {
-        const r = b.getBoundingClientRect()
-        return r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5
-      }).length
+  const iconFit = await p.evaluate((sel) => {
+    const bar = document.querySelector(sel)
+    if (!bar) return null
+    const items = [...bar.querySelectorAll('[data-dock-item][data-dock-copy="1"]')]
+    const barH = Math.round(bar.getBoundingClientRect().height)
+    const btn = items[0]?.offsetHeight ?? 0
+    /* 图标 + 上下内边距(6+6) + 上下边框(1+1) 必须装得进任务栏厚度 */
+    const need = items.map((b) => b.offsetHeight + 14)
     return {
-      barHeight: Math.round(barBox.height),
-      iconSize: Math.round(icons[0]?.getBoundingClientRect().height ?? 0),
-      outsideBar: outside(barBox),
-      clippedByScroll: outside(innerBox),
+      barHeight: barH,
+      iconSize: btn,
+      worstNeed: need.length ? Math.max(...need) : 0,
+      mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
     }
-  })
+  }, DOCK)
   check(
-    '固定图标尺寸时厚度下限跟着图标走（图标不被裁）',
-    !!iconFit &&
-      iconFit.iconSize === 64 &&
-      iconFit.barHeight >= 78 &&
-      iconFit.outsideBar === 0 &&
-      iconFit.clippedByScroll === 0,
+    '固定图标尺寸时厚度下限跟着图标走（64 的图标 + 内边距与边框都装得下）',
+    !!iconFit && iconFit.iconSize === 64 && iconFit.barHeight >= 78 && iconFit.worstNeed <= iconFit.barHeight,
     JSON.stringify(iconFit),
   )
   /* 还原并重新加载 */
@@ -1202,6 +1400,119 @@ async function run() {
   }, iconBefore)
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(700)
+
+  /* ── 14e 折行模式（wrap）：设置里的可选项，**完全旧行为** ─────────────────────
+     用户追加：「旧的展示方式也作为可选项放进设置里面吧」。
+     折行那几条旧断言（m-auto 居中 / 两端滚得到 / 折成多行）都搬到这一段的 wrap 分支下断言。 */
+  const setDockMode = async (label) => {
+    if ((await p.locator('button[aria-label^="任务栏图标区："]').count()) === 0) {
+      await p.click(`${DOCK} button[aria-label="设置"]`)
+      await p.waitForTimeout(600)
+    }
+    await p.click(`button[aria-label="任务栏图标区：${label}"]`)
+    await p.waitForTimeout(400)
+  }
+  await setDockMode('折行')
+  const wrapStored = await p.evaluate(
+    () => JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
+  )
+  check('设置里能切到「折行」：desktop.dock.mode 落盘为 wrap', wrapStored === 'wrap', String(wrapStored))
+
+  /* 加厚到 150、长度拖到 260：折行模式下应该折成多行（旧行为） */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+    raw.position = 'bottom'
+    raw.thickness = 150
+    raw.length = 260
+    raw.iconSize = null
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
+  const wrapProbe = await p.evaluate((sel) => {
+    const bar = document.querySelector(sel)
+    const scroller = bar?.querySelector('.no-scrollbar')
+    const items = scroller?.firstElementChild
+    if (!bar || !scroller || !items) return null
+    const icons = [...items.querySelectorAll('button[aria-label]')]
+    const box = scroller.getBoundingClientRect()
+    const barBox = bar.getBoundingClientRect()
+    const inner = scroller.firstElementChild
+    const fixed = [
+      bar.querySelector('button[aria-label="所有项目"]'),
+      bar.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
+      bar.querySelector('button[aria-label="任务栏位置"]'),
+    ].filter(Boolean)
+    const firstAtStart = icons[0].getBoundingClientRect().left - box.left
+    scroller.scrollLeft = 99999
+    const maxScroll = Math.round(scroller.scrollLeft)
+    const lastAtEnd = icons[icons.length - 1].getBoundingClientRect().right - box.left
+    scroller.scrollLeft = 0
+    return {
+      hasView: !!bar.querySelector('[data-dock-view]'),
+      rows: new Set(icons.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+      iconHeight: Math.round(icons[0].getBoundingClientRect().height),
+      itemsHeight: Math.round(items.getBoundingClientRect().height),
+      maxScroll,
+      firstReachable: firstAtStart >= -1,
+      lastReachable: lastAtEnd <= box.width + 1,
+      fixedInside: fixed.every((b) => {
+        const r = b.getBoundingClientRect()
+        return r.left >= barBox.left - 1 && r.right <= barBox.right + 1
+      }),
+      dockJustify: getComputedStyle(bar).justifyContent,
+      scrollerJustify: getComputedStyle(scroller).justifyContent,
+      innerClass: inner ? String(inner.className) : '',
+      mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
+    }
+  }, DOCK)
+  check(
+    '折行模式（wrap）：加厚 + 拖过长度之后仍折成多行（多行行为的断言搬到这里）',
+    !!wrapProbe && !wrapProbe.hasView && wrapProbe.rows > 1 && wrapProbe.itemsHeight >= wrapProbe.iconHeight * 2,
+    JSON.stringify({ rows: wrapProbe?.rows, itemsHeight: wrapProbe?.itemsHeight, iconHeight: wrapProbe?.iconHeight }),
+  )
+  check(
+    '折行模式：两端都滚得到，且三个固定按钮不越界（旧断言）',
+    !!wrapProbe && wrapProbe.maxScroll > 0 && wrapProbe.firstReachable && wrapProbe.lastReachable && wrapProbe.fixedInside,
+    JSON.stringify({
+      maxScroll: wrapProbe?.maxScroll,
+      firstReachable: wrapProbe?.firstReachable,
+      lastReachable: wrapProbe?.lastReachable,
+      fixedInside: wrapProbe?.fixedInside,
+    }),
+  )
+  check(
+    '折行模式：居中仍然靠「内层 m-auto」（滚动容器上写 justify-center 会让两端滚不到）',
+    !!wrapProbe &&
+      wrapProbe.dockJustify === 'center' &&
+      wrapProbe.scrollerJustify !== 'center' &&
+      wrapProbe.innerClass.includes('m-auto'),
+    JSON.stringify({ dock: wrapProbe?.dockJustify, scroller: wrapProbe?.scrollerJustify }),
+  )
+  check(
+    '刷新后模式还在（desktop.dock.mode === wrap，渲染的仍是折行视口）',
+    wrapProbe?.mode === 'wrap' && !wrapProbe?.hasView,
+    JSON.stringify({ mode: wrapProbe?.mode, hasView: wrapProbe?.hasView }),
+  )
+
+  /* 切回循环轮盘：单行 + 循环轨道都回来 */
+  await setDockMode('循环轮盘')
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+    raw.thickness = null
+    raw.length = null
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
+  const backToWheel = await wheelProbe()
+  check(
+    '切回「循环轮盘」：回到单行 + 循环轨道（mode 落盘 wheel）',
+    backToWheel.mode === 'wheel' && backToWheel.rows === 1 && backToWheel.hasView && backToWheel.hasTrack,
+    JSON.stringify({ mode: backToWheel.mode, rows: backToWheel.rows, view: backToWheel.hasView }),
+  )
+  await closeAllWindows()
+  await p.waitForTimeout(400)
 
   // 14d 桌面挂件「日月时钟」：随时刻变色（像太阳）、入夜换月亮、按日期显示月相
   const clock = await p.evaluate(() => {

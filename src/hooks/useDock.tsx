@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { APPS } from '../lib/apps'
 import { DOCK_ORDER, DOCK_THICKNESS, isVertical, minDockThickness } from '../lib/dock'
-import type { AppId, DockPosition } from '../types/desktop'
+import type { AppId, DockMode, DockPosition } from '../types/desktop'
 
 const STORAGE_KEY = 'desktop.dock'
 const ALL_APP_IDS: AppId[] = APPS.map((app) => app.id)
@@ -21,8 +21,10 @@ interface Stored {
   thickness: number | null
   /** null = 图标大小跟随厚度 */
   iconSize: number | null
-  /** 任务栏里显示哪些应用（顺序始终按 APPS） */
+  /** 任务栏里显示哪些应用；**顺序就是显示顺序**（轮盘模式下可拖拽换位） */
   dockApps: AppId[]
+  /** 图标区模式：循环轮盘（默认）/ 旧的折行 */
+  mode: DockMode
 }
 
 const DEFAULTS: Stored = {
@@ -31,6 +33,7 @@ const DEFAULTS: Stored = {
   thickness: null,
   iconSize: null,
   dockApps: ALL_APP_IDS,
+  mode: 'wheel',
 }
 
 function readStored(): Stored {
@@ -41,9 +44,11 @@ function readStored(): Stored {
       const position = DOCK_ORDER.includes(v.position as DockPosition)
         ? (v.position as DockPosition)
         : DEFAULTS.position
-      /* 只保留仍然存在的应用，顺序固定按 APPS，避免旧数据把顺序搞乱 */
+      /* 只保留仍然存在的应用，**顺序按存下来的那份**（轮盘模式可以拖拽换位，
+         不能再像以前那样强制按 APPS 重排，否则用户换的位置一刷新就没了）。
+         注意这里**不补**新上线的应用：清单里没有 = 用户取消勾选过，补回来会把他的选择抹掉。 */
       const dockApps = Array.isArray(v.dockApps)
-        ? ALL_APP_IDS.filter((id) => (v.dockApps as AppId[]).includes(id))
+        ? (v.dockApps as AppId[]).filter((id) => ALL_APP_IDS.includes(id))
         : ALL_APP_IDS
       return {
         position,
@@ -51,6 +56,8 @@ function readStored(): Stored {
         thickness: typeof v.thickness === 'number' && v.thickness > 0 ? v.thickness : null,
         iconSize: typeof v.iconSize === 'number' && v.iconSize > 0 ? v.iconSize : null,
         dockApps,
+        /* 读不到就是 wheel：老数据里没有这个键，用户应当直接看到新的循环轮盘 */
+        mode: v.mode === 'wrap' ? 'wrap' : 'wheel',
       }
     }
   } catch {
@@ -70,11 +77,16 @@ interface DockContextValue {
   effectiveThickness: number
   iconSize: number | null
   dockApps: AppId[]
+  /** 图标区模式：循环轮盘（默认）/ 旧的折行 */
+  mode: DockMode
   setPosition: (position: DockPosition) => void
   setLength: (length: number | null) => void
   setThickness: (thickness: number | null) => void
   setIconSize: (iconSize: number | null) => void
+  setMode: (mode: DockMode) => void
   toggleDockApp: (id: AppId) => void
+  /** 循环轮盘里拖拽换位：把第 from 个图标放到第 to 个位置（写回 localStorage） */
+  reorderDockApps: (from: number, to: number) => void
   resetDock: () => void
 }
 
@@ -131,6 +143,22 @@ export function DockProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  /* 轮盘模式里"竖拖换位"松手时落盘。两个下标都按当前清单（含未显示的过滤前？不 —— 传进来的
+     就是 Dock 里那份 shownApps 的下标），所以这里先按同样的过滤算一遍，保证下标对得上 */
+  const reorderDockApps = useCallback((from: number, to: number) => {
+    setState((s) => {
+      const next = [...s.dockApps]
+      if (from < 0 || from >= next.length || to < 0 || to >= next.length || from === to) return s
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return { ...s, dockApps: next }
+    })
+  }, [])
+
+  const setMode = useCallback((mode: DockMode) => {
+    setState((s) => ({ ...s, mode }))
+  }, [])
+
   const resetDock = useCallback(() => setState(DEFAULTS), [])
 
   return (
@@ -143,11 +171,14 @@ export function DockProvider({ children }: { children: ReactNode }) {
         effectiveThickness,
         iconSize: state.iconSize,
         dockApps: state.dockApps,
+        mode: state.mode,
         setPosition,
         setLength,
         setThickness,
         setIconSize,
+        setMode,
         toggleDockApp,
+        reorderDockApps,
         resetDock,
       }}
     >

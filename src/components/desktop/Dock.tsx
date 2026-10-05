@@ -7,12 +7,21 @@ import {
   DOCK_BORDER as BORDER,
   DOCK_GAP as GAP,
   DOCK_MARGIN,
-  DOCK_MIN_LENGTH,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
+  MAGNIFY_AMP,
+  MAGNIFY_RADIUS_RATIO,
+  MOVE_THRESHOLD,
+  SNAP_MS,
+  dockMinLength,
+  dockStep,
   isVertical,
   maxDockLength,
   maxDockThickness,
+  wheelChrome,
+  wheelViewMin,
+  wrapLines,
+  wrapPerLine,
 } from '../../lib/dock'
 import type { AppId } from '../../types/desktop'
 import { MenuGlyph, PositionGlyph } from '../icons'
@@ -29,7 +38,6 @@ function clamp(value: number, min: number, max: number): number {
    这里只留按钮边长上限 */
 /** 按钮最大边长：再厚就去多排一行，而不是把图标撑大（设置里手选最大能到 64） */
 const BTN_MAX = 64
-const MAX_LINES = 3
 
 /** 八条拖拽边（四边 + 四个倒角）：拖离中心的方向算变大 */
 interface ResizeEdge {
@@ -102,9 +110,11 @@ export function Dock() {
     minThickness,
     iconSize,
     dockApps,
+    mode,
     setPosition,
     setLength,
     setThickness,
+    reorderDockApps,
   } = useDock()
   const { windows, dispatch } = useWindows()
   const navigate = useNavigate()
@@ -121,35 +131,72 @@ export function Dock() {
   const grip = useRef<GripState | null>(null)
   const vertical = isVertical(position)
 
+  /* ── 轮盘模式的 ref 与手势状态（拖动过程只动 ref，不进 React 状态）── */
+  const viewEl = useRef<HTMLDivElement | null>(null)
+  const trackEl = useRef<HTMLDivElement | null>(null)
+  const offset = useRef(0)
+  const raf = useRef(0)
+  const gesture = useRef<{
+    axisStart: number
+    crossStart: number
+    offsetStart: number
+    onIcon: number | null
+    /** 按下的那个应用（换位预览换的是它，不能再用下标找 —— 下标会随预览变） */
+    dragId: AppId | null
+    kind: 'browse' | 'move' | null
+    to: number
+    clientX: number
+    clientY: number
+    /** 已经抓住指针了没（一动就抓，见 wheelMove 里的说明） */
+    captured: boolean
+  } | null>(null)
+  const lift = useRef<{ el: HTMLElement; id: AppId } | null>(null)
+  /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
+  const [preview, setPreview] = useState<AppId[] | null>(null)
+
   /* 图标边长：设置里选过就用选的，否则跟随厚度；跟随厚度时超过上限不再变大，富余厚度改成多行 */
   const autoBtn = clamp((thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2, 28, BTN_MAX)
   /* 手动选了尺寸就以它为准；范围与设置里的档位一致（32~64） */
   const btn = Math.round(iconSize === null ? autoBtn : clamp(iconSize, 32, 64))
   const btnStyle: CSSProperties = { width: btn, height: btn }
 
-  /* 长度下限：至少要装得下两端固定的三个按钮（开始 / 全屏 / 位置）+ 一个图标。
-     低于这个值时它们会被顶出任务栏边界（原来的 DOCK_MIN_LENGTH = 140 就装不下 3×40） */
-  const minLength = Math.max(DOCK_MIN_LENGTH, btn * 4 + GAP * 3 + (PAD + BORDER) * 2)
+  /* 长度下限：**两种模式各算各的**（见 lib/dock 的 dockMinLength）。
+     wheel = 三个固定按钮 + 图标区至少 3 个图标位；wrap = 旧的"至少装得下固定按钮 + 一个图标" */
+  const minLength = dockMinLength(mode, btn)
   /* 拖过长度就按它来，但不允许小于下限；length === null 表示"跟着按钮自适应" */
   const length = rawLength === null ? null : Math.max(rawLength, minLength)
 
-  /* 当前厚度能塞下几行（竖排时是几列），最多 3 */
+  /* 当前厚度能塞下几行（竖排时是几列）—— **只有折行模式用**；轮盘永远单行 */
   const crossAvail = (thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2
-  const lines = Math.round(clamp(Math.floor((crossAvail + GAP) / (btn + GAP)), 1, MAX_LINES))
+  const lines = mode === 'wrap' ? wrapLines(crossAvail, btn) : 1
 
   /* 本机专属的窗口（DSH）在线上不挂载：任务栏里也不该露出来，折行计算同样按"看得到的"来 */
   const shownApps = dockApps.filter((id) => visibleApps().some((app) => app.id === id))
-
-  /* 多行时给内层一个主轴上限，折行才会发生（内层才是 flex 容器）。
-     注意不能只在 length === null 时加 —— 那样拖过长度的任务栏就永远只有一条，只能在一条里滚 */
   const itemCount = shownApps.length
-  const perLine = Math.max(1, Math.ceil(itemCount / lines))
+
+  /* ── 折行模式的几何（旧行为，一个字都不改）──
+     多行时给内层一个主轴上限，折行才会发生（内层才是 flex 容器）。
+     注意不能只在 length === null 时加 —— 那样拖过长度的任务栏就永远只有一条，只能在一条里滚 */
+  const perLine = wrapPerLine(itemCount, lines)
   const lineSize = perLine * btn + (perLine - 1) * GAP
   const itemsStyle: CSSProperties = {}
-  if (lines > 1 && itemCount > 0) {
+  if (mode === 'wrap' && lines > 1 && itemCount > 0) {
     if (vertical) itemsStyle.height = lineSize
     else itemsStyle.width = lineSize
   }
+
+  /* ── 轮盘模式的几何 ──
+     step = 相邻图标中心距；图标区长度 = 给多少算多少（length === null 时按"装下所有图标"自适应，
+     再被 bar 的 87.5vw 上限挤一下，挤掉的部分正好靠循环补上）。
+     可视长度至少 3 个图标位：再小，中央放大出来的图标会被裁掉一半 */
+  const step = dockStep(btn)
+  const chromeLen = wheelChrome(btn)
+  const viewMin = wheelViewMin(btn)
+  const autoView = Math.max(viewMin, itemCount * step - GAP)
+  const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen)
+  /* 交叉轴上给放大后的图标留的"溢出余量"：中央 1.5× 的图标会比图标位高一截，
+     不留这点余量就会被图标区的裁剪切掉上下两边（视口靠负外边距 + 等量内边距实现） */
+  const spill = Math.ceil((btn * MAGNIFY_AMP) / 2) + 2
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
 
@@ -229,10 +276,11 @@ export function Dock() {
     }
   }
 
-  /* 工具条放不下时：按住拖动即可横滑（竖排即竖滑），滚轮同样可用。
+  /* ── 折行模式（wrap）的滚动：旧行为 ──
+     工具条放不下时：按住拖动即可横滑（竖排即竖滑），滚轮同样可用。
      注意：这里**不能**在 pointerdown 就 setPointerCapture —— 那会把 pointerup 改派到
      容器，滚动容器里按钮的 click 就永远不会触发（点不动应用）。等真拖出 4px 再抓。 */
-  function startDrag(e: React.PointerEvent<HTMLDivElement>) {
+  function wrapStartDrag(e: React.PointerEvent<HTMLDivElement>) {
     const el = scroller.current
     if (!el) return
     drag.current = {
@@ -244,7 +292,7 @@ export function Dock() {
     }
   }
 
-  function onDrag(e: React.PointerEvent<HTMLDivElement>) {
+  function wrapOnDrag(e: React.PointerEvent<HTMLDivElement>) {
     const el = scroller.current
     const d = drag.current
     if (!el || !d) return
@@ -257,16 +305,250 @@ export function Dock() {
     el.scrollTop = d.sy - (e.clientY - d.py)
   }
 
-  function endDrag() {
+  function wrapEndDrag() {
     drag.current = null
   }
 
-  function onWheel(e: React.WheelEvent<HTMLDivElement>) {
+  function wrapOnWheel(e: React.WheelEvent<HTMLDivElement>) {
     const el = scroller.current
     if (!el) return
     if (vertical) el.scrollTop += e.deltaY
     else el.scrollLeft += e.deltaY
   }
+
+  /* ── 轮盘模式（wheel）：按住拖动浏览 / 竖拖换位 ──────────────────────────────
+     ⚠️ 拖动过程**不进 React 状态**：offset 在 ref 里，用 rAF 直接改 track 的 transform、
+     逐个改图标 scale。每帧 setState 会把图标区整棵子树重渲，手感会飘。
+     只有"换位预览"这种离散事件才 setState（一次拖动最多几次）。 */
+  const cycle = itemCount * step
+  const normalize = (v: number) => (cycle > 0 ? ((v % cycle) + cycle) % cycle : 0)
+  const alongOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientY : e.clientX)
+  const crossOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientX : e.clientY)
+
+  /** 按当前 offset 把 track 与每个图标的 scale 画出来（同时负责"循环归一化"） */
+  function paint() {
+    const view = viewEl.current
+    const track = trackEl.current
+    if (!view || !track) return
+    /* 归一化到 [0, cycle)：两份列表背靠背，平移一个 cycle 画面完全一样，所以这次跳变看不见 */
+    const off = normalize(offset.current)
+    track.style.transform = vertical ? `translate3d(0, ${-off}px, 0)` : `translate3d(${-off}px, 0, 0)`
+    const vLen = vertical ? view.clientHeight : view.clientWidth
+    if (!vLen) return
+    const half = vLen / 2
+    const R = Math.max(1, vLen * MAGNIFY_RADIUS_RATIO)
+    const items = track.querySelectorAll<HTMLElement>('[data-dock-item]')
+    items.forEach((el) => {
+      /* 正在被拖起来换位的那个不动它（它自己跟手，paint 一插手就会把它拽回去） */
+      if (lift.current && lift.current.el === el) return
+      const c = (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
+      const d = Math.abs(c - half)
+      const t = d >= R ? 0 : 1 - d / R
+      const s = 1 + MAGNIFY_AMP * t * t
+      if (s > 1.001) {
+        el.style.transform = `scale(${s.toFixed(3)})`
+        el.style.zIndex = String(1 + Math.round(t * 10))
+      } else {
+        el.style.transform = ''
+        el.style.zIndex = ''
+      }
+    })
+  }
+
+  /** 拖动中每帧只排一次 rAF */
+  function schedulePaint(next: number) {
+    offset.current = next
+    if (raf.current) return
+    raf.current = requestAnimationFrame(() => {
+      raf.current = 0
+      paint()
+    })
+  }
+
+  /** 松手吸附到最近的格子：先瞬时归一化（画面一样、看不见），再缓动 SNAP_MS */
+  function snapToGrid() {
+    const track = trackEl.current
+    offset.current = normalize(offset.current)
+    let target = Math.round(offset.current / step) * step
+    if (target >= cycle) target -= cycle
+    offset.current = target
+    if (!track) return
+    track.classList.add('dock__track--anim')
+    paint()
+    window.setTimeout(() => {
+      track.classList.remove('dock__track--anim')
+      /* 缓动结束后把内部值也收回 [0, cycle)，纯记账，画面不动 */
+      offset.current = normalize(offset.current)
+    }, SNAP_MS + 40)
+  }
+
+  /** 指针落在第几个图标上（没有就 null）：用布局位置算，不看 transform */
+  function iconAtPoint(e: { clientX: number; clientY: number }): number | null {
+    const view = viewEl.current
+    if (!view || itemCount === 0) return null
+    const rect = view.getBoundingClientRect()
+    const p = alongOf(e) - (vertical ? rect.top : rect.left)
+    const off = normalize(offset.current)
+    const i = Math.round((p + off - btn / 2) / step)
+    const idx = ((i % itemCount) + itemCount) % itemCount
+    /* 再确认指针真的压在某个图标上（点空白不进入换位） */
+    const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
+    const hit = items ? [...items].some((el) => {
+      const r = el.getBoundingClientRect()
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+    }) : false
+    return hit ? idx : null
+  }
+
+  function wheelDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return
+    const onIcon = iconAtPoint(e)
+    gesture.current = {
+      axisStart: alongOf(e),
+      crossStart: crossOf(e),
+      offsetStart: offset.current,
+      onIcon,
+      dragId: onIcon === null ? null : shownApps[onIcon],
+      kind: null,
+      to: onIcon ?? 0,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      captured: false,
+    }
+    lift.current = null
+  }
+
+  function wheelMove(e: React.PointerEvent<HTMLDivElement>) {
+    const g = gesture.current
+    const view = viewEl.current
+    if (!g || !view) return
+    g.clientX = e.clientX
+    g.clientY = e.clientY
+    const along = alongOf(e) - g.axisStart
+    const cross = crossOf(e) - g.crossStart
+
+    /* ⚠️ **一动就抓指针**（2px），不能等到判定出手势再抓：
+       竖向拖到 44px 时指针早就离开图标区了（图标区才 60 多 px 高），
+       没有捕获的话后续 pointermove 会派给底下的元素、根本回不到这里 ——
+       表现就是"竖拖永远进不了移动模式"（实测踩过）。
+       2px 门槛保证"只点一下"不会抓（抓了之后 click 会派给容器，见「坑 2」）。 */
+    if (!g.captured && (Math.abs(along) >= 2 || Math.abs(cross) >= 2)) {
+      view.setPointerCapture(e.pointerId)
+      g.captured = true
+    }
+
+    /* 判定手势，一次拖动只判一次：
+       沿轴动 4px 就是"浏览"；只有**按在图标上**且垂直位移超过 44px 才算"移动"。
+       —— 用户明确要求：日常左右滑动不要误触发换位。 */
+    if (!g.kind) {
+      if (Math.abs(along) >= 4) g.kind = 'browse'
+      else if (g.onIcon !== null && Math.abs(cross) >= MOVE_THRESHOLD) g.kind = 'move'
+      else return
+      if (g.kind === 'browse') trackEl.current?.classList.remove('dock__track--anim')
+    }
+
+    if (g.kind === 'browse') {
+      schedulePaint(g.offsetStart - along)
+      return
+    }
+
+    /* 移动模式：被拖的图标跟手；越过邻居中点就实时预览换位 */
+    const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
+    if (!items || !g.dragId) return
+    const id = g.dragId
+    const el = [...items].find((x) => x.dataset.dockItem === id && x.getAttribute('data-dock-copy') === '1')
+    if (el) {
+      if (!lift.current) {
+        el.classList.add('dock__item--lift')
+        lift.current = { el, id }
+      }
+      const rect = view.getBoundingClientRect()
+      const pAlong = alongOf(e) - (vertical ? rect.top : rect.left)
+      const pCross = crossOf(e) - (vertical ? rect.left : rect.top)
+      const lAlong = (vertical ? el.offsetTop : el.offsetLeft) + btn / 2
+      const lCross = (vertical ? el.offsetLeft : el.offsetTop) + btn / 2
+      const off = normalize(offset.current)
+      const dAlong = pAlong - (lAlong - off)
+      const dCross = pCross - lCross
+      el.style.transform = vertical
+        ? `translate(${dCross}px, ${dAlong}px) scale(1.15)`
+        : `translate(${dAlong}px, ${dCross}px) scale(1.15)`
+      el.style.zIndex = '40'
+    }
+
+    /* 落点下标：指针位置换算成"第几个格子"。**要取模** —— 列表是循环的，
+       把最后一个图标继续往右拖，落点应该是队首（第 0 个），不是卡在末尾 */
+    const rect = view.getBoundingClientRect()
+    const p = alongOf(e) - (vertical ? rect.top : rect.left)
+    const off = normalize(offset.current)
+    const raw = Math.round((p + off - btn / 2) / step)
+    const to = ((raw % itemCount) + itemCount) % itemCount
+    if (to !== g.to) {
+      g.to = to
+      const order = [...(preview ?? shownApps)]
+      const from = order.indexOf(id)
+      if (from >= 0 && from !== to) {
+        order.splice(from, 1)
+        order.splice(to, 0, id)
+        setPreview(order)
+      }
+    }
+  }
+
+  function wheelUp() {
+    const g = gesture.current
+    gesture.current = null
+    if (lift.current) {
+      lift.current.el.classList.remove('dock__item--lift')
+      lift.current.el.style.transform = ''
+      lift.current.el.style.zIndex = ''
+      lift.current = null
+    }
+    if (!g) {
+      paint()
+      return
+    }
+    if (g.kind === 'browse') {
+      snapToGrid()
+      return
+    }
+    if (g.kind === 'move' && g.onIcon !== null && g.dragId) {
+      /* 落盘：按下时它在 shownApps 里的下标 = g.onIcon，松手时它在预览顺序里的下标就是新位置。
+         写回 desktop.dock.dockApps，刷新后还在。 */
+      const toIdx = preview ? preview.indexOf(g.dragId) : g.onIcon
+      if (toIdx >= 0 && toIdx !== g.onIcon) reorderDockApps(g.onIcon, toIdx)
+    }
+    setPreview(null)
+    paint()
+  }
+
+  function wheelOnWheel(e: React.WheelEvent<HTMLDivElement>) {
+    e.preventDefault()
+    const d = vertical ? e.deltaY : e.deltaX || e.deltaY
+    /* 滚轮 = 一格一格地浏览（方向与拖动一致）；落点本来就是整数格，吸附只是顺手归一化 */
+    offset.current += (d > 0 ? 1 : -1) * step
+    snapToGrid()
+  }
+
+  /* 轮盘：首帧与几何变化后重画一次。换了模式 / 位置 / 图标尺寸 / 列表顺序 / 长度厚度都要重画，
+     否则 DOM 上留下的还是上一次的 transform。 */
+  useEffect(() => {
+    if (mode !== 'wheel') return
+    paint()
+    const view = viewEl.current
+    if (!view) return
+    const ro = new ResizeObserver(() => paint())
+    ro.observe(view)
+    return () => ro.disconnect()
+  }, [mode, position, btn, itemCount, length, thickness, preview, dockApps])
+
+  /* 卸载时把没跑完的那一帧 rAF 收掉 */
+  useEffect(
+    () => () => {
+      if (raf.current) cancelAnimationFrame(raf.current)
+    },
+    [],
+  )
 
   /* 拖任意一条边或倒角改尺寸；双击恢复该边负责的那一维 */
   function startGrip(edge: ResizeEdge, e: React.PointerEvent<HTMLSpanElement>) {
@@ -355,6 +637,55 @@ export function Dock() {
     </button>
   )
 
+  /* 一个应用图标按钮：两种模式共用。
+     `copy`：1 = 正本（带无障碍名），2 = 循环用的副本。
+     ⚠️ **副本绝不能带 `aria-label`**：两份同名按钮会让 Playwright 的
+     `button[aria-label="博客"]` 一次命中两个，strict mode 直接报错 —— 两个验证脚本都会炸。
+     副本同时 `aria-hidden` + `tabIndex=-1`，键盘与读屏只走正本。 */
+  function iconButton(id: AppId, opts: { copy: 1 | 2; index: number; wheel: boolean }) {
+    const app = getApp(id)
+    const running = windows.some((w) => w.tabs.some((tab) => tab.id === app.id))
+    const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
+    /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上 */
+    const label = `${app.name} · ${app.veggie}`
+    const loop = opts.wheel
+
+    return (
+      <button
+        key={`${opts.copy}-${app.id}`}
+        type="button"
+        style={btnStyle}
+        title={label}
+        /* ⚠️ 无障碍名**只用窗口名**：验证脚本（verify.mjs / verify-dst.mjs）都按
+           `button[aria-label="博客"]` 这类选择器点按钮，往里塞"菜名"会把它们全弄坏。
+           菜名放 title 与悬浮提示里。 */
+        aria-label={opts.copy === 1 ? app.name : undefined}
+        aria-hidden={loop && opts.copy === 2 ? true : undefined}
+        tabIndex={loop && opts.copy === 2 ? -1 : undefined}
+        aria-current={active ? 'page' : undefined}
+        data-dock-item={loop ? app.id : undefined}
+        data-dock-copy={loop ? String(opts.copy) : undefined}
+        data-dock-index={loop ? opts.index : undefined}
+        onClick={() => openApp(app.id)}
+        onMouseEnter={(e) => showName(e.currentTarget, label)}
+        onMouseLeave={() => setHover(null)}
+        onFocus={(e) => showName(e.currentTarget, label)}
+        onBlur={() => setHover(null)}
+        className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
+          loop ? 'dock__item' : ''
+        } ${active ? 'bg-accent text-accent-ink' : ''}`}
+      >
+        <AppIcon name={app.icon} className="h-1/2 w-1/2" />
+        {running ? (
+          <span
+            className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
+            aria-hidden="true"
+          />
+        ) : null}
+      </button>
+    )
+  }
+
   return (
     <nav
       ref={bar}
@@ -389,69 +720,68 @@ export function Dock() {
 
       {vertical ? null : menuButton}
 
-      {/* 只显示放得下的按钮，其余靠拖动/滚轮查看 */}
-      <div
-        ref={scroller}
-        onPointerDown={startDrag}
-        onPointerMove={onDrag}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onWheel={onWheel}
-        /* 视口本身不设 justify/align —— 居中交给里面那层用 m-auto。
-           滚动容器上直接写 justify-center 时，内容一旦超出，超出的那一侧会落到
-           滚动原点之外：滚轮和拖动都永远够不到（小任务栏时最左 / 最上的图标就是这么丢的）。
-           max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏 */
-        className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full ${
-          length !== null ? 'flex-1' : ''
-        } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
-      >
-        {/* m-auto 两头都管：有富余就居中，真超出时自动变 0，内容从滚动原点开始，两端都够得到 */}
+      {mode === 'wheel' ? (
+        /* ── 循环轮盘（默认）──
+           视口里放**两份**背靠背的列表，offset 归一化到 [0, N*step)：往一个方向一直拖能绕回起点，
+           永远不到头（也不会像滚动那样到头卡住）。中央放大按"离视口中心的距离"衰减。 */
         <div
-          style={itemsStyle}
-          className={`m-auto flex shrink-0 gap-1 ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
-            vertical ? 'flex-col' : ''
-          }`}
+          ref={viewEl}
+          data-dock-view=""
+          onPointerDown={wheelDown}
+          onPointerMove={wheelMove}
+          onPointerUp={wheelUp}
+          onPointerCancel={wheelUp}
+          onWheel={wheelOnWheel}
+          style={{
+            /* length 定了就吃掉剩余空间，没定就按内容（= 装下所有图标，超了由循环补） */
+            flex: length === null ? '0 0 auto' : '1 1 auto',
+            ...(vertical ? { height: viewLen } : { width: viewLen }),
+            ['--dock-spill' as string]: `${spill}px`,
+          }}
+          className={`dock__view ${vertical ? 'dock__view--v' : 'dock__view--h'}`}
         >
-          {shownApps
-            .map((id) => {
-              const app = getApp(id)
-              const running = windows.some((w) => w.tabs.some((tab) => tab.id === app.id))
-              const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
-              /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上 */
-              const label = `${app.name} · ${app.veggie}`
-
-              return (
-                <button
-                  key={app.id}
-                  type="button"
-                  style={btnStyle}
-                  title={label}
-                  /* ⚠️ 无障碍名**只用窗口名**：验证脚本（verify.mjs / verify-dst.mjs）都按
-                     `button[aria-label="博客"]` 这类选择器点按钮，往里塞"菜名"会把它们全弄坏。
-                     菜名放 title 与悬浮提示里。 */
-                  aria-label={app.name}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => openApp(app.id)}
-                  onMouseEnter={(e) => showName(e.currentTarget, label)}
-                  onMouseLeave={() => setHover(null)}
-                  onFocus={(e) => showName(e.currentTarget, label)}
-                  onBlur={() => setHover(null)}
-                  className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
-                    active ? 'bg-accent text-accent-ink' : ''
-                  }`}
-                >
-                  <AppIcon name={app.icon} className="h-1/2 w-1/2" />
-                  {running ? (
-                    <span
-                      className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                </button>
-              )
-            })}
+          <div
+            ref={trackEl}
+            data-dock-track=""
+            style={{ gap: GAP }}
+            className={`dock__track ${vertical ? 'dock__track--v' : ''}`}
+          >
+            {[1, 2].map((copy) =>
+              (preview ?? shownApps).map((id, i) =>
+                iconButton(id, { copy: copy === 1 ? 1 : 2, index: i, wheel: true }),
+              ),
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        /* ── 折行（wrap）：**完全旧行为**，一个字都没改（最多 3 行、静态、不放大、无拖拽手势）──
+           只显示放得下的按钮，其余靠拖动/滚轮查看 */
+        <div
+          ref={scroller}
+          onPointerDown={wrapStartDrag}
+          onPointerMove={wrapOnDrag}
+          onPointerUp={wrapEndDrag}
+          onPointerCancel={wrapEndDrag}
+          onWheel={wrapOnWheel}
+          /* 视口本身不设 justify/align —— 居中交给里面那层用 m-auto。
+             滚动容器上直接写 justify-center 时，内容一旦超出，超出的那一侧会落到
+             滚动原点之外：滚轮和拖动都永远够不到（小任务栏时最左 / 最上的图标就是这么丢的）。
+             max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏 */
+          className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full ${
+            length !== null ? 'flex-1' : ''
+          } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
+        >
+          {/* m-auto 两头都管：有富余就居中，真超出时自动变 0，内容从滚动原点开始，两端都够得到 */}
+          <div
+            style={itemsStyle}
+            className={`m-auto flex shrink-0 gap-1 ${lines > 1 ? 'flex-wrap' : 'flex-nowrap'} ${
+              vertical ? 'flex-col' : ''
+            }`}
+          >
+            {shownApps.map((id, i) => iconButton(id, { copy: 1, index: i, wheel: false }))}
+          </div>
+        </div>
+      )}
 
       {vertical ? menuButton : null}
 

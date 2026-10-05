@@ -100,10 +100,12 @@ export function SettingsWindow() {
     thickness,
     iconSize,
     dockApps,
+    mode,
     setPosition,
     setLength,
     setThickness,
     setIconSize,
+    setMode,
     toggleDockApp,
     resetDock,
   } = useDock()
@@ -272,6 +274,41 @@ export function SettingsWindow() {
             </button>
           ))}
         </div>
+      </Section>
+
+      <Section
+        title="任务栏图标区"
+        hint="循环轮盘：单行首尾相接，按住左右拖就能一直转、中间的图标更大，按住图标上下拖还能换位置。折行：以前那样堆成最多 3 行、位置固定。"
+      >
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { id: 'wheel' as const, name: '循环轮盘', hint: '单行 + 循环 + 中央放大，可拖着浏览 / 换位' },
+              { id: 'wrap' as const, name: '折行', hint: '旧行为：最多 3 行折行，位置固定' },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              /* ⚠️ 无障碍名带上"任务栏图标区："前缀 —— 验证脚本靠它点这两个按钮 */
+              aria-label={`任务栏图标区：${item.name}`}
+              aria-pressed={mode === item.id}
+              title={item.hint}
+              onClick={() => setMode(item.id)}
+              className={`rounded border px-3 py-1.5 text-xs ${
+                mode === item.id
+                  ? 'border-accent bg-accent text-accent-ink'
+                  : 'border-edge text-ink hover:bg-hover'
+              }`}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-dim">
+          当前：{mode === 'wheel' ? '循环轮盘（单行，可拖着转）' : '折行（最多 3 行，位置固定）'}
+          ｜默认是循环轮盘；老设置里没有这一项时也按循环轮盘走。
+        </p>
       </Section>
 
       <Section title="任务栏显示哪些应用" hint="取消勾选的仍可从「所有项目」进入">

@@ -10,6 +10,13 @@ export type WallpaperFit = 'cover' | 'contain' | 'repeat'
 /** 任务栏停靠位置；左/右为竖排 */
 export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
 
+/**
+ * 任务栏图标区的展示模式（用户 2026-10-05 追加：「旧的展示方式也作为可选项放进设置里面」）：
+ * - `wheel`：新的**循环轮盘** —— 永远单行/单列、首尾相接循环、中央放大、按住拖动浏览、竖拖换位（**默认**）
+ * - `wrap`：**完全旧行为** —— 最多 3 行折行、静态、不放大、没有拖拽手势，顺序仍由设置里那份清单决定
+ */
+export type DockMode = 'wheel' | 'wrap'
+
 export type IconName =
   | 'about'
   | 'projects'
