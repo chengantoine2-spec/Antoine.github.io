@@ -10,9 +10,6 @@ export type WallpaperFit = 'cover' | 'contain' | 'repeat'
 /** 任务栏停靠位置；左/右为竖排 */
 export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
 
-/** 窗口标签栏（像浏览器的标签页）：顶部一条 / 左侧一条 / 不显示 */
-export type TabPosition = 'top' | 'left' | 'off'
-
 export type IconName =
   | 'about'
   | 'projects'
@@ -51,7 +48,7 @@ export interface AppDef {
   localOnly?: boolean
 }
 
-/** 一个窗口的位置与大小（含最大化状态），用于记忆 */
+/** 一个窗口框的位置与大小（含最大化状态），用于记忆 */
 export interface WindowGeometry {
   x: number
   y: number
@@ -66,8 +63,24 @@ export interface WindowGeometry {
  */
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom' | 'tl' | 'tr' | 'bl' | 'br'
 
-export interface WindowState {
+/** 框里的一个标签：一个应用 + 它当前停在的子页面 */
+export interface WindowTab {
   id: AppId
+  /** 子页面参数：博客详情 `/blog/17` → `'17'`；应用根就是 undefined */
+  param?: string
+}
+
+/**
+ * **一个窗口框**（不是"一个应用"）：框里可以有多个标签（合并后）。
+ * 用户 2026-10-05 拍板的模型：标签活在各自窗口框的边框里面，框可以合并 / 拆分。
+ */
+export interface WindowState {
+  /** 框 id：`w1`、`w2`…，由 reducer 的 nextKey 递增 */
+  key: string
+  /** 至少一个标签；顺序 = 标签栏顺序 */
+  tabs: WindowTab[]
+  /** 当前标签下标（一定落在 tabs 范围内） */
+  active: number
   x: number
   y: number
   w: number
@@ -75,12 +88,6 @@ export interface WindowState {
   z: number
   minimized: boolean
   maximized: boolean
-  /**
-   * 窗口里的「子页面」参数：博客详情 `/blog/17` → `'17'`，项目详情同理。
-   * 一个应用只有一个窗口，所以同一个应用同时只显示一个页面
-   * （用户 2026-10-05 定的范围：多窗口 = 不同应用各一个，不做同应用多开）。
-   */
-  param?: string
   /** 当前吸附在哪个区（没吸附就是 undefined） */
   snap?: SnapZone
   /** 吸附前的矩形：解吸附时回到这里 */
@@ -90,6 +97,16 @@ export interface WindowState {
 export interface DesktopState {
   windows: WindowState[]
   topZ: number
+  /** 下一个可用的框号 */
+  nextKey: number
+}
+
+/** 刷新恢复用的一帧（`desktop.openWindows` 里的形状） */
+export interface SessionFrame {
+  tabs: WindowTab[]
+  active: number
+  /** 老数据可能没有几何：那就按应用记住的 / 居中落位 */
+  geometry?: WindowGeometry
 }
 
 export type WindowAction =
@@ -103,21 +120,33 @@ export type WindowAction =
       /** 目标子页面；**不传 = 回到这个应用的根**（点任务栏图标就该回根） */
       param?: string
     }
-  /** 只在窗口内部换页（点卡片进详情），不动几何、不重开 */
-  | { type: 'setParam'; id: AppId; param?: string }
-  | { type: 'focus'; id: AppId }
-  | { type: 'close'; id: AppId }
+  | { type: 'focusFrame'; key: string }
+  /** 切到框里第 index 个标签（越界就当没发生） */
+  | { type: 'activate'; key: string; index: number }
+  | { type: 'closeFrame'; key: string }
+  /** 关掉一个标签；最后一个被关掉 = 整个框关掉 */
+  | { type: 'closeTab'; key: string; index: number }
   | { type: 'closeAll' }
-  | { type: 'minimize'; id: AppId }
-  | { type: 'restore'; id: AppId }
-  | { type: 'toggle-maximize'; id: AppId }
-  | { type: 'move'; id: AppId; x: number; y: number }
-  | { type: 'resize'; id: AppId; w: number; h: number }
+  | { type: 'minimize'; key: string }
+  | { type: 'restore'; key: string }
+  | { type: 'toggle-maximize'; key: string }
+  | { type: 'move'; key: string; x: number; y: number }
+  | { type: 'resize'; key: string; w: number; h: number }
   /** 贴到某个吸附区（bounds = 窗口层尺寸，几何由 lib/snap.ts 算） */
-  | { type: 'snap'; id: AppId; zone: SnapZone; bounds: { w: number; h: number } }
+  | { type: 'snap'; key: string; zone: SnapZone; bounds: { w: number; h: number } }
   /**
    * 解吸附：回到 `restore` 里的矩形。
    * 拖动时带上 anchor（指针在标题栏宽度里的相对位置 0~1）与 pointer（指针在窗口层里的坐标），
    * 就能把窗口"摆回指针下面"，不会跳一下。
    */
-  | { type: 'unsnap'; id: AppId; anchor?: number; pointer?: { x: number; y: number } }
+  | { type: 'unsnap'; key: string; anchor?: number; pointer?: { x: number; y: number } }
+  /** 改某个标签的子页面（点卡片进详情这种） */
+  | { type: 'setParam'; key: string; index: number; param?: string }
+  /** 把 fromKey 那一框整个并进 intoKey：标签接在后头，被拖过来的那个成为活动标签 */
+  | { type: 'merge'; fromKey: string; intoKey: string }
+  /** 把框里第 index 个标签拆出去单独成一框（位置给指针附近那个矩形） */
+  | { type: 'detach'; key: string; index: number; x: number; y: number; w: number; h: number }
+  /** 框内标签换位置（拖拽排序） */
+  | { type: 'reorder'; key: string; from: number; to: number }
+  /** 刷新恢复：直接照着会话记忆把框建起来（老格式由 lib/windowStore 归一化成这个形状） */
+  | { type: 'hydrate'; frames: SessionFrame[]; bounds: { w: number; h: number } }

@@ -32,9 +32,11 @@ export function useFullscreen() {
       }
       /* 顺手把当前窗口最大化：否则浏览器进了全屏、窗口还是小的，看着依旧"没铺开" */
       const app = matchApp(pathname)
-      const win = app ? windows.find((item) => item.id === app.id) : undefined
+      const win = app
+        ? windows.find((item) => item.tabs.some((tab) => tab.id === app.id))
+        : undefined
       if (win && !win.minimized && !win.maximized) {
-        dispatch({ type: 'toggle-maximize', id: win.id })
+        dispatch({ type: 'toggle-maximize', key: win.key })
       }
       await document.documentElement.requestFullscreen()
     } catch {

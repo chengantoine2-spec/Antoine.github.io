@@ -18,8 +18,14 @@ export default defineConfig({
   server: {
     port: 5173,
     watch: {
-      /* 大体积静态资源在复制/写入期间会被锁住，watcher 撞上 EBUSY 会直接崩掉 dev server */
-      ignored: ['**/*.mp4', '**/*.webm'],
+      /* ⚠️ 这几条是"dev server 一改文件就死"的真凶，别删：
+         ① 大体积静态资源在复制/写入期间会被锁住；
+         ② 更常见的是**原子写留下的临时目录** —— 保存文件时常常写成
+            `<目录>/.<文件名>.<pid>.<guid>.tmpdir/<文件名>.tmp` 再替换，Vite 的 watcher
+            会去 watch 那个临时文件；它一被锁住/删掉就抛
+            `EBUSY: resource busy or locked, watch '…tmp'`，并**直接结束进程**（不是警告）。
+            忽略之后再用工具改文件就不会把 dev server 带走了。 */
+      ignored: ['**/*.mp4', '**/*.webm', '**/.*.tmpdir/**', '**/*.tmp'],
     },
   },
 })

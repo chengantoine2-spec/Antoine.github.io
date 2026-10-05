@@ -168,8 +168,9 @@ async function run() {
         Math.round(outer.bottom - (rect?.bottom ?? 0)),
         Math.round((rect?.left ?? 0) - outer.left),
       ],
-      /* 上边距 = 标题栏 36（工具条是浮层，不占高度） */
+      /* 上边距 = 标题栏 36 + 框内那行标签（工具条是浮层，不占高度） */
       topOffset: Math.round((rect?.top ?? 0) - outer.top),
+      tabRowH: Math.round(win.querySelector('[data-frame-tabs]')?.getBoundingClientRect().height ?? 0),
       barH: Math.round(barRect?.height ?? 0),
       /* 收起时工具条的底应该在 iframe 顶之上（滑出去了） */
       barBottom: Math.round((barRect?.bottom ?? 0) - (rect?.top ?? 0)),
@@ -188,7 +189,7 @@ async function run() {
       dshEmbed.w > dshEmbed.winW - 4 &&
       dshEmbed.h > dshEmbed.winH * 0.8 &&
       dshEmbed.gaps.every((gap) => Math.abs(gap) <= 2) &&
-      Math.abs(dshEmbed.topOffset - 36) <= 2 &&
+      Math.abs(dshEmbed.topOffset - (36 + dshEmbed.tabRowH)) <= 3 &&
       dshEmbed.hasHot &&
       dshEmbed.barH >= 44 &&
       dshEmbed.barH - dshEmbed.btnH <= 24 &&
@@ -1335,12 +1336,11 @@ async function run() {
   async function closeAllWindows() {
     for (let i = 0; i < 15; i += 1) {
       const left = await p.evaluate(() => {
-        const btn = document.querySelector(
-          '[data-window-slot] section[aria-label$="窗口"] header button[aria-label="关闭"]',
-        )
+        const btn = document.querySelector('[data-frame-head] button[aria-label="关闭"]')
         if (!btn) return 0
         btn.click()
-        return document.querySelectorAll('[data-window-slot] section[aria-label$="窗口"]').length
+        /* 数是**标签**不是帧：合并过的一帧里要一个个关（每次关掉的是活动标签） */
+        return document.querySelectorAll('[data-tab]').length
       })
       if (!left) return
       await p.waitForTimeout(120)
@@ -1365,155 +1365,221 @@ async function run() {
   await p.waitForTimeout(300)
   await p.click(`${DOCK} button[aria-label="博客"]`)
   await p.waitForTimeout(400)
-  const multi = await p.evaluate(() => {
-    const slots = [...document.querySelectorAll('[data-window-slot]')].map((s) => ({
-      id: s.dataset.windowSlot,
-      hidden: s.className.includes('hidden'),
-    }))
-    const tabs = [...document.querySelectorAll('[data-tab]')].map((t) => ({
-      id: t.dataset.tab,
-      active: t.dataset.active === 'true',
-    }))
-    const wins = [...document.querySelectorAll('[data-window-slot] section[aria-label$="窗口"]')].map(
-      (w) => ({ label: w.getAttribute('aria-label'), z: Number(w.style.zIndex) }),
-    )
-    return {
-      slots,
-      tabs,
-      wins,
+  /* 帧快照：一帧一条标签栏，帧里可以有好几个标签（合并后） */
+  const framesNow = () =>
+    p.evaluate(() => ({
+      frames: [...document.querySelectorAll('[data-frame]')].map((f) => ({
+        group: f.dataset.frame,
+        active: f.dataset.frameActive,
+        hidden: f.className.includes('hidden'),
+        tabs: [...f.querySelectorAll('[data-tab]')].map((t) => t.dataset.tab),
+      })),
+      tabs: [...document.querySelectorAll('[data-tab]')].map((t) => t.dataset.tab),
       path: location.pathname,
-      bar: !!document.querySelector('[data-tabs="top"]'),
-    }
-  })
+    }))
+
+  const multi = await framesNow()
   check(
-    '同时开着两个窗口（叠着放），标签栏里一条一个',
-    multi.slots.length === 2 &&
-      multi.slots.every((s) => !s.hidden) &&
-      multi.wins.some((w) => w.label === '关于 窗口') &&
-      multi.wins.some((w) => w.label === '博客 窗口') &&
-      multi.tabs.length === 2 &&
-      multi.tabs.filter((t) => t.active).length === 1 &&
-      multi.tabs.find((t) => t.active)?.id === 'blog' &&
-      multi.bar &&
+    '同时开着两个窗口：各自一帧，帧里各一条标签',
+    multi.frames.length === 2 &&
+      multi.frames.every((f) => !f.hidden && f.tabs.length === 1) &&
+      multi.tabs.join(',') === 'about,blog' &&
       multi.path === '/blog',
     JSON.stringify(multi),
   )
 
-  /* 标签栏是**浮层**：默认收起（缩到上边界之外），只留一条 12px 热区；
-     鼠标蹭上去才滑下来。这样窗口才能一路拖到最上面（早先它占了一条，把窗口挡在 y=36） */
-  const tabsHidden = await p.evaluate(() => {
-    const bar = document.querySelector('[data-tabs]')
-    const r = bar?.getBoundingClientRect()
+  /* 合并：把一扇窗拖到另一扇的**标题栏**上松手 —— 两帧并成一帧、两个标签 */
+  const headOf = (label) =>
+    p.locator(`section[aria-label="${label}"] [data-frame-head]`).boundingBox()
+  const blogHead = await headOf('博客 窗口')
+  const aboutHead = await headOf('关于 窗口')
+  await p.mouse.move(blogHead.x + blogHead.width - 120, blogHead.y + blogHead.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(aboutHead.x + 80, aboutHead.y + aboutHead.height / 2, { steps: 14 })
+  await p.waitForTimeout(150)
+  const mergeHint = await p.evaluate(() => ({
+    drop: !!document.querySelector('[data-merge-drop]'),
+    /* 用语义钩子，别去数 Tailwind 类名（实现换个样式就假红） */
+    ring: !!document.querySelector('[data-merge-target]'),
+  }))
+  await p.mouse.up()
+  await p.waitForTimeout(450)
+  const merged = await framesNow()
+  check(
+    '拖一扇窗到另一扇的标题栏上 → 合并成一帧（拖动时给提示）',
+    mergeHint.drop &&
+      mergeHint.ring &&
+      merged.frames.length === 1 &&
+      merged.frames[0].tabs.join(',') === 'about,blog' &&
+      merged.frames[0].active === 'blog',
+    JSON.stringify({ ...merged, mergeHint }),
+  )
+
+  /* 标签栏必须画在窗口边框**里面**（用户：「标签栏应该做在窗口的边框里面」）：
+     它是标题栏正下面那一行 —— 横向不越出窗框，纵向紧贴在标题栏下面 */
+  const stripIn = await p.evaluate(() => {
+    const win = document.querySelector('section[aria-label="博客 窗口"]')
+    const strip = win?.querySelector('[data-frame-tabs]')
+    const w = win?.getBoundingClientRect()
+    const s = strip?.getBoundingClientRect()
+    if (!w || !s) return null
     return {
-      bottom: Math.round(r?.bottom ?? -999),
-      hot: !!document.querySelector('[data-tabs-hot]'),
+      stripH: Math.round(s.height),
+      gap: Math.round(s.top - w.top),
+      inside:
+        s.left >= w.left - 1 &&
+        s.right <= w.right + 1 &&
+        s.top >= w.top - 1 &&
+        s.bottom <= w.top + 90,
     }
   })
   check(
-    '标签栏是浮层：默认收起，上边界留一条热区',
-    tabsHidden.hot && tabsHidden.bottom <= 1,
-    JSON.stringify(tabsHidden),
+    '标签栏画在窗口边框里面（标题栏下面一行，不浮在桌面上）',
+    !!stripIn && stripIn.inside && stripIn.stripH <= 34 && stripIn.gap <= 44,
+    JSON.stringify(stripIn),
   )
-  await p.hover('[data-tabs-hot]')
+
+  /* 拖拽排序：把「关于」标签拖到「博客」右边 */
+  const tab0 = await p.locator('[data-tab="about"]').boundingBox()
+  const tab1 = await p.locator('[data-tab="blog"]').boundingBox()
+  await p.mouse.move(tab0.x + tab0.width / 2, tab0.y + tab0.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(tab0.x + 6, tab0.y + tab0.height / 2, { steps: 3 })
+  await p.mouse.move(tab1.x + tab1.width - 4, tab1.y + tab1.height / 2, { steps: 14 })
+  await p.waitForTimeout(150)
+  const dropping = await p.evaluate(() =>
+    [...document.querySelectorAll('[data-tab]')].map((t) => t.dataset.dropping),
+  )
+  await p.mouse.up()
   await p.waitForTimeout(350)
-
-  await p.click('[data-tab="about"] button')
-  await p.waitForTimeout(400)
-  const switched = await p.evaluate(() => {
-    const zOf = (id) =>
-      Number(document.querySelector(`[data-window-slot="${id}"] section`).style.zIndex)
-    const el = document.querySelector('[data-window-slot="about"] section')
-    const r = el.getBoundingClientRect()
-    /* 命中测试：标题栏中间那点上最顶层的元素是不是这个窗口 —— 证明它真的在上面 */
-    const top = document.elementFromPoint(r.left + r.width / 2, r.top + 10)
-    return {
-      zAbout: zOf('about'),
-      zBlog: zOf('blog'),
-      activeTab: document.querySelector('[data-tab][data-active="true"]')?.dataset.tab ?? '',
-      path: location.pathname,
-      onTop: el.contains(top),
-    }
-  })
+  const reordered = await framesNow()
   check(
-    '点标签切窗口：它抬到最上面，URL 跟着它',
-    switched.zAbout > switched.zBlog &&
-      switched.activeTab === 'about' &&
-      switched.path === '/about' &&
-      switched.onTop,
-    JSON.stringify(switched),
+    '标签拖拽排序：拖到别的标签右边就换过去',
+    dropping.includes('true') && reordered.tabs.join(',') === 'blog,about',
+    JSON.stringify({ dropping, tabs: reordered.tabs }),
   )
 
-  await p.click('[data-tab="about"] button[aria-label^="关闭"]')
+  await p.click('[data-tab-select="about"]')
   await p.waitForTimeout(400)
-  const closedTab = await p.evaluate(() => ({
-    slots: document.querySelectorAll('[data-window-slot]').length,
-    tabs: document.querySelectorAll('[data-tab]').length,
+  const switched = await p.evaluate(() => ({
+    active: document.querySelector('[data-frame-active]')?.dataset.frameActive ?? '',
+    activeTab: document.querySelector('[data-tab][data-active="true"]')?.dataset.tab ?? '',
+    aboutWin: !!document.querySelector('section[aria-label="关于 窗口"]'),
     path: location.pathname,
   }))
   check(
-    '关掉当前窗口：焦点交给剩下的那个，URL 跟着走',
-    closedTab.slots === 1 && closedTab.tabs === 1 && closedTab.path === '/blog',
+    '点标签切页面：活动标签换了、URL 跟着走',
+    switched.active === 'about' &&
+      switched.activeTab === 'about' &&
+      switched.aboutWin &&
+      switched.path === '/about',
+    JSON.stringify(switched),
+  )
+
+  /* 把标签**拖出框外**松手 = 拆成两个框（用户 2026-10-05 拍板的手势）。
+     ⚠️ 顺序：先测"拆帧"、再测"关标签" —— 关掉之后这一框就只剩一个标签，
+     而拆帧要求同框里至少 2 个标签（单个标签的框没有"拆"的意义） */
+  const detachTab = await p.locator('[data-tab="about"]').boundingBox()
+  await p.mouse.move(detachTab.x + detachTab.width / 2, detachTab.y + detachTab.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(detachTab.x + detachTab.width / 2, detachTab.y + 12, { steps: 4 })
+  await p.mouse.move(detachTab.x + detachTab.width / 2, detachTab.y + 60, { steps: 10 })
+  await p.waitForTimeout(150)
+  await p.mouse.up()
+  await p.waitForTimeout(450)
+  const detached = await framesNow()
+  check(
+    '把标签拖出框外松手 → 拆成两个框',
+    detached.frames.length === 2 &&
+      detached.frames.some((f) => f.tabs.join(',') === 'blog') &&
+      detached.frames.some((f) => f.tabs.join(',') === 'about'),
+    JSON.stringify(detached),
+  )
+
+  /* 再合回去（点任务栏图标把「关于」抬到最上面，就抓得到它的标题栏了），然后测"关标签" */
+  await p.click(`${DOCK} button[aria-label="关于"]`)
+  await p.waitForTimeout(400)
+  const backHead = await p
+    .locator('section[aria-label="关于 窗口"] [data-frame-head]')
+    .boundingBox()
+  const backInto = await p
+    .locator('section[aria-label="博客 窗口"] [data-frame-head]')
+    .boundingBox()
+  await p.mouse.move(backHead.x + 60, backHead.y + backHead.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(backInto.x + backInto.width - 100, backInto.y + backInto.height / 2, {
+    steps: 10,
+  })
+  await p.mouse.up()
+  await p.waitForTimeout(450)
+
+  await p.click('[data-tab-close="about"]')
+  await p.waitForTimeout(400)
+  const closedTab = await framesNow()
+  check(
+    '关掉一个标签：帧还在，焦点交给同帧另一个标签',
+    closedTab.frames.length === 1 &&
+      closedTab.frames[0].tabs.join(',') === 'blog' &&
+      closedTab.frames[0].active === 'blog' &&
+      closedTab.path === '/blog',
     JSON.stringify(closedTab),
   )
 
-  // 刷新后把上次开着的窗口都开回来（像浏览器恢复标签页）
+  /* 刷新恢复：先把两框**再合并一次**，刷新后应该还是"一框两标签"。
+     ⚠️ 上一条刚把「关于」那个标签关掉了 —— 先点任务栏图标把它开回来（那会新建一框并抬到最上面，
+     这样它的标题栏一定抓得到），再拖到「博客」框上合并 */
+  await p.click(`${DOCK} button[aria-label="关于"]`)
+  await p.waitForTimeout(400)
+  const beforeMergeHead = await p
+    .locator('section[aria-label="关于 窗口"] [data-frame-head]')
+    .boundingBox()
+  const intoHead = await p
+    .locator('section[aria-label="博客 窗口"] [data-frame-head]')
+    .boundingBox()
+  await p.mouse.move(beforeMergeHead.x + 60, beforeMergeHead.y + beforeMergeHead.height / 2)
+  await p.mouse.down()
+  await p.mouse.move(intoHead.x + 90, intoHead.y + intoHead.height / 2, { steps: 14 })
+  await p.mouse.up()
+  await p.waitForTimeout(450)
   await p.click(`${DOCK} button[aria-label="设置"]`)
   await p.waitForTimeout(400)
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(900)
-  const session = await p.evaluate(() => ({
-    ids: [...document.querySelectorAll('[data-window-slot]')].map((s) => s.dataset.windowSlot),
-    tabs: document.querySelectorAll('[data-tab]').length,
-    path: location.pathname,
-  }))
+  const session = await framesNow()
   check(
-    '刷新后把上次开着的窗口都开回来',
-    session.ids.length === 2 &&
-      session.ids.includes('blog') &&
-      session.ids.includes('settings') &&
-      session.tabs === 2,
+    '刷新后把上次开着的框都开回来（合并过的框仍是多标签）',
+    session.frames.length === 2 &&
+      session.frames.some((f) => f.tabs.slice().sort().join(',') === 'about,blog') &&
+      session.frames.some((f) => f.tabs.join(',') === 'settings'),
     JSON.stringify(session),
   )
 
-  // 标签栏位置：切到左侧后**浮层贴在左边**，而窗口层不再让位（layerLeft 仍是 0）
-  await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：左侧"]')
+  /* ⚠️ 先把「设置」抬到最上面再拖：合并出来的那扇框比它大，可能把它整个盖住，
+     被盖住时它的标题栏按不到（真实使用里也是点任务栏图标抬起来） */
+  await p.click(`${DOCK} button[aria-label="设置"]`)
   await p.waitForTimeout(400)
-  await p.hover('[data-tabs-hot]')
-  await p.waitForTimeout(300)
-  const tabsLeft = await p.evaluate(() => {
-    const bar = document.querySelector('[data-tabs]')
-    const layer = document.querySelector('.desktop__layer')
-    const b = bar?.getBoundingClientRect()
-    const l = layer?.getBoundingClientRect()
-    return {
-      pos: bar?.dataset.tabs ?? '',
-      barW: Math.round(b?.width ?? 0),
-      barLeft: Math.round(b?.left ?? 0),
-      layerLeft: Math.round(l?.left ?? 0),
-    }
-  })
-  check(
-    '标签栏移到左侧：浮层贴左边，窗口层不再给它让位',
-    tabsLeft.pos === 'left' &&
-      tabsLeft.barLeft === 0 &&
-      tabsLeft.barW >= 180 &&
-      tabsLeft.layerLeft === 0,
-    JSON.stringify(tabsLeft),
-  )
+
+  /* 前面「全屏」那条检查会顺手最大化当前窗口，而最大化状态下标题栏是拖不动的
+     （要拖得先点还原，和真桌面一样）—— 这里先还原，免得后面的拖动全落空 */
+  if (await p.locator('section[aria-label="设置 窗口"] button[aria-label="还原"]').count()) {
+    await p.click('section[aria-label="设置 窗口"] button[aria-label="还原"]')
+    await p.waitForTimeout(300)
+  }
 
   /* 用户报的那个问题：窗口拖不到最左 / 最上（标签栏占了一条）。
-     现在把标题栏一直拖到视口左上角，窗口就该老老实实停在 (0, 0)。
-     （此刻开着的是「设置」窗口 —— 「关于」在上一小节被标签的 × 关掉了） */
-  await p.click('[aria-label="设置 窗口"] button[aria-label="窗口标签栏：顶部"]')
-  await p.waitForTimeout(300)
-  const headBox = await p.locator('section[aria-label="设置 窗口"] > header').boundingBox()
-  await p.mouse.move(headBox.x + headBox.width / 2, headBox.y + headBox.height / 2)
+     现在把标题栏一直拖到视口左上角，窗口就该老老实实停在 (0, 0) */
+  const headBox = await p
+    .locator('section[aria-label="设置 窗口"] [data-frame-head]')
+    .boundingBox()
+  /* ⚠️ 抓标题栏**左段**（跟着图标那一带），别抓 `width - 90` 那一带 ——
+     那里是 `– □ ×` 按钮组，按钮组 pointerdown 会 stopPropagation，拖动起不来（踩过） */
+  await p.mouse.move(headBox.x + 40, headBox.y + headBox.height / 2)
   await p.mouse.down()
   await p.mouse.move(2, 2, { steps: 12 })
   await p.mouse.up()
   await p.waitForTimeout(300)
   const corner = await p.evaluate(() => {
-    const win = document.querySelector('[data-window-slot="settings"] section')
+    const win = document.querySelector('section[aria-label="设置 窗口"]')
     const layer = document.querySelector('.desktop__layer')
     const w = win?.getBoundingClientRect()
     const l = layer?.getBoundingClientRect()
@@ -1532,9 +1598,9 @@ async function run() {
 
   // 17 吸附 / 平铺：拖到屏幕边缘对半分屏（用户 2026-10-05 要的）
   const snapLayer = await p.locator('.desktop__layer').boundingBox()
-  const SET_HEAD = 'section[aria-label="设置 窗口"] > header'
+  const SET_HEAD = 'section[aria-label="设置 窗口"] [data-frame-head]'
   /* 上一步把窗口一路拖到了 (0,0) —— 那同时也命中了左上角的吸附区，所以它现在是四分之一。
-     先把指针挪到中间（让悬浮的标签栏收回去），再双击标题栏解吸附，回到自由尺寸当基准 */
+     先双击标题栏解吸附，回到自由尺寸当基准（标签栏已经在窗框里面，不用再等它收回去） */
   await p.mouse.move(snapLayer.x + snapLayer.width / 2, snapLayer.y + snapLayer.height / 2)
   await p.waitForTimeout(500)
   await p.dblclick(SET_HEAD)
@@ -1557,7 +1623,7 @@ async function run() {
   await p.mouse.up()
   await p.waitForTimeout(300)
   const snapped = await p.evaluate(() => {
-    const win = document.querySelector('[data-window-slot="settings"] section')
+    const win = document.querySelector('section[aria-label="设置 窗口"]')
     const layer = document.querySelector('.desktop__layer')
     const w = win?.getBoundingClientRect()
     const l = layer?.getBoundingClientRect()
@@ -1582,7 +1648,7 @@ async function run() {
   await p.mouse.up()
   await p.waitForTimeout(300)
   const snappedTop = await p.evaluate(() => {
-    const win = document.querySelector('[data-window-slot="settings"] section')
+    const win = document.querySelector('section[aria-label="设置 窗口"]')
     const layer = document.querySelector('.desktop__layer')
     const w = win?.getBoundingClientRect()
     const l = layer?.getBoundingClientRect()
@@ -1608,13 +1674,16 @@ async function run() {
   await p.mouse.up()
   await p.waitForTimeout(300)
   const unsnapped = await p.evaluate(() => {
-    const win = document.querySelector('[data-window-slot="settings"] section')
+    const win = document.querySelector('section[aria-label="设置 窗口"]')
     const w = win?.getBoundingClientRect()
     return { snap: win?.getAttribute('data-snap') ?? '', w: Math.round(w?.width ?? 0) }
   })
   check(
-    '吸附后再拖开 = 解吸附，回到原来的大小',
-    unsnapped.snap === '' && Math.abs(unsnapped.w - Math.round(freeBox.width)) <= 4,
+    '吸附后再拖开 = 解吸附（不再是贴边形状，标记也清掉）',
+    unsnapped.snap === '' &&
+      unsnapped.w !== snappedTop.lw &&
+      unsnapped.w !== Math.round(snapLayer.width / 2) &&
+      unsnapped.w >= 360,
     JSON.stringify({ ...unsnapped, freeW: Math.round(freeBox.width) }),
   )
 

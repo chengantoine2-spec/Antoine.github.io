@@ -12,9 +12,10 @@ import { windowReducer } from '../lib/windowManager'
 import { clearGeometry, loadGeometry, saveGeometry, type GeometryMap } from '../lib/windowStore'
 import type { AppId, DesktopState, WindowAction, WindowGeometry, WindowState } from '../types/desktop'
 
-const EMPTY_STATE: DesktopState = { windows: [], topZ: 1 }
+const EMPTY_STATE: DesktopState = { windows: [], topZ: 1, nextKey: 1 }
 
 interface WindowsContextValue {
+  /** 桌面上的**窗口框**（每框一个或多个标签） */
   windows: WindowState[]
   dispatch: React.Dispatch<WindowAction>
   /** 记住的几何（含已关闭的窗口）；只在打开窗口时读一次 */
@@ -29,22 +30,33 @@ export function WindowsProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(windowReducer, EMPTY_STATE)
   const memory = useRef<GeometryMap>(loadGeometry())
 
-  /* 打开 / 移动 / 缩放都记下来；关闭时**故意保留**，下次打开回到原处 */
+  /* 打开 / 移动 / 缩放都记下来；关闭时**故意保留**，下次打开回到原处。
+     记住的粒度是**应用**：一框多标签时，这框的几何写给它每个标签的应用 ——
+     以后单独打开其中任何一个，都回到这框待过的地方 */
   useEffect(() => {
     let changed = false
     const next: GeometryMap = { ...memory.current }
     for (const win of state.windows) {
-      const prev = next[win.id]
-      if (
-        !prev ||
-        prev.x !== win.x ||
-        prev.y !== win.y ||
-        prev.w !== win.w ||
-        prev.h !== win.h ||
-        prev.maximized !== win.maximized
-      ) {
-        next[win.id] = { x: win.x, y: win.y, w: win.w, h: win.h, maximized: win.maximized }
-        changed = true
+      const geo: WindowGeometry = {
+        x: win.x,
+        y: win.y,
+        w: win.w,
+        h: win.h,
+        maximized: win.maximized,
+      }
+      for (const tab of win.tabs) {
+        const prev = next[tab.id]
+        if (
+          !prev ||
+          prev.x !== geo.x ||
+          prev.y !== geo.y ||
+          prev.w !== geo.w ||
+          prev.h !== geo.h ||
+          prev.maximized !== geo.maximized
+        ) {
+          next[tab.id] = geo
+          changed = true
+        }
       }
     }
     if (changed) {

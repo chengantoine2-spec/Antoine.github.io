@@ -185,8 +185,9 @@ export function Dock() {
 
   function openApp(id: AppId) {
     const app = getApp(id)
-    const win = windows.find((w) => w.id === id)
-    if (win?.minimized) dispatch({ type: 'restore', id })
+    /* 这一框可能装着好几个标签：按"哪个框里有这个应用"来找 */
+    const win = windows.find((w) => w.tabs.some((tab) => tab.id === id))
+    if (win?.minimized) dispatch({ type: 'restore', key: win.key })
     navigate(app.path)
   }
 
@@ -414,7 +415,7 @@ export function Dock() {
           {shownApps
             .map((id) => {
               const app = getApp(id)
-              const running = windows.some((w) => w.id === app.id)
+              const running = windows.some((w) => w.tabs.some((tab) => tab.id === app.id))
               const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
               /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上 */
               const label = `${app.name} · ${app.veggie}`
