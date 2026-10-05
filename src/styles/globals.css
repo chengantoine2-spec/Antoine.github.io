@@ -861,8 +861,11 @@
    ⚠️ 自定义 CSS 一律写在 `@layer` 之外（见「坑 1」：Tailwind 会把扫不到的规则整条裁掉）。 */
 .dock__view {
   position: relative;
-  /* 沿轴裁掉跑到视口外的图标；交叉轴的余量靠下面的负外边距 + 等量内边距撑出来 */
-  overflow: hidden;
+  /* ⚠️ **不能退回 `overflow: hidden`**（那会把 2× 的中心图标裁掉）——
+     裁剪只保留**主轴**：靠下面的 `clip-path` 裁掉循环用的第二份副本，
+     交叉轴给足负值 = 不裁 = 放大的图标从任务栏边**凸出去**（站主要的那种夸张感）。
+     也别写成 `overflow: hidden visible`：CSS 会把 visible 算成 auto，长出一条滚动条。 */
+  overflow: visible;
   /* 按住拖动是自己算的，别让浏览器的触摸滚动/缩放抢走手势 */
   touch-action: none;
   cursor: grab;
@@ -870,19 +873,13 @@
 .dock__view:active {
   cursor: grabbing;
 }
-/* 交叉轴留溢出余量：中央放大到 1.5× 的图标比图标位高出一截，不留就会被裁掉上下两边。
-   负外边距把裁剪框撑大、等量内边距把内容推回原位 —— 图标位置一点没变。 */
+/* 主轴裁剪：横向任务栏裁左右（上下不裁、允许凸出）；竖排反过来。
+   负 999px 是"这一边不裁"的写法（inset 的负值 = 边界往外扩）。 */
 .dock__view--h {
-  margin-top: calc(var(--dock-spill, 12px) * -1);
-  margin-bottom: calc(var(--dock-spill, 12px) * -1);
-  padding-top: var(--dock-spill, 12px);
-  padding-bottom: var(--dock-spill, 12px);
+  clip-path: inset(-999px 0 -999px 0);
 }
 .dock__view--v {
-  margin-left: calc(var(--dock-spill, 12px) * -1);
-  margin-right: calc(var(--dock-spill, 12px) * -1);
-  padding-left: var(--dock-spill, 12px);
-  padding-right: var(--dock-spill, 12px);
+  clip-path: inset(0 -999px 0 -999px);
 }
 .dock__track {
   display: flex;
@@ -898,10 +895,23 @@
 .dock__track--anim .dock__item {
   transition: transform 150ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
-/* 换位时被抬起来的那个图标：描一圈强调色 + 一层同色投影，底色取任务栏自己的底色 */
+/* 换位时被拖走的那个图标：**留在原位当占位**（淡出），跟手的实体是下面那个浮层幽灵 */
 .dock__item--lift {
+  opacity: 0.3;
+}
+/* 拖拽幽灵：被拖的图标本体（位置/缩放在 JS 里按指针写 transform）。
+   ⚠️ 它**必须挂在 `document.body` 的浮层里**（Dock.tsx 用 createPortal），不能放进图标区 ——
+   图标区那个 `clip-path` 会成为后代的包含块，幽灵放进去会被一起裁掉（而且拖出去就看不见了，
+   这正是站主报的那个 bug）。`pointer-events: none` 保证它不挡任何点击。 */
+.dock__ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  pointer-events: none;
+  border-radius: 10px;
   background: var(--c-chrome);
-  box-shadow: 0 10px 20px -6px var(--c-accent);
+  box-shadow: 0 12px 24px -8px var(--c-accent);
   outline: 1px solid var(--c-accent);
   outline-offset: -1px;
 }

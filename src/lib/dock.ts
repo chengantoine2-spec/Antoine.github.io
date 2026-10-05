@@ -22,14 +22,17 @@ export function minDockThickness(iconSize: number | null): number {
 }
 
 /* ── 循环轮盘（mode: 'wheel'，2026-10-05 用户要的）─────────────────────────────
-   中央放大用 `t = 1 - d/R`、`scale = 1 + AMP * t²`（正中 1.5×，到 R 回到 1.0）；
-   R = 图标区可视长度的 40%。拖拽浏览松手吸附到最近格子，缓动 SNAP_MS。
-   竖拖 44px 才进入"移动图标"（用户明确要求：日常左右滑动不要误触发移动）。 */
-export const MAGNIFY_AMP = 0.5
+   中央放大：**中心 2×，越远越小，到可视边缘约 0.8×**（站主拍板的口径）。
+   公式 `scale = PEAK - (PEAK - MIN) * u^1.5`，`u = 归一化距离`（0 = 峰所在的那个图标，1 = 可视边缘）。
+   拖拽浏览松手吸附到最近格子，缓动 SNAP_MS。竖拖 44px 才进入"移动图标"。 */
+/** 正中（峰）的倍数 */
+export const MAGNIFY_PEAK = 2
+/** 可视边缘的倍数：**小于 1×** —— 外侧图标比基础尺寸还小一圈，这是要的效果，不是被裁 */
+export const MAGNIFY_MIN = 0.8
+/** 衰减曲线的指数（1.5：中心附近变化慢、外侧收得快） */
+export const MAGNIFY_EXP = 1.5
 export const MOVE_THRESHOLD = 44
 export const SNAP_MS = 150
-/** 放大基准半径占图标区可视长度的比例 */
-export const MAGNIFY_RADIUS_RATIO = 0.4
 /** 循环轮盘的可视长度至少要有这么多个图标位：少于 3 个，放大后的中心图标会被裁掉一半 */
 export const DOCK_VIEW_MIN_SLOTS = 3
 /** 长度下限（两套模式共用的地板值） */

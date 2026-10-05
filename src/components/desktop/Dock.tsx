@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getApp, visibleApps } from '../../lib/apps'
 import { useDock } from '../../hooks/useDock'
@@ -9,8 +10,9 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
-  MAGNIFY_AMP,
-  MAGNIFY_RADIUS_RATIO,
+  MAGNIFY_EXP,
+  MAGNIFY_MIN,
+  MAGNIFY_PEAK,
   MOVE_THRESHOLD,
   SNAP_MS,
   dockMinLength,
@@ -23,6 +25,7 @@ import {
   wrapLines,
   wrapPerLine,
 } from '../../lib/dock'
+import { veggieOfName } from '../../lib/veggies'
 import type { AppId } from '../../types/desktop'
 import { MenuGlyph, PositionGlyph } from '../icons'
 import { AppIcon } from './AppIcon'
@@ -32,6 +35,28 @@ import { StartMenu } from './StartMenu'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+/* 任务栏上的应用图：**菜图**（站主 2026-10-05：「任务栏图标全部换成蔬菜水果图」）。
+   身份层的对应关系只有一份：`AppDef.veggie`（中文菜名）→ `veggieOfName()` 查 URL。
+   - `logo-mark`：给透明底图形托一层主题投影（三套主题各有一份 `--logo-shadow`），
+     彩色菜图在深色 / 浅色的任务栏底色上都看得清；
+   - `alt=""` + `draggable={false}`：无障碍名仍然**只靠按钮的 `aria-label`**
+     （`button[aria-label="博客"]` 是两个验证脚本点任务栏的唯一入口，绝不能动），
+     同时避免浏览器原生图片拖拽抢走我们的指针手势；
+   - 找不到菜图时退回功能图标 —— 防的是"以后加了窗口却没配菜"时按钮空着。 */
+function appGlyph(id: AppId, className: string) {
+  const app = getApp(id)
+  const veg = veggieOfName(app.veggie)
+  if (!veg) return <AppIcon name={app.icon} className={className} />
+  return (
+    <img
+      src={veg.src}
+      alt=""
+      draggable={false}
+      className={`logo-mark pointer-events-none select-none object-contain ${className}`}
+    />
+  )
 }
 
 /* 任务栏内部几何 GAP / PAD / BORDER 现在从 lib/dock 来 —— 厚度下限要用同一套数，
@@ -153,6 +178,11 @@ export function Dock() {
   const lift = useRef<{ el: HTMLElement; id: AppId } | null>(null)
   /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
   const [preview, setPreview] = useState<AppId[] | null>(null)
+  /* 拖拽幽灵（站主报的 bug：拖出去的图标被图标区裁掉、看不见了）。它是**浮层**，
+     挂在 `document.body` 上（见下面的 createPortal）—— 图标区现在带 `clip-path`，
+     放进去会被一起裁掉。`ghost` 只在"进入移动模式/松手"这种离散时刻变，跟手靠 ref 直接改 transform。 */
+  const [ghost, setGhost] = useState<AppId | null>(null)
+  const ghostEl = useRef<HTMLDivElement | null>(null)
 
   /* 图标边长：设置里选过就用选的，否则跟随厚度；跟随厚度时超过上限不再变大，富余厚度改成多行 */
   const autoBtn = clamp((thickness ?? DOCK_THICKNESS) - (PAD + BORDER) * 2, 28, BTN_MAX)
@@ -194,9 +224,10 @@ export function Dock() {
   const viewMin = wheelViewMin(btn)
   const autoView = Math.max(viewMin, itemCount * step - GAP)
   const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen)
-  /* 交叉轴上给放大后的图标留的"溢出余量"：中央 1.5× 的图标会比图标位高一截，
-     不留这点余量就会被图标区的裁剪切掉上下两边（视口靠负外边距 + 等量内边距实现） */
-  const spill = Math.ceil((btn * MAGNIFY_AMP) / 2) + 2
+  /* ⚠️ 这里**不再有**"交叉轴溢出余量"（原 `--dock-spill` + 负外边距那套）：站主要的是
+     "放大的图标从任务栏边**凸出去**"（macOS 那种夸张感），所以图标区交叉轴不裁（见 globals.css
+     的 `.dock__view--h/--v`：`clip-path` 只裁主轴），2× 的图标自然凸在栏外，不需要预留空间。
+     任务栏厚度照旧 = 1× 图标 + 内边距。 */
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
 
@@ -336,18 +367,38 @@ export function Dock() {
     const vLen = vertical ? view.clientHeight : view.clientWidth
     if (!vLen) return
     const half = vLen / 2
-    const R = Math.max(1, vLen * MAGNIFY_RADIUS_RATIO)
-    const items = track.querySelectorAll<HTMLElement>('[data-dock-item]')
+    const items = [...track.querySelectorAll<HTMLElement>('[data-dock-item]')]
+    if (!items.length) return
+    /* 放大曲线：`u = clamp((d - dMin) / (dMax - dMin), 0, 1)`、`scale = PEAK - (PEAK-MIN)·u^1.5`。
+       - **dMin**：把"最靠中心那个图标"当峰 → 中心恒 2.0×（格子是离散的，拿几何中心当峰时
+         任务栏一短，实测峰值只有 1.76×，达不到"看着就是 2×"）；
+       - **dMax**：**可见的那一段**里最外那个图标的距离 → 最外侧恒 0.8×，中间按距离递减。
+         ⚠️ 别拿 `half`（可视半径）当分母：图标是离散的，默认几何下最外侧那个落在 220/240，
+         按 half 定标它只有 0.947× —— 根本看不出"越远越小"（站主这次要的正是这个）。
+         ⚠️ 也不能把循环第二份算进 dMax：它在可视区外、距离好几百 px，会把整条曲线压平。 */
+    const dist = new Map<HTMLElement, number>()
+    let dMin = Infinity
+    let dMax = 0
     items.forEach((el) => {
-      /* 正在被拖起来换位的那个不动它（它自己跟手，paint 一插手就会把它拽回去） */
-      if (lift.current && lift.current.el === el) return
       const c = (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
       const d = Math.abs(c - half)
-      const t = d >= R ? 0 : 1 - d / R
-      const s = 1 + MAGNIFY_AMP * t * t
-      if (s > 1.001) {
+      dist.set(el, d)
+      const pad = el.offsetWidth / 2
+      if (c >= -pad && c <= vLen + pad) {
+        if (d < dMin) dMin = d
+        if (d > dMax) dMax = d
+      }
+    })
+    if (!Number.isFinite(dMin)) dMin = 0
+    const span = Math.max(1, dMax - dMin)
+    items.forEach((el) => {
+      /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
+      if (lift.current && lift.current.el === el) return
+      const u = clamp(((dist.get(el) ?? 0) - dMin) / span, 0, 1)
+      const s = MAGNIFY_PEAK - (MAGNIFY_PEAK - MAGNIFY_MIN) * Math.pow(u, MAGNIFY_EXP)
+      if (Math.abs(s - 1) > 0.001) {
         el.style.transform = `scale(${s.toFixed(3)})`
-        el.style.zIndex = String(1 + Math.round(t * 10))
+        el.style.zIndex = String(1 + Math.round((1 - u) * 10))
       } else {
         el.style.transform = ''
         el.style.zIndex = ''
@@ -452,28 +503,24 @@ export function Dock() {
       return
     }
 
-    /* 移动模式：被拖的图标跟手；越过邻居中点就实时预览换位 */
+    /* 移动模式：原位置那个**淡出当占位**，跟手的实体是挂在 `document.body` 上的浮层幽灵。
+       图标区现在带 `clip-path`（只裁主轴、交叉轴允许凸出），图标本体留在里面一拖出栏外
+       就会被裁掉看不见 —— 这就是站主报的那个 bug。 */
     const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
     if (!items || !g.dragId) return
     const id = g.dragId
     const el = [...items].find((x) => x.dataset.dockItem === id && x.getAttribute('data-dock-copy') === '1')
-    if (el) {
-      if (!lift.current) {
-        el.classList.add('dock__item--lift')
-        lift.current = { el, id }
-      }
-      const rect = view.getBoundingClientRect()
-      const pAlong = alongOf(e) - (vertical ? rect.top : rect.left)
-      const pCross = crossOf(e) - (vertical ? rect.left : rect.top)
-      const lAlong = (vertical ? el.offsetTop : el.offsetLeft) + btn / 2
-      const lCross = (vertical ? el.offsetLeft : el.offsetTop) + btn / 2
-      const off = normalize(offset.current)
-      const dAlong = pAlong - (lAlong - off)
-      const dCross = pCross - lCross
-      el.style.transform = vertical
-        ? `translate(${dCross}px, ${dAlong}px) scale(1.15)`
-        : `translate(${dAlong}px, ${dCross}px) scale(1.15)`
-      el.style.zIndex = '40'
+    if (el && !lift.current) {
+      el.classList.add('dock__item--lift')
+      lift.current = { el, id }
+      setGhost(id)
+    }
+    /* 跟手：只写一个元素的 transform（固定定位 + translate 到指针），不进 React 状态 */
+    const ge = ghostEl.current
+    if (ge) {
+      ge.style.transform = `translate3d(${Math.round(e.clientX - btn / 2)}px, ${Math.round(
+        e.clientY - btn / 2,
+      )}px, 0)`
     }
 
     /* 落点下标：指针位置换算成"第几个格子"。**要取模** —— 列表是循环的，
@@ -504,6 +551,8 @@ export function Dock() {
       lift.current.el.style.zIndex = ''
       lift.current = null
     }
+    /* 收掉浮层幽灵（松手或取消都一样） */
+    setGhost(null)
     if (!g) {
       paint()
       return
@@ -541,6 +590,18 @@ export function Dock() {
     ro.observe(view)
     return () => ro.disconnect()
   }, [mode, position, btn, itemCount, length, thickness, preview, dockApps])
+
+  /* 幽灵一出现就先摆到当前指针位置：否则要等下一个 pointermove 才跟手，
+     中间那一帧它会停在左上角（浮层默认位置）闪一下。 */
+  useEffect(() => {
+    if (!ghost) return
+    const g = gesture.current
+    const el = ghostEl.current
+    if (!g || !el) return
+    el.style.transform = `translate3d(${Math.round(g.clientX - btn / 2)}px, ${Math.round(
+      g.clientY - btn / 2,
+    )}px, 0)`
+  }, [ghost, btn])
 
   /* 卸载时把没跑完的那一帧 rAF 收掉 */
   useEffect(
@@ -675,10 +736,15 @@ export function Dock() {
           loop ? 'dock__item' : ''
         } ${active ? 'bg-accent text-accent-ink' : ''}`}
       >
-        <AppIcon name={app.icon} className="h-1/2 w-1/2" />
+        {appGlyph(app.id, 'h-1/2 w-1/2')}
         {running ? (
           <span
-            className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-ink"
+            /* 正在跑的小圆点：底色跟着"有没有被选中"走 —— 菜图是彩色的、不吃主题色，
+               所以"哪个是当前应用"靠按钮底（bg-accent）+ 这个点两处一起表达。
+               点色用 chrome-ink / accent-ink 两个**面向前景**的令牌，三套主题都不会糊。 */
+            className={`absolute bottom-0.5 h-1 w-1 rounded-full ${
+              active ? 'bg-accent-ink' : 'bg-chrome-ink'
+            }`}
             aria-hidden="true"
           />
         ) : null}
@@ -736,7 +802,6 @@ export function Dock() {
             /* length 定了就吃掉剩余空间，没定就按内容（= 装下所有图标，超了由循环补） */
             flex: length === null ? '0 0 auto' : '1 1 auto',
             ...(vertical ? { height: viewLen } : { width: viewLen }),
-            ['--dock-spill' as string]: `${spill}px`,
           }}
           className={`dock__view ${vertical ? 'dock__view--v' : 'dock__view--h'}`}
         >
@@ -828,6 +893,24 @@ export function Dock() {
           {hover.name}
         </span>
       ) : null}
+
+      {/* 拖拽幽灵：被拖走的那个图标本体。
+          ⚠️ 它**必须挂在外壳层（`document.body` 的浮层）**，不能放进图标区 ——
+          图标区带 `clip-path`，会成为后代的包含块，放进去一拖出栏外就被裁掉（站主报的 bug）。
+          `pointer-events: none`：它不挡窗口 / 任务栏的任何点击；z 比任务栏高，拖着的时候看得见。 */}
+      {ghost
+        ? createPortal(
+            <div
+              ref={ghostEl}
+              data-dock-ghost={ghost}
+              style={{ width: btn, height: btn }}
+              className="dock__ghost grid place-items-center"
+            >
+              {appGlyph(ghost, 'h-full w-full')}
+            </div>,
+            document.body,
+          )
+        : null}
 
       <StartMenu open={menuOpen} position={position} onClose={closeMenu} />
     </nav>

@@ -1089,15 +1089,37 @@ async function run() {
         centerD: Number((byDistance[0]?.d ?? 0).toFixed(1)),
         secondScale: Number((byDistance[2]?.s ?? 0).toFixed(3)),
         edgeScale: Number((byDistance[byDistance.length - 1]?.s ?? 0).toFixed(3)),
-        /* 放大到 1.5× 的中心图标必须仍然完整待在图标区的裁剪框里 ——
-           交叉轴不留溢出余量的话，它上下会被裁掉一截（工作单第四节那条取舍） */
-        clipInside: (() => {
+        /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`（PEAK=2、MIN=0.8，u = 归一化距离）。
+           站主 2026-10-05：中心 2×，**越远越小**，外侧要**小于 1×**（不是被裁）。 */
+        monoOk: byDistance.every((it, i) => i === 0 || it.s <= byDistance[i - 1].s + 0.02),
+        curve: byDistance.map((it) => Number(it.s.toFixed(2))),
+        /* clip-path 只裁**主轴**：可视区左右两侧外面的点不该命中任何图标按钮（循环的第二份就藏在那儿） */
+        clipPath: view ? getComputedStyle(view).clipPath : '',
+        mainAxisClipped: (() => {
           if (!vr) return false
-          const near = byDistance[0]?.id
-          const el = primary.find((b) => b.dataset.dockItem === near)
+          const y = vr.y + vr.height / 2
+          const hits = (x) => {
+            const el = document.elementFromPoint(x, y)
+            return !!el?.closest('[data-dock-item]')
+          }
+          return !hits(vr.right + 3) && !hits(vr.x - 3)
+        })(),
+        /* 凸出量：底栏时"任务栏顶边 − 中心图标顶边"，允许溢出，所以必须 > 0 */
+        protrude: (() => {
+          if (!vr || !bar) return 0
+          const el = primary.find((b) => b.dataset.dockItem === byDistance[0]?.id)
+          if (!el) return 0
+          return Number((bar.getBoundingClientRect().top - el.getBoundingClientRect().top).toFixed(1))
+        })(),
+        /* 凸出来的那一截**真的看得见**：在任务栏上方 4px 处做命中测试，应该命中的就是这个图标
+           （证明它没被 clip-path / 容器裁掉，也没被别的东西盖住） */
+        protrudeHit: (() => {
+          if (!bar) return false
+          const el = primary.find((b) => b.dataset.dockItem === byDistance[0]?.id)
           if (!el) return false
           const r = el.getBoundingClientRect()
-          return r.top >= vr.top - 0.5 && r.bottom <= vr.bottom + 0.5
+          const hit = document.elementFromPoint(r.x + r.width / 2, bar.getBoundingClientRect().top - 4)
+          return !!hit && (el === hit || el.contains(hit))
         })(),
         mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
       }
@@ -1113,29 +1135,62 @@ async function run() {
     wheel0.copies === 2 && wheel0.items === wheel0.apps * 2 && wheel0.named === wheel0.apps,
     JSON.stringify({ copies: wheel0.copies, items: wheel0.items, named: wheel0.named, apps: wheel0.apps }),
   )
-  /* 放大公式：t = 1 - d/R，scale = 1 + AMP·t²，AMP = 0.5、R = 图标区可视长的 40%。
-     格子是离散的，中心未必正好落在某个图标上，所以不硬要求"正好 1.5"，
-     而是**按实测距离反算公式值**（既验了 AMP，也验了 R），再要求单调衰减。 */
-  const magnifyWant = (() => {
-    const R = wheel0.viewW * 0.4
-    const t = Math.max(0, 1 - wheel0.centerD / R)
-    return Number((1 + 0.5 * t * t).toFixed(3))
-  })()
+  /* 14a 图标全换菜图（站主 2026-10-05：「任务栏图标全部换成蔬菜水果图」，本轮只改任务栏）。
+     身份层只有一份对应关系：`AppDef.veggie` → `lib/veggies.ts` 的 `veggieOfName()`。
+     ⚠️ 同时钉住"无障碍名一个都没动" —— 两个验证脚本点任务栏全靠 `button[aria-label="X"]`。 */
+  const veggieProbe = await p.evaluate((sel) => {
+    const btns = [...document.querySelectorAll(`${sel} [data-dock-item][data-dock-copy="1"]`)]
+    const rows = btns.map((b) => {
+      const img = b.querySelector('img')
+      return {
+        label: b.getAttribute('aria-label'),
+        hasImg: !!img,
+        veg: (img?.getAttribute('src') ?? '').includes('veggies'),
+      }
+    })
+    return {
+      total: rows.length,
+      img: rows.filter((r) => r.hasImg).length,
+      veg: rows.filter((r) => r.veg).length,
+      labelled: rows.filter((r) => r.label).length,
+      sample: rows[0] ?? null,
+    }
+  }, DOCK)
   check(
-    '中央放大：越靠图标区中心越大、外侧回到 1.0×，与 scale = 1 + 0.5·(1−d/R)² 吻合（R = 可视长 40%），且放大后不被裁',
-    Math.abs(wheel0.centerScale - magnifyWant) <= 0.02 &&
-      wheel0.centerScale >= 1.3 &&
-      wheel0.secondScale < wheel0.centerScale &&
-      wheel0.edgeScale <= 1.01 &&
-      wheel0.clipInside,
+    '任务栏图标全是菜图（每个应用按钮里都是 <img>，src 指向 veggies），且无障碍名一个没动',
+    veggieProbe.total > 1 &&
+      veggieProbe.img === veggieProbe.total &&
+      veggieProbe.veg === veggieProbe.total &&
+      veggieProbe.labelled === veggieProbe.total,
+    JSON.stringify(veggieProbe),
+  )
+
+  /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`，PEAK = 2、MIN = 0.8、指数 1.5。
+     站主的口径是"中心 2×、越远越小、最外侧约 0.8×"（旧口径是 d≥R 之后恒等 1.0）。 */
+  check(
+    '中央放大：中心 ≥1.9×、按实测距离单调递减、最外侧 ≤0.85×（越远越小，外侧小于 1× 是要的效果）',
+    wheel0.centerScale >= 1.9 &&
+      wheel0.monoOk &&
+      wheel0.edgeScale <= 0.85 &&
+      wheel0.edgeScale >= 0.75,
     JSON.stringify({
       center: wheel0.centerScale,
-      公式值: magnifyWant,
-      d: wheel0.centerD,
-      second: wheel0.secondScale,
-      edge: wheel0.edgeScale,
-      放大后仍在框内: wheel0.clipInside,
+      曲线: wheel0.curve,
+      outer: wheel0.edgeScale,
+      单调递减: wheel0.monoOk,
     }),
+  )
+  /* 允许凸出（站主："中间扩大的图标允许溢出，一种凸出任务栏的夸张感"）：
+     不是把裁剪框撑大把 2× 装进去，而是图标从栏边凸出来。 */
+  check(
+    '放大的中心图标凸出任务栏（底栏：图标顶边高于栏顶边），凸出来那一截真的看得见、不被容器裁',
+    wheel0.protrude > 6 && wheel0.protrudeHit,
+    JSON.stringify({ 凸出量: wheel0.protrude, 凸出处命中图标: wheel0.protrudeHit }),
+  )
+  check(
+    '图标区只裁主轴（clip-path ≠ none）：可视区左右两侧外面的点命不中任何图标（循环的第二份仍藏着）',
+    wheel0.clipPath !== 'none' && wheel0.mainAxisClipped,
+    JSON.stringify({ clipPath: wheel0.clipPath, 主轴外侧命不中图标: wheel0.mainAxisClipped }),
   )
 
   /* 14b 拖拽浏览：按住沿轴拖 120px 跟手；松手吸附到最近的整数格；往一个方向一直拖不到头 */
@@ -1251,9 +1306,53 @@ async function run() {
   await p.mouse.down()
   await p.mouse.move(iconB.x, iconB.y - 70, { steps: 10 })
   const lifted = await p.evaluate(() => document.querySelectorAll('.dock__item--lift').length)
+  /* 站主报的 bug：竖拖进移动模式后图标一离开任务栏那一条就被裁掉、看不见了。
+     现在跟手的是挂在 `document.body` 上的浮层幽灵（图标区带 clip-path，放进去会被裁）。 */
+  const ghostProbe = () =>
+    p.evaluate(() => {
+      const g = document.querySelector('[data-dock-ghost]')
+      const bar = document.querySelector('nav[aria-label="任务栏"]')
+      if (!g || !bar) return { present: false }
+      const r = g.getBoundingClientRect()
+      const br = bar.getBoundingClientRect()
+      const cs = getComputedStyle(g)
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+      return {
+        present: true,
+        /* 拖到任务栏**之外**仍然看得见（幽灵的底边高于栏顶边） */
+        aboveBar: r.bottom < br.top + 1,
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        onBody: g.parentElement === document.body,
+        pe: cs.pointerEvents,
+        /* 不挡点击：幽灵所在位置的最上层元素不该是它自己 */
+        notHit: !(hit && (g === hit || g.contains(hit))),
+      }
+    })
+  const ghost1 = await ghostProbe()
+  await p.mouse.move(iconB.x + 40, iconB.y - 150, { steps: 6 })
+  const ghost2 = await ghostProbe()
+  check(
+    '拖到任务栏之外仍看得见被拖的图标：浮层幽灵挂在 body 上、跟着指针走、不挡点击',
+    ghost1.present &&
+      ghost1.aboveBar &&
+      ghost1.onBody &&
+      ghost1.pe === 'none' &&
+      ghost1.notHit &&
+      ghost2.present &&
+      Math.abs(ghost2.x - ghost1.x) >= 20 &&
+      ghost2.y < ghost1.y - 40,
+    JSON.stringify({ 第一次: ghost1, 第二次: ghost2 }),
+  )
   await p.mouse.move(iconB.x + 70, iconB.y - 70, { steps: 10 })
   await p.mouse.up()
   await p.waitForTimeout(400)
+  const ghostGone = await p.evaluate(() => !document.querySelector('[data-dock-ghost]'))
+  check(
+    '松手后浮层幽灵收掉（原位置那个占位图标恢复不透明）',
+    ghostGone,
+    JSON.stringify({ ghostGone }),
+  )
   const orderAfterMove = await savedOrder()
   check(
     '竖拖 60px 进入移动模式（图标被抬起），越过邻居后松手 → desktop.dock.dockApps 顺序真的变了',
