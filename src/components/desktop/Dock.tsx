@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getApp, visibleApps } from '../../lib/apps'
+import { appColorIcon } from '../../lib/appIcons'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
 import {
@@ -48,6 +49,15 @@ function clamp(value: number, min: number, max: number): number {
    菜图现在只出现在开始菜单与关于窗口，见 `lib/veggies.ts` 的 `dishRows()`。 */
 function appGlyph(id: AppId, className: string) {
   const app = getApp(id)
+  /* 彩色自绘图标（design/icons-app/*.svg，本站原创、无第三方素材）：macOS 那套观感就是
+     彩色 App 图标排成方阵。查不到这张图就退回单色功能图标 —— 绝不渲染裂图。
+     2026-10-06 站主："我希望图标能更生动，而不是黑白图"。 */
+  const src = appColorIcon(id)
+  if (src) {
+    return (
+      <img src={src} alt="" draggable={false} className={`${className} select-none object-contain`} />
+    )
+  }
   return <AppIcon name={app.icon} className={className} />
 }
 

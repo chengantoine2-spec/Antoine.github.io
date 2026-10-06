@@ -1452,23 +1452,43 @@ async function run() {
       sample: rows.slice(0, 3).map((r) => ({ btn: r.btn, glyph: r.glyph, fill: r.fill })),
     }
   }, DOCK)
+  /* 2026-10-06 站主：「我希望图标能更生动，而不是黑白图」→ 任务栏改成**彩色自绘 App 图标**
+     （`design/icons-app/*.svg`，本站原创、无第三方素材；登记表 `lib/appIcons.ts`）。
+     原断言写的是「每个按钮里都是功能图标 <svg>、没有 <img>」—— 那时是对的，现在**必须反过来**：
+     按钮里应当是彩色 <img>，旧的单色 <svg> 不该再出现在任务栏里（查不到彩色图时才回退 <svg>）。
+     ⚠️ 无障碍名仍然一个都不能动（两个验证脚本靠它点任务栏）。 */
   check(
-    '任务栏图标是**功能图标**（每个按钮里都是 <svg>、没有菜图 <img>），且无障碍名一个没动',
+    '任务栏图标是**彩色自绘图标**（每个按钮里都是 <img>、不再用单色 <svg>），无障碍名一个没动',
     glyphProbe.total > 1 &&
-      glyphProbe.svg === glyphProbe.total &&
-      glyphProbe.img === 0 &&
+      glyphProbe.img === glyphProbe.total &&
+      glyphProbe.svg === 0 &&
       glyphProbe.labelled === glyphProbe.total,
-    JSON.stringify(glyphProbe),
+    JSON.stringify({ total: glyphProbe.total, img: glyphProbe.img, svg: glyphProbe.svg, labelled: glyphProbe.labelled }),
   )
 
   /* 14a2 图标**填充比**：`.dock__glyph` 读 `--dock-icon-fill`（默认 **72%**）。
      来历：`design/ICON-MACOS-BRIEF.md` 读代码量出来「图标只有按钮的一半」（默认 40px 按钮里 20px）
      是**与 macOS 差距最大的单点** —— macOS 的 Dock 图标几乎填满格子。这个值就是那条的回归：
      谁把 `.dock__glyph` 退回 `h-1/2`（或忘了挂 `--dock-icon-fill`），这里会红。 */
+  /* ⚠️ 2026-10-06 起任务栏图标是彩色 <img>，所以这条要**量 <img>**（原来量的 `.dock__glyph` 里那个 <svg>
+     已经不存在了，继续量它会永远得 0）。比例关系不变：img 的盒子 = 按钮 × --dock-icon-fill。 */
+  const iconFillProbe = await p.evaluate((sel) => {
+    const rows = [...document.querySelectorAll(`${sel} button[aria-label]`)]
+      .filter((b) => b.querySelector('img'))
+      .map((b) => {
+        const btn = b.getBoundingClientRect()
+        const img = b.querySelector('img').getBoundingClientRect()
+        return { btn: Math.round(btn.height), glyph: Math.round(img.height) }
+      })
+    return {
+      fill: rows.map((r) => (r.btn > 0 ? Number((r.glyph / r.btn).toFixed(3)) : 0)),
+      sample: rows.slice(0, 3),
+    }
+  }, DOCK)
   check(
     'Dock 图标占按钮边长的 **72%**（原来 50%：40px 按钮里只有 20px、周围一圈空）',
-    glyphProbe.fill.length > 0 && glyphProbe.fill.every((f) => Math.abs(f - 0.72) <= 0.04),
-    JSON.stringify({ 期望: 0.72, 实测样本: glyphProbe.sample }),
+    iconFillProbe.fill.length > 0 && iconFillProbe.fill.every((f) => Math.abs(f - 0.72) <= 0.06),
+    JSON.stringify({ 期望: 0.72, 实测样本: iconFillProbe.sample }),
   )
 
   /* 放大 = **指针驱动**（2026-10-06「一切以 macOS 为准」）：上面已经把指针移到某个图标正中，

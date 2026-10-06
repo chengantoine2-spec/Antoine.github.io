@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="塔罗牌">
+  <!-- 本站原创（自绘），无任何第三方素材；形状 = squircle 44..468 圆角 96 -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#D8B4FE"/><stop offset="1" stop-color="#7E22CE"/>
+    </linearGradient>
+    <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="c"><rect x="44" y="44" width="424" height="424" rx="96"/></clipPath>
+  </defs>
+  <rect x="44" y="44" width="424" height="424" rx="96" fill="url(#g)"/>
+  <g clip-path="url(#c)"><rect x="44" y="44" width="424" height="424" fill="url(#hl)"/></g>
+  <g fill="#fff"><g transform="rotate(-9 256 256)"><rect x="192" y="132" width="128" height="196" rx="18"/></g><path d="M256 246 L270 292 L316 306 L270 320 L256 366 L242 320 L196 306 L242 292 Z" fill="#7E22CE" opacity=".75"/></g>
+</svg>
