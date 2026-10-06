@@ -23,8 +23,8 @@
   - **交通灯（macOS，2026-10-06「其他照 macOS 全改」；同日站主又加码两条：
     「再大一点」+「图标鼠标上去再明显一点」）**：左起 **红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）**，
     **14px 圆点、间距 9px、距标题栏左边 8px**（原 12 / 8 / 8）；
-    **字形平时隐藏、hover 到这一簇才显**（**11px、opacity 0.85**，原 9px / 1.0），
-    字形色也从 `rgba(0,0,0,.55)` 加深到 **.78（浅）/ .85（深）** —— 压在亮色圆点上才看得清。
+    **字形平时隐藏、hover 到这一簇才显**（**13px、opacity 1**，原 9px / 1.0），
+    字形色也从 `rgba(0,0,0,.55)` 加深到 **纯黑（浅 / 深都是 `rgba(0,0,0,1)`）** —— 压在亮色圆点上才看得清。
     样式在 `globals.css` 的 `.traffic-lights` / `.traffic*`，尺寸与颜色全走令牌
     （`--traffic-size/-gap/-inset/-glyph`、`--traffic-glyph-size`、`--c-traffic-close/min/max`）。
     ⚠️ **标题栏仍是 24px**（`--titlebar-h`）：14px 圆点上下各留 5px，靠 `align-items: center` 居中，

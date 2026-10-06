@@ -2694,12 +2694,12 @@ async function run() {
   const [mr, mg, mb] = chan(lights.colors[1])
   const [gr, gg, gb] = chan(lights.colors[2])
   check(
-    '交通灯在左：14px 圆点 / 间距 9px / 距左 8px、字形 11px 平时隐藏（aria-label 仍是 关闭 / 最小化 / 最大化|还原）',
+    '交通灯在左：14px 圆点 / 间距 9px / 距左 8px、字形 13px 平时隐藏（aria-label 仍是 关闭 / 最小化 / 最大化|还原）',
     lights.n === 3 &&
       lights.size === 14 &&
       lights.gap === 9 &&
       lights.inset === 8 &&
-      lights.glyphSize.every((s) => s === 11) &&
+      lights.glyphSize.every((s) => s === 13) &&
       lights.glyph.every((o) => Number(o) === 0) &&
       lights.labels[0] === '关闭' &&
       lights.labels[1] === '最小化' &&

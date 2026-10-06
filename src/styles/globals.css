@@ -956,7 +956,7 @@
 
 .traffic-lights:hover .traffic > span,
 .traffic:focus-visible > span {
-  opacity: 0.85;
+  opacity: 1;
 }
 
 /* 标签行：装得下**居中**（macOS 的标题在正中间）、装不下退化成 start。

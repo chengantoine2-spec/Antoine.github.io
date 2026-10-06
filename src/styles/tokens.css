@@ -91,8 +91,8 @@
      有效不透明度 = 字形色 alpha × 元素 opacity，两个都会削弱 —— 实测
      0.95 × 0.85 = 0.81（红点对比 4.7:1），而旧的 0.55 × 1.0 只有 3.0:1（低于 WCAG 4.5）。
      `verify.mjs` 有一条按 WCAG 公式算**实际对比度**并断言 ≥4.5:1，改这两个数要一起看 */
-  --traffic-glyph: rgba(0, 0, 0, 0.95);
-  --traffic-glyph-size: 11px;
+  --traffic-glyph: rgba(0, 0, 0, 1);
+  --traffic-glyph-size: 13px;
   /* 交通灯三色：取自 playground-macos 用的 Tailwind 500 档
      （⚠️ Apple 原版 hex 未核实，见 MACOS-BRIEF 第 6 节；深浅两套主题都用这三个值） */
   --c-traffic-close: #ef4444;
@@ -157,7 +157,7 @@
   --traffic-inset: 8px;
   /* 深色主题：圆点色值两套一样（都是亮色），字形给满不透明、由 opacity 0.85 收一档 */
   --traffic-glyph: rgba(0, 0, 0, 1);
-  --traffic-glyph-size: 11px;
+  --traffic-glyph-size: 13px;
   --c-traffic-close: #ef4444;
   --c-traffic-min: #eab308;
   --c-traffic-max: #22c55e;
