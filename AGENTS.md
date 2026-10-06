@@ -48,6 +48,7 @@
 - 任务栏（图标区两种模式 / 回弹 / 放大 / 拖拽 / 长度下限 / 折行居中）：**见 `ARCH-DOCK.md`**
 - 主题令牌 / 两套配色 / 字体红线 / 48 张菜图的用法 / 日月时钟 / 站名与菜名：**见 `ARCH-THEME.md`**
 - 验证体系与历次断言的来龙去脉（哪条为哪个 bug 立的）：**见 `ARCH-VERIFY.md`**
+- 顶部菜单栏（macOS P2 那一单：规格 / 实测数字 / 踩坑）：**见 `ARCH-MENUBAR.md`**
 
 > 上面四个文件是从本文搬出去的长篇明细；**规则以本文为准**，那里放沿革、实测数字与踩坑。
 - **下一步（方案已定，未开工）**：手机端走 **PWA/WebAPK**（零 SDK）+ 声音入口 L1
@@ -63,13 +64,15 @@
 |---|---|---|
 | **主管** | 全站 UI / 交互 / 内容标准：桌面外壳、任务栏、窗口框架、主题令牌、路由、部署、验证脚本 | 除右边那两处以外的**全部** |
 | **wiki 负责人** | 只管「饥荒 Wiki」窗口的**内容与呈现** | `src/components/program/DstWikiWindow.tsx`、`DstWikiContent.tsx`、`src/data/dst/**`、`src/lib/dst/**`、`tools/verify-dst.mjs`、`docs/**` |
-| **图标设计负责人**（2026-10-05 开工） | 只管**图标美术**：11 个应用图标 + 4 个外壳字形 | `src/components/icons/**`、`design/**` |
+| ~~图标设计负责人~~（2026-10-05 开工，**2026-10-06 解职**） | 图标美术**已收归主管**；他原来的任务书 `design/ICON-BRIEF.md` 只作历史参考，**别再按它派活** | 现由主管改：`src/components/icons/**`、`design/**`、彩色 App 图标 `design/icons-app/**` + `src/lib/appIcons.ts` |
 
-**图标设计负责人**的任务书是 **`design/ICON-BRIEF.md`**（自包含，直接丢给新对话即可）。
-接线已经做完：`AppIcon.tsx` 现在只查 `ICON_SET` 表，画全在 `src/components/icons/` 里 ——
-换美术**不需要动外壳、任务栏、窗口**。他的硬约束（不许写死颜色、不许改 `aria-label`、
-不许引依赖、不许改验证脚本、`ICON_SET` 的 11 个键不许改名）都写在任务书里。
+⚠️ **原「图标设计负责人」已解职（2026-10-06），图标职责收归主管** —— 接线照旧：
+`AppIcon.tsx` 只查 `ICON_SET` 表，换美术**不需要动外壳、任务栏、窗口**；
+`ICON_SET` 的键名不许改（两个验证脚本都靠 `button[aria-label=…]` 找按钮）。
 ⚠️ 站标 `public/logo.svg`（焦糖布丁）**站主明确要求不动**，别被"全套新图标"顺手换掉。
+
+**执行者编制与分组规则见 `TEAM.md`**（站主 2026-10-06 定规：子智能体 ≤ **20** 个、按 **A~E** 组分类、
+**优先复用**旧执行者而不是新开；派活时要写明组别）。
 
 **插件工程师**（2026-10-05 上岗）做的是 **DSH 插件**：`dsh-celery-farm`「芹菜耕地」面板
 （侧栏图标 + 主区嵌桌面站）与 `dsh-product-assistant`「产品助理」面板（事件 → 追问 → 一键推断三件事）。
@@ -185,7 +188,7 @@ npm run typecheck    # 只做类型检查
 | 路径 | 职责 |
 |---|---|
 | `src/components/desktop/` | 桌面外壳：`DesktopShell`（布局+让位+多窗口+路由对齐）、`Window`（窗口框：**一行** = 标签 + 窗口按钮）、`FrameTabs`（框里的标签行 / 拖拽排序 / 拖出拆帧）、`Dock`（任务栏）、`DockPositionMenu`、`StartMenu`、`AppIcon`（**只查表**：把 `IconName` 翻成图标组件）、`FullscreenButton`（全屏按钮）、`CelestialClock`（日月时钟挂件） |
-| `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归图标设计负责人** |
+| `src/components/icons/` | **全站图标美术**（换图标只改这里）：`base.ts`（统一几何：24 网格 / 线宽 1.6 / currentColor）、一个图标一个文件、`index.ts` 的 `ICON_SET` 登记表、`glyphs/`（外壳字形：所有项目 / 全屏 / 最大化 / 任务栏位置）。**归主管**（原图标设计负责人已于 2026-10-06 解职，见 `TEAM.md`） |
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条），以及 **`views.tsx`＝「窗口 id → 装什么」的登记表** |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
 | `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`snap`（吸附/平铺的分区几何与预览矩形）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化）、`veggies`（48 张菜图的登记表与查表：`veggieOfName()` / `dishRows()`） |
@@ -196,7 +199,7 @@ npm run typecheck    # 只做类型检查
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
 | `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`verify-tarot.mjs`（塔罗牌专属校验）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1）。⚠️ **唯一一个非 Node 的**：`tarot-assets.py`（塔罗素材流水线，`npm run tarot:assets`）—— Node 内置模块编不出 WebP 而不能引依赖，所以借 Pillow；**只在换素材时用，不进构建**，要求 `python` 在 PATH 上且有 Pillow（见 `docs/tarot.md` 第九节） |
 | `docs/` | `dst-wiki.md`（饥荒 Wiki 的实现说明：数据模型 / 打分规则 / chunk 拆分 / 踩坑）、`dst-guides/`（3 篇新手教程稿件 + 发布脚本 + 说明），**归 wiki 负责人** |
-| `design/` | 设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`、`veggies/*.svg`（48 张菜图）、`veggies.html`、两个 `build-*.mjs`（生成预览页）。**除了 `veggies/*.svg` 被 `lib/veggies.ts` 引用（进构建）以外，其余不参与构建**，归图标设计负责人 |
+| `design/` | 设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`、`veggies/*.svg`（48 张菜图）、`veggies.html`、两个 `build-*.mjs`（生成预览页）。**除了 `veggies/*.svg`（被 `lib/veggies.ts` 引用）与 `icons-app/*.svg`（被 `lib/appIcons.ts` 引用）进构建、且都不内联以外，其余不参与构建**，归主管 |
 
 ## 窗口契约：加一个新窗口要动 4 个地方
 
