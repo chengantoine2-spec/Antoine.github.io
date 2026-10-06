@@ -122,7 +122,7 @@ body{
 .item .dot{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:999px;background:var(--chrome-fg);opacity:.55}
 .item[data-run="false"] .dot{visibility:hidden}   /* 未运行：invisible，但**占位** */
 .item .tip{
-  position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);
+  position:absolute;bottom:calc(100% + 34px);left:50%;transform:translateX(-50%);
   padding:3px 8px;border-radius:6px;font-size:11px;white-space:nowrap;
   background:var(--surface);border:var(--edge);box-shadow:0 6px 16px rgba(0,0,0,.18);
   opacity:0;pointer-events:none;transition:opacity .1s
@@ -276,20 +276,37 @@ dock.appendChild(trash)
 const all = [...items, trash]
 
 /* ── 放大：**按指针距离**（这是 macOS 真实做法；本站现在做的是"按 Dock 中心"）
-      scale = PEAK − (PEAK − MIN)·u^1.5，u = 指针距离 / 影响半径；只往上长（origin: bottom） */
-const PEAK = 2, MIN = 1, R = 150   /* 影响半径 150px ≈ 三格多一点 */
+      scale = PEAK − (PEAK − MIN)·u^1.5，u = 指针距离 / 影响半径；只往上长（origin: bottom center）
+      ⚠️ 光是"放大"不够：macOS 还会把放大出来的宽度**推开**邻居，并把整条 Dock 撑宽 ——
+      少了这两步，放大的那个会压住左右两个，看着乱（第一版就是这样）。 */
+const PEAK = 2, MIN = 1, R = 150, W = 48, PAD = 8
 function magnify(px){
-  all.forEach((el) => {
-    const svg = el.querySelector('svg')
-    const r = el.getBoundingClientRect()
-    const cx = r.left + r.width / 2
-    const d = Math.abs(px - cx)
-    const u = Math.min(1, d / R)
-    const s = PEAK - (PEAK - MIN) * Math.pow(u, 1.5)
-    svg.style.transform = `scale(${s.toFixed(3)})`
+  const dockLeft = dock.getBoundingClientRect().left - PAD   /* 减掉内边距当下标 */
+  const centers = all.map((el) => dockLeft + PAD + el.offsetLeft + el.offsetWidth / 2)
+  const scales = centers.map((cx) => {
+    const u = Math.min(1, Math.abs(px - cx) / R)
+    return PEAK - (PEAK - MIN) * Math.pow(u, 1.5)
   })
+  const extra = (k) => (scales[k] - 1) * W
+  let total = 0
+  all.forEach((el, i) => {
+    const svg = el.querySelector('svg')
+    const cx = centers[i]
+    /* 位移 = 它和指针之间那些图标的"额外宽度"的一半（把自己那一半也算上） */
+    let shift = extra(i) / 2
+    if (cx < px) for (let k = i + 1; k < all.length && centers[k] <= px; k++) shift += extra(k) / 2
+    else for (let k = i - 1; k >= 0 && centers[k] >= px; k--) shift -= extra(k) / 2
+    shift = cx < px ? -shift : shift
+    svg.style.transform = `translateX(${shift.toFixed(1)}px) scale(${scales[i].toFixed(3)})`
+    total += extra(i)
+  })
+  /* 整条 Dock 跟着变宽（macOS 也这样）—— 两侧各加"总增量/4"，加起来正好是 Σ额外/2 */
+  dock.style.paddingLeft = dock.style.paddingRight = `${PAD + total / 4}px`
 }
-function reset(){ all.forEach((el) => { el.querySelector('svg').style.transform = '' }) }
+function reset(){
+  all.forEach((el) => { el.querySelector('svg').style.transform = '' })
+  dock.style.paddingLeft = dock.style.paddingRight = ''
+}
 dock.addEventListener('pointermove', (e) => magnify(e.clientX))
 dock.addEventListener('pointerleave', reset)
 
