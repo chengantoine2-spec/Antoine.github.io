@@ -181,6 +181,31 @@ export function Window({
     drag.current = null
   }
 
+  /* 最小化 = macOS 的「吸入 Dock」**简化版**（站主 2026-10-06 P4）：
+     先播 ~260ms 的缩放淡出（`data-minimizing` → CSS 动画），**播完才真正交给外壳隐藏**。
+     ⚠️ 隐藏机制一个字不改：`DesktopShell` 给框加 `hidden`（= display:none），**窗口不卸载**，
+        所以滚动位置、加载好的数据都留着。别改成"直接 dispatch 省掉动画"。
+     ⚠️ `prefers-reduced-motion: reduce` 时**跳过动画直接藏**（尊重系统设置）。
+     ⚠️ 真正的 genie（漏斗形变）六个参考仓库都没实现，我们**故意不做**，只做缩放淡出。 */
+  const MINIMIZE_MS = 260
+  const [minimizing, setMinimizing] = useState(false)
+  const minTimer = useRef<number | undefined>(undefined)
+
+  function onMinimize() {
+    const reduce =
+      typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduce) {
+      dispatch({ type: 'minimize', key: win.key })
+      return
+    }
+    setMinimizing(true)
+    minTimer.current = window.setTimeout(() => {
+      setMinimizing(false)
+      dispatch({ type: 'minimize', key: win.key })
+    }, MINIMIZE_MS)
+  }
+  useEffect(() => () => window.clearTimeout(minTimer.current), [])
+
   function startResize(e: React.PointerEvent<HTMLElement>) {
     e.stopPropagation()
     resize.current = { x: e.clientX, y: e.clientY }
@@ -208,6 +233,8 @@ export function Window({
       /* 宿主契约：框上这两样都跟**当前激活标签**走（`data-window-slot` / aria-label） */
       aria-label={`${app.name} 窗口`}
       data-snap={win.snap ?? ''}
+      /* 最小化过渡进行中（见 onMinimize）：CSS 靠它播 ~260ms 的缩放淡出 */
+      data-minimizing={minimizing ? '' : undefined}
       data-merge-hover={overFrame ?? ''}
       data-frame-body={win.key}
       className={`window absolute flex flex-col overflow-hidden rounded-window border border-edge bg-surface shadow-[var(--shadow-window)] ${
@@ -258,7 +285,7 @@ export function Window({
             type="button"
             className="traffic traffic--min"
             aria-label="最小化"
-            onClick={() => dispatch({ type: 'minimize', key: win.key })}
+            onClick={onMinimize}
           >
             <span aria-hidden>&#8211;</span>
           </button>

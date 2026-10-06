@@ -189,3 +189,16 @@
 | **拖到屏幕边缘吸附** | 贴到**真正的屏幕边**（含任务栏那一条），回归断言 innerHeight - win.bottom === 0 | 站主点名的功能：要求吸附后铺满到真屏幕边，不许停在任务栏上沿 |
 
 ⚠️ 改 .window--max 时别顺手改吸附，反之亦然；erify.mjs 里两条断言分别钉住这两种语义（最大化那条还额外断言 dockOnTop：任务栏必须点得到）。
+
+## 最小化的「吸入」过渡（简化版，2026-10-06 P4）
+
+- 站主点了 macOS 的 genie（吸入 Dock）。⚠️ **六个参考仓库都没实现 genie**（`playground-macos` 只是 300ms 淡出），
+  所以按指示做**简化版**：`data-minimizing` → CSS `window-minimize` 关键帧（`scale(.35)` + `opacity 0`、
+  **260ms** `ease-in`），播完才 dispatch `minimize`。
+- ⚠️ **隐藏机制一个字没改**：`DesktopShell` 给框加 `hidden`（`display:none`），窗口**不卸载** →
+  滚动位置/数据都在；别改成"直接 dispatch 省掉动画"。
+- ⚠️ `prefers-reduced-motion: reduce` 时**跳过动画直接藏**（`Window.tsx` 里的 `matchMedia` 分支）。
+- 回归在 `verify.mjs`：最小化进行中那一帧 `display !== none` 且带 `data-minimizing`、340ms 后框 `display:none`
+  且窗口仍挂载（`[data-tab]` 还在）、再从任务栏点回来能恢复。
+- ⚠️ 写这类断言别用 `className.includes('hidden')` 判断隐藏：`.window` 的类里有 `overflow-hidden`，
+  那个字符串永远为 true（我这轮先踩了一次，量出来是假绿）。

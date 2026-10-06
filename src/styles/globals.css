@@ -988,6 +988,21 @@
   border-radius: 0;
 }
 
+/* 最小化 = macOS「吸入 Dock」的**简化版**：朝任务栏那侧缩小淡出 ~260ms，播完才由外壳加 `hidden`。
+   ⚠️ 别把这条删成"直接 display:none"：那样黄点一点窗口就"啪"地消失，没有过渡。
+   ⚠️ 真正的 genie（漏斗形变）没做，是**故意**的（六个参考仓库都没实现，简化版够用）。
+   ⚠️ 系统开了"减少动效"时直接藏（见 Window.tsx 的 matchMedia 分支）。 */
+.window[data-minimizing] {
+  pointer-events: none;
+  animation: window-minimize 260ms ease-in forwards;
+}
+@keyframes window-minimize {
+  to {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+}
+
 .window__resize {
   position: absolute;
   right: 0;

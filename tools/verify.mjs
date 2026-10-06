@@ -2658,6 +2658,58 @@ async function run() {
       Math.abs(lights.fit.centerOff) <= 1,
     JSON.stringify(lights.fit),
   )
+  /* 最小化 = macOS「吸入 Dock」的**简化版**（站主 2026-10-06 P4）：先播 ~260ms 的缩放淡出，
+     过程中那一帧**仍然可见**（不是直接 `display:none`），播完才由外壳给框加 `hidden`；
+     而且窗口**不卸载**（滚动位置/数据都留着），点任务栏图标能原样回来。 */
+  const minBtn = p.locator(WIN).first().locator('[data-window-controls] button[aria-label="最小化"]')
+  const minApp = ((await p.getAttribute(WIN, 'aria-label')) ?? '').replace(/\s*窗口$/, '')
+  await minBtn.click()
+  await p.waitForTimeout(70)
+  const minDuring = await p.evaluate((sel) => {
+    const el = document.querySelector(sel)
+    /* 兼容两种口径：`WIN` 可能指向**框外层**，也可能直接指向 `.window` 自己
+       （⚠️ 别再用 `frame.className.includes('hidden')` 判断隐藏 —— `.window` 的类里有
+       `overflow-hidden`，那个字符串永远是 true，会得到假绿） */
+    const win = el?.classList.contains('window') ? el : el?.querySelector('.window')
+    const frame = win?.closest('[data-frame]') ?? el
+    return {
+      animating: win?.hasAttribute('data-minimizing') ?? false,
+      display: win ? getComputedStyle(win).display : '',
+      frameDisplay: frame ? getComputedStyle(frame).display : '',
+    }
+  }, WIN)
+  await p.waitForTimeout(340)
+  const minAfter = await p.evaluate((sel) => {
+    const el = document.querySelector(sel)
+    const win = el?.classList.contains('window') ? el : el?.querySelector('.window')
+    const frame = win?.closest('[data-frame]') ?? el
+    return {
+      frameDisplay: frame ? getComputedStyle(frame).display : '',
+      stillMounted: !!win,
+      tabCount: win ? win.querySelectorAll('[data-tab]').length : 0,
+    }
+  }, WIN)
+  check(
+    '最小化 = 先播 ~260ms 的「吸入」过渡（进行中那一帧仍可见），播完才 hidden，且窗口没被卸载',
+    minDuring.animating &&
+      minDuring.display !== 'none' &&
+      minDuring.frameDisplay !== 'none' &&
+      minAfter.frameDisplay === 'none' &&
+      minAfter.stillMounted &&
+      minAfter.tabCount >= 1,
+    JSON.stringify({ during: minDuring, after: minAfter }),
+  )
+  /* 还原：从任务栏点回来（顺带证明"最小化不丢状态"） */
+  await p.click(`[aria-label="任务栏"] button[aria-label="${minApp}"]`)
+  await p.waitForTimeout(220)
+  const minBack = await p.evaluate((sel) => {
+    const el = document.querySelector(sel)
+    const win = el?.classList.contains('window') ? el : el?.querySelector('.window')
+    const frame = win?.closest('[data-frame]') ?? el
+    return { visible: !!frame && getComputedStyle(frame).display !== 'none' }
+  }, WIN)
+  check('最小化后从任务栏能点回来（窗口没被卸载、状态还在）', minBack.visible, JSON.stringify(minBack))
+
   /* 右端那颗"等宽占位"是用令牌算出来的（inset + 3*size + 2*gap），圆点一变大它就该跟着变宽。
      这里直接量标签块的中线有没有跟着偏 —— 占位写死或忘了联动，这条就红 */
   const titleMid = await p.evaluate((sel) => {
