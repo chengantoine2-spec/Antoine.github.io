@@ -1376,6 +1376,87 @@ async function run() {
            2026-10-06「一切以 macOS 为准」：边缘图标回 1.0×（0.8 那套已撤）。 */
         monoOk: byDistance.every((it, i) => i === 0 || it.s <= byDistance[i - 1].s + 0.02),
         curve: byDistance.map((it) => Number(it.s.toFixed(2))),
+        /* ── 2026-10-06 **三档模型**（站主：「我只想要变大选中的那一个图标，其他图标只需要往两边移，
+           不需要跟着变」+「仅两侧的图标变大一丢丢，最主要是给变大的图标让位置」）──
+           这里按**槽位顺序**（`primary` 就是 DOM 顺序 = 显示顺序）量 scale 与 rect.x：
+           · `hotIdx` = 离指针最近的那个（三档里**唯一**该到 ≈2× 的）；
+           · 它左右各一个 = "大一丢丢"的**紧邻**（1.04~1.14），且承担**主要的让位位移**；
+           · 更外侧的 scale **必须恒 1.0**（原来那套"一圈都跟着变大"已被站主否掉）。
+           `hotNeighborOverlap` 是"让位真的生效"的**硬证据**：hot 的渲染盒与紧邻两个**不许相交**
+           （比"x 变了"强得多 —— 只测 scale 会漏掉"根本没让开"）。 */
+        step: primary.length > 1 ? primary[1].offsetLeft - primary[0].offsetLeft : 0,
+        slotScales: primary.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3))),
+        slotXs: primary.map((b) => Math.round(b.getBoundingClientRect().x)),
+        slotLabels: primary.map((b) => b.getAttribute('aria-label') ?? ''),
+        hotIdx: (() => {
+          let best = Infinity
+          let idx = -1
+          primary.forEach((b, i) => {
+            const r = b.getBoundingClientRect()
+            const d = Math.abs(r.x + r.width / 2 - mid)
+            if (d < best) {
+              best = d
+              idx = i
+            }
+          })
+          return idx
+        })(),
+        hotNeighborOverlap: (() => {
+          let best = Infinity
+          let idx = -1
+          primary.forEach((b, i) => {
+            const r = b.getBoundingClientRect()
+            const d = Math.abs(r.x + r.width / 2 - mid)
+            if (d < best) {
+              best = d
+              idx = i
+            }
+          })
+          if (idx < 0) return null
+          const hot = primary[idx].getBoundingClientRect()
+          const overlap = (nb) => {
+            if (!nb) return false
+            const r = nb.getBoundingClientRect()
+            return hot.right > r.x + 0.5 && hot.x < r.right - 0.5 && hot.bottom > r.y + 0.5 && hot.y < r.bottom - 0.5
+          }
+          return overlap(primary[idx - 1]) || overlap(primary[idx + 1])
+        })(),
+        /* 悬停/选中那个按钮的"外圈"到底有没有东西：站主报的"半透明边框"真凶是**按钮底色**
+           （`.dock__item` 原来带 `hover:bg-hover` 与选中态 `bg-accent`；图标只占按钮 72%，
+           底色就从彩色圆角底外面露出一圈）。这条把三样都钉住：background / border / box-shadow。 */
+        itemStyle: (() => {
+          let best = Infinity
+          let idx = -1
+          primary.forEach((b, i) => {
+            const r = b.getBoundingClientRect()
+            const d = Math.abs(r.x + r.width / 2 - mid)
+            if (d < best) {
+              best = d
+              idx = i
+            }
+          })
+          const el = idx >= 0 ? primary[idx] : null
+          if (!el) return null
+          const cs = getComputedStyle(el)
+          const before = getComputedStyle(el, '::before')
+          const after = getComputedStyle(el, '::after')
+          const img = el.querySelector('img')
+          return {
+            label: el.getAttribute('aria-label') ?? '',
+            bg: cs.backgroundColor,
+            borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+            boxShadow: cs.boxShadow,
+            outlineStyle: cs.outlineStyle,
+            outlineWidth: cs.outlineWidth,
+            filter: cs.filter,
+            beforeContent: before.content,
+            beforeBorder: before.borderTopWidth,
+            afterContent: after.content,
+            afterBorder: after.borderTopWidth,
+            imgShadow: img ? getComputedStyle(img).boxShadow : '',
+            imgFilter: img ? getComputedStyle(img).filter : '',
+          }
+        })(),
         /* clip-path 只裁**主轴**：可视区左右两侧外面的点不该命中任何图标按钮（循环的第二份就藏在那儿） */
         clipPath: view ? getComputedStyle(view).clipPath : '',
         mainAxisClipped: (() => {
@@ -1579,18 +1660,94 @@ async function run() {
   /* 放大 = **指针驱动**（2026-10-06「一切以 macOS 为准」）：上面已经把指针移到某个图标正中，
      所以 `centerScale` 现在是"**指针正对的那个图标**"的 scale，`monoOk` 是"按离指针的距离单调递减"。
      PEAK = 2、MIN = 1.0（macOS 不缩边缘图标）、影响半径 `MAGNIFY_RADIUS_SLOTS = 3` 格。 */
+  /* ⚠️ 2026-10-06 站主把放大收窄成**三档**（原话与常量注释见 `lib/dock.ts` 顶部）：
+     ① 指针正对的那个（hot）≈2×；② **紧邻两侧各一个**只"大一丢丢"（1.04~1.14）；
+     ③ **更外侧恒 1.0** —— 原来那套"按离指针的距离给**每个**图标算 scale"= 一圈都跟着变大，已被站主否掉
+     （「我只想要变大选中的那一个图标，其他图标只需要往两边移，不需要跟着变」）。
+     **原断言**：「指针正对的那个 ≥1.9× + 离指针越远越小（`monoOk` 单调递减）+ 最外侧 1.0×」。
+     它在旧模型下是对的，但它**允许"整圈都在放大"**（只要单调递减就算过）—— 那正是站主不要的。
+     所以**改写**为按**槽位距离**分档判定（hot / 紧邻 / 更外侧三档各自的区间）。 */
+  const hotIdx = wheel0.hotIdx
+  const hotScale = (wheel0.slotScales ?? [])[hotIdx] ?? 0
+  const neighborScales = [wheel0.slotScales?.[hotIdx - 1], wheel0.slotScales?.[hotIdx + 1]].filter(
+    (s) => typeof s === 'number',
+  )
+  const fartherScales = (wheel0.slotScales ?? []).filter((_, i) => i !== hotIdx && i !== hotIdx - 1 && i !== hotIdx + 1)
+  const fartherMax = fartherScales.length ? Math.max(...fartherScales) : 1
   check(
-    '指针驱动放大：**指针正对的那个图标最大且 ≥1.9×**、离指针越远越小、最外侧回到 1.0×（macOS 不缩边缘图标）',
-    wheel0.centerScale >= 1.9 &&
-      wheel0.monoOk &&
-      wheel0.edgeScale >= 0.98 &&
-      wheel0.edgeScale <= 1.02,
+    '三档放大：**指针正对的那个 ≥1.8×**、**紧邻两侧各只"大一丢丢"（1.04~1.14）**、**更外侧恒 1.0×**',
+    hotScale >= 1.8 &&
+      neighborScales.length === 2 &&
+      neighborScales.every((s) => s >= 1.04 && s <= 1.14) &&
+      fartherMax <= 1.02,
     JSON.stringify({
-      指针正对的图标: wheel0.centerScale,
-      曲线按离指针的距离: wheel0.curve,
-      最外侧: wheel0.edgeScale,
-      单调递减: wheel0.monoOk,
+      指针正对: { 序号: hotIdx, 应用: (wheel0.slotLabels ?? [])[hotIdx], scale: hotScale },
+      紧邻两个: neighborScales,
+      更外侧最大: fartherMax,
+      全部槽位: wheel0.slotScales,
     }),
+  )
+  /* 让位是这一单的**核心诉求**（「最主要是给变大的图标让位置」）：判据不能用"x 变了"，
+     要用"**放大那个的渲染盒与紧邻两个不相交**" —— 否则邻居让了 1px 也算过。 */
+  check(
+    '让位**真的生效**：放大的那个与紧邻两侧的渲染盒**不相交**（核心是让位，不是变大）',
+    wheel0.hotNeighborOverlap === false,
+    JSON.stringify({
+      hot与紧邻相交: wheel0.hotNeighborOverlap,
+      hot序号: hotIdx,
+      槽位x: wheel0.slotXs,
+    }),
+  )
+  /* 站主报的"半透明边框"（2026-10-06）：真凶**不是** border/outline/box-shadow，
+     而是**按钮自己的底色** —— 图标只占按钮 72%，`hover:bg-hover`（rgba(0,0,0,.05)）与选中态
+     `bg-accent` 都会从彩色圆角底**外面露出一圈**。这条把三样都钉住，谁再加回来就红：
+     background 必须全透明、border 必须 0、**box-shadow 不许含非零描边**（`0 0 0 1px …` 那种）。
+     ⚠️ `:focus-visible` 的焦点环是**键盘无障碍**，不许一起拿掉（下面单独有一条守它）。 */
+  check(
+    '悬停/选中那个图标**没有半透明外圈**：按钮底色全透明、无边框、box-shadow 无描边（真凶原是按钮底色）',
+    !!wheel0.itemStyle &&
+      /rgba?\(0,\s*0,\s*0,\s*0\)|transparent/.test(wheel0.itemStyle.bg) &&
+      wheel0.itemStyle.borderWidths.every((w) => parseFloat(w) === 0) &&
+      (wheel0.itemStyle.boxShadow === 'none' ||
+        (wheel0.itemStyle.boxShadow.match(/-?\d+(\.\d+)?px/g) ?? []).every((n) => parseFloat(n) === 0)) &&
+      !(parseFloat(wheel0.itemStyle.outlineWidth) > 0 && wheel0.itemStyle.outlineStyle !== 'none'),
+    JSON.stringify(wheel0.itemStyle),
+  )
+  /* 站主要拿掉的是"图标外面那圈半透明"，**不是键盘焦点环** —— 焦点环是无障碍底线。
+     这里扫样式表确认全局 `:focus-visible` 规则还在：谁"顺手清理"删了就红。
+     ⚠️ 必须**递归**扫：项目把基础样式放在 `@layer base` 里，规则嵌在 `CSSLayerBlockRule` 之下，
+     只看顶层 `sheet.cssRules` 会得到 0 条（第一版就是这么误红的，`n:0` 不是"焦点环没了"）。 */
+  const focusRing = await p.evaluate(() => {
+    const hits = []
+    const walk = (rules) => {
+      for (const r of rules ?? []) {
+        if (r.cssRules) walk(r.cssRules)
+        if (
+          r.selectorText &&
+          /:focus-visible/.test(r.selectorText) &&
+          (r.style?.outlineWidth || r.style?.outline || r.style?.boxShadow)
+        ) {
+          hits.push({
+            sel: r.selectorText,
+            outline: r.style.outline || r.style.outlineWidth,
+            shadow: r.style.boxShadow || '',
+          })
+        }
+      }
+    }
+    for (const sheet of [...document.styleSheets]) {
+      try {
+        walk(sheet.cssRules)
+      } catch {
+        /* 跨源表跳过 */
+      }
+    }
+    return { n: hits.length, sample: hits.slice(0, 3) }
+  })
+  check(
+    '键盘焦点环仍在（存在带非零 outline 的 `:focus-visible` 规则）：拿掉半透明外圈不许误伤无障碍',
+    focusRing.n > 0,
+    JSON.stringify(focusRing),
   )
   /* 允许凸出（站主："中间扩大的图标允许溢出，一种凸出任务栏的夸张感"）：
      不是把裁剪框撑大把 2× 装进去，而是图标从栏边凸出来。 */
@@ -1619,10 +1776,21 @@ async function run() {
   await p.mouse.move(640, 320)
   await p.waitForTimeout(360)
   const wheelAway = await wheelProbe()
+  /* ⚠️ 2026-10-06 加了后半段：三档模型里"指针移开"必须**连位移一起归零**。
+     判据用**相邻槽位间距 == 布局步长**（让位时邻居被推开，间距会变大）—— 只测 scale 会漏掉
+     "图标缩回去了但还停在让位后的位置"。 */
+  const awayGaps = (wheelAway.slotXs ?? []).slice(1).map((x, i) => x - wheelAway.slotXs[i])
   check(
-    '指针**不在 Dock 上**时不放大：所有图标回 1.0×（没有常驻的固定鱼眼 —— macOS 只在指针扫过时放大）',
-    wheelAway.curve.length > 0 && wheelAway.curve.every((s) => s <= 1.02),
-    JSON.stringify({ 指针移开后: wheelAway.curve }),
+    '指针**不在 Dock 上**时：所有图标回 1.0× **且让位位移归零**（间距回到布局步长；没有常驻鱼眼）',
+    wheelAway.curve.length > 0 &&
+      wheelAway.curve.every((s) => s <= 1.02) &&
+      awayGaps.length > 0 &&
+      awayGaps.every((g) => Math.abs(g - wheelAway.step) <= 2),
+    JSON.stringify({
+      指针移开后: wheelAway.curve,
+      相邻间距: awayGaps,
+      布局步长: wheelAway.step,
+    }),
   )
 
   /* 14b 拖拽浏览 + **回弹**（2026-10-06「跟随 macOS 改成回弹」）：

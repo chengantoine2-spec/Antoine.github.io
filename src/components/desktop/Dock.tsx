@@ -12,8 +12,7 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
-  MAGNIFY_EXP,
-  MAGNIFY_MIN,
+  MAGNIFY_NEIGHBOR,
   MAGNIFY_PEAK,
   MAGNIFY_RADIUS_SLOTS,
   MOVE_THRESHOLD,
@@ -400,18 +399,21 @@ export function Dock() {
   const alongOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientY : e.clientX)
   const crossOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientX : e.clientY)
 
-  /** 按当前 offset 与**指针位置**把 track 与每个图标的 scale 画出来。
+  /** 按当前 offset 与**指针位置**把 track 与每个图标的 scale/位移画出来。
    *  画的是 `dampedOffset()`：界内原样、越界按苹果的橡皮筋公式衰减（拉 100px 实移不到 100px）。
    *
-   *  放大 = **指针驱动**（macOS）：`u = clamp(|图标中心 − 指针| / (RADIUS_SLOTS × step), 0, 1)`、
-   *  `scale = 1 + (PEAK − 1) · (1 − u^EXP) · fade`。
-   *  - 指针正对的那个图标 ≈ 2×（`u = 0`）；
-   *  - 两侧按指数递减，3 格之外回 1.0×；
-   *  - `fade` 是整体强度：指针不在图标区上时为 0 → **所有图标都是 1×**（macOS 的 Dock 就是这样，
-   *    没有指针扫过时图标不放大）。它由 `tick()` 平滑推进，进/出都是渐变、不突跳。
+   *  放大 = **指针驱动 + 三档**（站主 2026-10-06 定的口径，见 `lib/dock.ts` 顶部注释）：
+   *  - **指针正对的那个（hot）**：`scale = 1 + (PEAK − 1) · fade` ≈ 2×；
+   *  - **紧邻两侧各一个**：`1 + (NEIGHBOR − 1) · fade`（≈1.08，**只大一丢丢**），
+   *    并**承担主要的让位位移**；
+   *  - **更外侧**：`scale` **恒 1.0**，只按距离递减地让一点位，越远越少；
+   *  - `fade` 是整体强度：指针不在图标区上时为 0 → **全部回到 1× 且位移归零**（macOS 的 Dock 就是这样）。
+   *    它由 `tick()` 平滑推进，进/出都是渐变、不突跳。
    *
-   *  ⚠️ 2026-10-06 之前是"按图标区**几何中心**"的固定鱼眼（指针在哪儿都放大中间那几个），
-   *  那不是 macOS 的行为 —— 已按「一切以 macOS 为准」改成指针驱动，别改回去。 */
+   *  ⚠️ 2026-10-06 之前是"按离指针的距离给每个图标算 scale"（一圈都跟着变大）——
+   *  站主明确否掉了："其他图标只需要往两边移，不需要跟着变"。**核心是让位，不是变大**：
+   *  hot 的渲染盒与紧邻两个**不许相交**（`verify.mjs` 有这条断言钉着）。
+   *  ⚠️ 更早（2026-10-06 之前）还是"按图标区**几何中心**"的固定鱼眼，也已被否。 */
   function paint() {
     const view = viewEl.current
     const track = trackEl.current
@@ -421,21 +423,53 @@ export function Dock() {
     const items = [...track.querySelectorAll<HTMLElement>('[data-dock-item]')]
     if (!items.length) return
     const { pos, fade } = pointer.current
-    const radius = Math.max(1, MAGNIFY_RADIUS_SLOTS * step)
-    items.forEach((el) => {
+    const active = pos !== null && fade > 0.002
+    /* 图标中心在**视口主轴**上的位置：布局位置减掉当前偏移 */
+    const centerOf = (el: HTMLElement) =>
+      (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
+    /* ① 先找**指针正对的那个**（最近的槽位）—— 三档里唯一会放大到 2× 的 */
+    let hotIdx = -1
+    if (active) {
+      let best = Infinity
+      items.forEach((el, i) => {
+        if (lift.current && lift.current.el === el) return
+        const d = Math.abs(centerOf(el) - pos)
+        if (d < best) {
+          best = d
+          hotIdx = i
+        }
+      })
+    }
+    /* ② 让位幅度：hot 居中放大，每侧涨出 `(PEAK − 1) · 图标边长 / 2`；
+       紧邻那个**让满**这半个增量，更外侧按槽位折半递减（越远越少）。 */
+    const magBtn = Math.max(1, step - GAP)
+    const growth = (MAGNIFY_PEAK - 1) * magBtn * 0.5
+    items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
       if (lift.current && lift.current.el === el) return
       let s = 1
-      if (pos !== null && fade > 0.002) {
-        /* 图标中心在**视口坐标**里的位置：布局位置减掉当前偏移 */
-        const c = (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
-        const u = clamp(Math.abs(c - pos) / radius, 0, 1)
-        s = 1 + (MAGNIFY_PEAK - MAGNIFY_MIN) * (1 - Math.pow(u, MAGNIFY_EXP)) * fade
+      let shift = 0
+      let z = ''
+      if (active && hotIdx >= 0) {
+        const d = Math.abs(i - hotIdx)
+        if (d === 0) {
+          s = 1 + (MAGNIFY_PEAK - 1) * fade
+          z = '3'
+        } else {
+          if (d === 1) s = 1 + (MAGNIFY_NEIGHBOR - 1) * fade
+          const fall = d === 1 ? 1 : (Math.max(0, 1 - (d - 1) / MAGNIFY_RADIUS_SLOTS) * 0.5)
+          shift = growth * fall * fade * (i < hotIdx ? -1 : 1)
+          if (Math.abs(shift) > 0.05) z = '2'
+        }
       }
-      if (Math.abs(s - 1) > 0.001) {
-        el.style.transform = `scale(${s.toFixed(3)})`
-        /* 越大的越靠前，免得被邻居压住（指针正对的那个 z 最高） */
-        el.style.zIndex = String(1 + Math.round((s - 1) * 20))
+      const parts: string[] = []
+      if (Math.abs(shift) > 0.05) {
+        parts.push(vertical ? `translateY(${shift.toFixed(2)}px)` : `translateX(${shift.toFixed(2)}px)`)
+      }
+      if (Math.abs(s - 1) > 0.001) parts.push(`scale(${s.toFixed(3)})`)
+      if (parts.length) {
+        el.style.transform = parts.join(' ')
+        el.style.zIndex = z
       } else {
         el.style.transform = ''
         el.style.zIndex = ''
@@ -866,9 +900,17 @@ export function Dock() {
         onMouseLeave={() => setHover(null)}
         onFocus={(e) => showName(e.currentTarget, app.name)}
         onBlur={() => setHover(null)}
-        className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
+        /* ⚠️ 2026-10-06 站主：「圆角彩色底不要改，其外围还有一个**半透明边框**，把半透明改成**全透明**就行」
+           —— 那圈"半透明边框"的真凶**不是 border / outline / box-shadow**（那三样量出来本来就是干净的），
+           而是**按钮自己的底色**：图标只占按钮 72%，所以按钮上的底色会在彩色圆角底**外面露出一圈**。
+           两处都被拿掉了：
+             ① `hover:bg-hover`（`--c-hover` = rgba(0,0,0,.05) / rgba(255,255,255,.08)，就是那层半透明）；
+             ② 选中态 `bg-accent`（实心蓝底，在图标外面露出的就是那圈"框"）。
+           **保持选中语义**：`aria-current="page"` 还在、跑着的绿点还在 —— 只是不再用底色画框。
+           ⚠️ 键盘可达性不许一起拿掉：`:focus-visible` 的焦点环在 `globals.css` 里，别删。 */
+        className={`relative grid shrink-0 place-items-center rounded text-chrome-ink ${
           loop ? 'dock__item' : ''
-        } ${active ? 'bg-accent text-accent-ink' : ''} ${bouncing === app.id ? 'dock__item--bounce' : ''}`}
+        } ${bouncing === app.id ? 'dock__item--bounce' : ''}`}
       >
         {/* 图标区（wheel）用 `.dock__glyph`（占按钮 72%，macOS 那种填满格子）；
             折行（wrap）仍是 `h-1/2 w-1/2` —— 那是它的旧观感，按规矩不动。 */}
@@ -876,10 +918,8 @@ export function Dock() {
         {running ? (
           <span
             /* 正在跑的小圆点（macOS 的 4px 指示点）：未运行时**不渲染**，所以不占位。
-               底色跟着"有没有被选中"走，两个都是**面向前景**的令牌，两套主题都不会糊。 */
-            className={`absolute bottom-0.5 h-1 w-1 rounded-full ${
-              active ? 'bg-accent-ink' : 'bg-chrome-ink'
-            }`}
+               原来选中时用 `bg-accent-ink`（那是给蓝底配的前景色），蓝底拿掉后统一用前景令牌。 */
+            className="absolute bottom-0.5 h-1 w-1 rounded-full bg-chrome-ink"
             aria-hidden="true"
           />
         ) : null}
