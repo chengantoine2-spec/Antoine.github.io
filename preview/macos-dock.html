@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>macOS 风格样张 · 菜单栏 / 窗口 / Dock</title>
+<style>
+/* ── 数值全部照抄本站 tokens.css（2026-10-06「一切以 macOS 为准」那版）────────────
+   浅：面 hsl(240,24%,100%) 强调 hsl(211,100%,50%)；深：面 hsl(240,3%,11%) 强调 #0a85ff */
+:root{
+  --surface:hsl(240,24%,100%); --surface-2:hsl(240,20%,96%);
+  --ink:hsl(240,6%,12%); --dim:hsl(240,5%,45%);
+  --edge:1px solid rgba(107,114,128,.3);
+  --accent:hsl(211,100%,50%); --accent-fg:#fff;
+  --chrome:rgba(255,255,255,.72); --chrome-fg:hsl(240,6%,12%);
+  --dock-bg:rgba(255,255,255,.2); --dock-border:1px solid rgba(160,160,170,.4);
+  --dock-blur:40px; --dock-shadow:0 0 20px rgba(0,0,0,.17);
+  --traffic-close:#ef4444; --traffic-min:#eab308; --traffic-max:#22c55e;
+  --glyph:rgba(0,0,0,.95);
+  --menubar-h:28px; --titlebar-h:24px; --menubar-hot:5px;
+  --r-window:8px; --r-dock:12px;
+  --shadow-window:0 10px 15px -3px rgba(0,0,0,.3),0 4px 6px -4px rgba(0,0,0,.3);
+}
+[data-theme="dark"]{
+  --surface:hsl(240,3%,11%); --surface-2:hsl(240,4%,15%);
+  --ink:hsl(240,10%,92%); --dim:hsl(240,5%,62%);
+  --accent:#0a85ff;
+  --chrome:rgba(30,30,34,.72); --chrome-fg:hsl(240,10%,92%);
+  --dock-bg:rgba(28,28,30,.35); --dock-border:1px solid rgba(160,160,170,.3);
+  --glyph:rgba(0,0,0,1);
+  --shadow-window:0 10px 15px -3px rgba(0,0,0,.5),0 4px 6px -4px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Microsoft YaHei",sans-serif;
+  color:var(--ink); overflow:hidden;
+  /* 壁纸：纯 CSS 渐变，**不用 Apple 原版壁纸**（版权红线） */
+  background:
+    radial-gradient(120% 90% at 15% 8%, #7c5cff 0%, rgba(124,92,255,0) 55%),
+    radial-gradient(110% 80% at 88% 18%, #22d3ee 0%, rgba(34,211,238,0) 52%),
+    radial-gradient(130% 110% at 60% 105%, #f472b6 0%, rgba(244,114,182,0) 58%),
+    linear-gradient(160deg,#1e1b4b 0%,#312e81 45%,#0f172a 100%);
+}
+[data-theme="light"] body{
+  background:
+    radial-gradient(120% 90% at 12% 6%, #a5b4fc 0%, rgba(165,180,252,0) 55%),
+    radial-gradient(110% 80% at 90% 14%, #7dd3fc 0%, rgba(125,211,252,0) 52%),
+    radial-gradient(130% 110% at 62% 108%, #fbcfe8 0%, rgba(251,207,232,0) 58%),
+    linear-gradient(160deg,#e0e7ff 0%,#c7d2fe 45%,#bae6fd 100%);
+}
+
+/* ── 顶部菜单栏 ─────────────────────────────────────────────────────────────── */
+.menubar{
+  position:fixed; inset:0 0 auto 0; height:var(--menubar-h); z-index:70;
+  display:flex; align-items:center; gap:1px; padding:0 8px; font-size:12px;
+  color:var(--chrome-fg); background:var(--dock-bg);
+  border-bottom:var(--dock-border);
+  backdrop-filter:blur(var(--dock-blur)) saturate(180%);
+  -webkit-backdrop-filter:blur(var(--dock-blur)) saturate(180%);
+}
+.menubar .btn{display:flex;align-items:center;gap:6px;height:calc(100% - 6px);padding:0 8px;border:0;border-radius:5px;background:none;color:inherit;font:inherit;cursor:default}
+.menubar .btn:hover,.menubar .btn[data-open="true"]{background:var(--c-hover,rgba(0,0,0,.06))}
+.menubar .btn[data-open="true"]{background:var(--accent);color:var(--accent-fg)}
+.menubar .app{font-weight:700;padding:0 8px}
+.menubar .right{margin-left:auto;display:flex;align-items:center;gap:2px}
+.menubar .clock{font-variant-numeric:tabular-nums;padding:0 6px;letter-spacing:.2px}
+.menubar svg{width:14px;height:14px;display:block} /* ⚠️ 不写尺寸 → SVG 会按 300×150 撑爆这一条（本项目踩过） */
+.wrap{position:relative;height:100%;display:flex;align-items:center}
+.dropdown{
+  position:absolute; top:100%; left:0; min-width:190px; padding:5px;
+  background:var(--surface); border:var(--edge); border-radius:8px;
+  box-shadow:0 12px 28px rgba(0,0,0,.22); display:none;
+}
+.dropdown--right{left:auto;right:0}
+.wrap[data-open="true"] .dropdown{display:block}
+.dropdown button{display:flex;justify-content:space-between;gap:18px;width:100%;padding:5px 9px;border:0;border-radius:5px;background:none;color:inherit;font:inherit;text-align:left}
+.dropdown button:hover{background:var(--accent);color:var(--accent-fg)}
+.dropdown hr{border:0;border-top:var(--edge);margin:5px 6px}
+.hint{opacity:.55;font-size:11px}
+
+/* ── 窗口（圆角 8 / 标题栏 24 / 交通灯 14·间距 9·距左 8）──────────────────────── */
+.window{
+  position:fixed; z-index:10; border-radius:var(--r-window); overflow:hidden;
+  background:var(--surface); border:var(--edge); box-shadow:var(--shadow-window);
+  display:flex; flex-direction:column;
+}
+.window__head{
+  height:var(--titlebar-h); display:flex; align-items:center; gap:9px; padding:0 8px;
+  background:var(--chrome); border-bottom:var(--edge);
+  backdrop-filter:blur(var(--dock-blur)) saturate(180%);
+}
+.traffic{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.traffic i{
+  width:14px;height:14px;border-radius:999px;display:grid;place-items:center;
+  font-size:11px;line-height:1;color:var(--glyph);opacity:.85;
+}
+.traffic i span{opacity:0;transition:opacity .12s ease}
+.traffic:hover i span{opacity:.85}       /* 平时无字形、hover 才显（照 macOS） */
+.traffic i:nth-child(1){background:var(--traffic-close)}
+.traffic i:nth-child(2){background:var(--traffic-min)}
+.traffic i:nth-child(3){background:var(--traffic-max)}
+.tabs{flex:1;display:flex;justify-content:center;gap:4px;min-width:0}
+.tab{height:18px;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:6px;font-size:11px;color:var(--dim);white-space:nowrap}
+.tab[data-active="true"]{background:var(--surface-2);color:var(--ink);border:var(--edge)}
+.tab .x{opacity:.5}
+.head__pad{flex:0 0 68px}                 /* 右端等宽占位：让标签真正居中（= 交通灯那一簇） */
+.window__body{padding:18px;color:var(--dim);display:grid;gap:8px}
+.window__body h3{margin:0;font-size:15px;color:var(--ink)}
+
+/* ── Dock（半透明底板 + 圆角 12 + 模糊 40 + 放大 2×）────────────────────────── */
+.dock{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:8px; z-index:50;
+  padding:8px; border-radius:var(--r-dock);
+  background:var(--dock-bg); border:var(--dock-border); box-shadow:var(--dock-shadow);
+  backdrop-filter:blur(var(--dock-blur)) saturate(180%);
+  -webkit-backdrop-filter:blur(var(--dock-blur)) saturate(180%);
+  display:flex; align-items:flex-end; gap:8px;  /* 间距 8（DOCK_GAP） */
+}
+.item{position:relative;width:48px;height:48px;flex:0 0 auto;display:grid;place-items:end center}
+.item img,.item svg{width:48px;height:48px;display:block;transform-origin:bottom center;will-change:transform}
+.item .dot{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:999px;background:var(--chrome-fg);opacity:.55}
+.item[data-run="false"] .dot{visibility:hidden}   /* 未运行：invisible，但**占位** */
+.item .tip{
+  position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);
+  padding:3px 8px;border-radius:6px;font-size:11px;white-space:nowrap;
+  background:var(--surface);border:var(--edge);box-shadow:0 6px 16px rgba(0,0,0,.18);
+  opacity:0;pointer-events:none;transition:opacity .1s
+}
+.item:hover .tip{opacity:1}
+.dock__sep{width:1px;align-self:stretch;margin:6px 2px;background:rgba(160,160,170,.45)}
+
+/* ── 说明条（不是站点的一部分，只为"看样张"）──────────────────────────────── */
+.legend{
+  position:fixed;left:12px;top:calc(var(--menubar-h) + 12px);z-index:80;width:300px;
+  background:var(--surface);border:var(--edge);border-radius:10px;padding:12px 14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.22);font-size:12px;color:var(--dim)
+}
+.legend h4{margin:0 0 6px;font-size:13px;color:var(--ink)}
+.legend ul{margin:6px 0 10px;padding-left:16px;line-height:1.7}
+.legend b{color:var(--ink)}
+.legend .row{display:flex;gap:6px;flex-wrap:wrap}
+.legend button{padding:4px 10px;border-radius:6px;border:var(--edge);background:var(--surface-2);color:var(--ink);font:inherit;cursor:pointer}
+.legend button[data-on="true"]{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+</style>
+</head>
+<body>
+
+<!-- 顶部菜单栏 -->
+<div class="menubar">
+  <div class="wrap" data-open="false" data-hover>
+    <button class="btn" aria-label="本站菜单">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </button>
+    <div class="dropdown"><button>关于本站</button><button>打开设置</button><hr><button>全部最小化</button></div>
+  </div>
+  <span class="app" id="appName">博客</span>
+  <div class="wrap" data-open="false" data-hover><button class="btn">文件</button>
+    <div class="dropdown"><button>关闭当前窗口<span class="hint">⌘W</span></button><button>关闭全部窗口</button><hr><button>返回桌面</button></div></div>
+  <div class="wrap" data-open="false" data-hover><button class="btn">显示</button>
+    <div class="dropdown"><button>平铺：左半</button><button>平铺：右半</button><button>铺满工作区<span class="hint">⌃⌘F</span></button><hr><button>深色外观</button></div></div>
+  <div class="wrap" data-open="false" data-hover><button class="btn">窗口</button>
+    <div class="dropdown"><button>最小化当前窗口<span class="hint">⌘M</span></button><button>全部最小化</button></div></div>
+  <div class="wrap" data-open="false" data-hover><button class="btn">帮助</button>
+    <div class="dropdown"><button>关于本站</button><button>饥荒 Wiki 教程</button></div></div>
+
+  <div class="right">
+    <button class="btn" title="进入全屏" aria-label="全屏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+    <button class="btn" title="任务栏位置" aria-label="任务栏位置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="6" y="15" width="12" height="3" rx="1" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- 说明 / 开关（样张自带，不是站点内容） -->
+<div class="legend">
+  <h4>macOS 样张 · 数值全照本站令牌</h4>
+  <ul>
+    <li>菜单栏 <b>28px</b>（左上九宫格 = 本站菜单）</li>
+    <li>窗口圆角 <b>8px</b>、标题栏 <b>24px</b>、阴影 <b>black/30</b></li>
+    <li>交通灯 <b>14px</b>、间距 <b>9px</b>、距左 <b>8px</b>，<b>hover 才显字形</b></li>
+    <li>Dock 圆角 <b>12px</b>、模糊 <b>40px</b>、间距 <b>8px</b>、运行点 <b>4px</b></li>
+    <li>放大：峰值 <b>2×</b>、边缘 <b>1×</b>、指数 <b>1.5</b>，<b>只往上长</b>（凸出栏边）</li>
+  </ul>
+  <div class="row">
+    <button id="btnLight" data-on="true">浅色</button>
+    <button id="btnDark" data-on="false">深色</button>
+    <button id="btnDots" data-on="true">运行点</button>
+  </div>
+  <p style="margin:10px 0 0">把鼠标<b>在 Dock 上左右移动</b>看放大；<b>移到窗口左上角</b>看交通灯字形；<b>鼠标停到菜单名上</b>看下拉。</p>
+</div>
+
+<!-- 一扇窗口 -->
+<section class="window" style="left:360px;top:96px;width:640px;height:360px">
+  <header class="window__head">
+    <div class="traffic" aria-label="交通灯">
+      <i><span>×</span></i><i><span>−</span></i><i><span>+</span></i>
+    </div>
+    <div class="tabs">
+      <span class="tab" data-active="true">博客 <span class="x">×</span></span>
+      <span class="tab">关于 <span class="x">×</span></span>
+    </div>
+    <span class="head__pad"></span>
+  </header>
+  <div class="window__body">
+    <h3>窗口那一行 = 交通灯 + 居中标签</h3>
+    <div>这是样张，用来判断观感；真实站点里这一行是 `FrameTabs`（可拖拽排序、拖出拆帧、拖到别的窗上合并）。</div>
+    <div>圆角 8px · 描边 rgba(107,114,128,.3) · 标题栏 24px · 标签 18px/11px</div>
+  </div>
+</section>
+
+<!-- Dock -->
+<nav class="dock" id="dock" aria-label="Dock 样张"></nav>
+
+<script>
+/* ── 时钟（照站点的"对齐整秒自调度 setTimeout"，别用 setInterval）──────────── */
+const clock = document.getElementById('clock')
+function tick(){
+  const d = new Date()
+  const p = (n) => String(n).padStart(2,'0')
+  clock.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  setTimeout(tick, 1000 - (Date.now() % 1000))
+}
+tick()
+
+/* ── 菜单：hover 展开（真实 macOS 是点开，样张里 hover 更容易看）──────────── */
+document.querySelectorAll('.wrap[data-hover]').forEach((w) => {
+  const open = (v) => w.setAttribute('data-open', v ? 'true' : 'false')
+  w.addEventListener('pointerenter', () => {
+    document.querySelectorAll('.wrap[data-hover]').forEach((o) => o.setAttribute('data-open','false'))
+    open(true)
+  })
+  w.addEventListener('pointerleave', () => open(false))
+})
+
+/* ── 主题开关 ───────────────────────────────────────────────────────────── */
+const bl = document.getElementById('btnLight'), bd = document.getElementById('btnDark')
+const setTheme = (t) => {
+  document.documentElement.dataset.theme = t
+  bl.dataset.on = String(t === 'light'); bd.dataset.on = String(t === 'dark')
+}
+bl.onclick = () => setTheme('light'); bd.onclick = () => setTheme('dark')
+
+/* ── Dock：图标用内联 SVG 画（不引任何第三方素材 / 不用 Apple 图标）────────── */
+const ICONS = [
+  ['博客','M4 5h16v14H4z M8 9h8 M8 13h5'],
+  ['关于','M12 3a9 9 0 100 18 9 9 0 000-18z M12 8h.01 M11 12h1v5h1'],
+  ['项目','M3 7h6l2 2h10v10H3z'],
+  ['饥荒 Wiki','M4 5h7v14H4z M13 5h7v14h-7z'],
+  ['终端','M4 4h16v16H4z M7 9l3 3-3 3 M13 15h4'],
+  ['设置','M12 4v3 M12 17v3 M4 12h3 M17 12h3 M6.5 6.5l2 2 M15.5 15.5l2 2 M17.5 6.5l-2 2 M8.5 15.5l-2 2 M12 9a3 3 0 100 6 3 3 0 000-6z'],
+  ['塔罗牌','M6 3h9l3 3v15H6z M9 8h6 M9 12h6'],
+]
+const RUN = [true,false,true,false,true,false,true]
+const dock = document.getElementById('dock')
+const items = ICONS.map(([name, path], i) => {
+  const el = document.createElement('div')
+  el.className = 'item'
+  el.dataset.run = String(RUN[i])
+  el.innerHTML = `<span class="tip">${name}</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0" style="display:none"/>${path.split(' M').map((seg, k) => `<path d="${k ? 'M' + seg : seg}"/>`).join('')}
+    </svg><i class="dot"></i>`
+  dock.appendChild(el)
+  return el
+})
+/* 分隔线（macOS 的 Dock 在"废纸篓"前有一道） */
+const sep = document.createElement('div'); sep.className = 'dock__sep'; dock.appendChild(sep)
+const trash = document.createElement('div')
+trash.className = 'item'; trash.dataset.run = 'false'
+trash.innerHTML = `<span class="tip">废纸篓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7h14 M9 7V5h6v2 M7 7l1 12h8l1-12 M11 11v5 M13 11v5"/></svg><i class="dot"></i>`
+dock.appendChild(trash)
+const all = [...items, trash]
+
+/* ── 放大：**按指针距离**（这是 macOS 真实做法；本站现在做的是"按 Dock 中心"）
+      scale = PEAK − (PEAK − MIN)·u^1.5，u = 指针距离 / 影响半径；只往上长（origin: bottom） */
+const PEAK = 2, MIN = 1, R = 150   /* 影响半径 150px ≈ 三格多一点 */
+function magnify(px){
+  all.forEach((el) => {
+    const svg = el.querySelector('svg')
+    const r = el.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const d = Math.abs(px - cx)
+    const u = Math.min(1, d / R)
+    const s = PEAK - (PEAK - MIN) * Math.pow(u, 1.5)
+    svg.style.transform = `scale(${s.toFixed(3)})`
+  })
+}
+function reset(){ all.forEach((el) => { el.querySelector('svg').style.transform = '' }) }
+dock.addEventListener('pointermove', (e) => magnify(e.clientX))
+dock.addEventListener('pointerleave', reset)
+
+/* 运行点开关（看"未运行不占位"那 4px） */
+const bdots = document.getElementById('btnDots')
+bdots.onclick = () => {
+  const on = bdots.dataset.on !== 'true'
+  bdots.dataset.on = String(on)
+  document.querySelectorAll('.item .dot').forEach((d) => { d.style.display = on ? '' : 'none' })
+}
+</script>
+</body>
+</html>

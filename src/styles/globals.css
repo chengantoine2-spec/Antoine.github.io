@@ -270,9 +270,34 @@
   -webkit-backdrop-filter: blur(var(--dock-blur)) saturate(180%);
 }
 
-/* 真·浏览器级全屏里 macOS 会收起菜单栏（退出靠 Esc / F11）。 */
-:fullscreen .menubar {
-  display: none;
+/* 真·浏览器级全屏里 macOS 会收起菜单栏 —— 但**不是 `display: none`**：
+   站主 2026-10-06 要「鼠标碰顶部就浮现菜单栏」那种细节，所以收起 = **滑上去**（transform + opacity），
+   碰到屏幕顶端那条热区（`.menubar__hot`）就滑回来。
+   两个标记由 `MenuBar` 写（来自 Fullscreen API 的 `fullscreenchange`）：
+   - `data-fs="on"`      = 真的在浏览器级全屏里
+   - `data-hidden="true"` = 此刻收起（热区唤起来之后变 `false`）
+   两者同时成立才隐藏 —— **非全屏时菜单栏常驻，现有行为一个字不变**。
+   ⚠️ 别改回 `display: none`（滑不回来、也没法"碰到就浮现"）；也别用 `:fullscreen` 伪类驱动，
+   那玩意在 Playwright 里不一定匹配得到、而且没法用属性断言。 */
+.menubar {
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.menubar[data-fs='on'][data-hidden='true'] {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 顶部唤出热区：只在浏览器级全屏里出场（平时菜单栏就常驻那一条，不需要它）。
+   z 比菜单栏(70)**低 1**：栏滑下来之后指针落在栏上，热区的 enter/leave 不会跟栏打架。 */
+.menubar__hot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--menubar-hot, 5px);
+  z-index: 69;
 }
 
 .menubar__wrap {

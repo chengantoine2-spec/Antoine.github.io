@@ -75,3 +75,38 @@ DesktopShell
 菜单栏高度、下拉位置等**只取数值**（`MACOS-BRIEF.md` 第 2 节，来自 `PuruVJ/macos-web` 的 `theme.css`
 与 `Renovamen/playground-macos`，两者都是 **MIT**），**没有抄任何第三方代码**，所以不需要附 LICENSE。
 真抄代码就必须在 `AGENTS.md` 记明出处与 license。
+
+## 6. 全屏里的"碰顶浮现"（2026-10-06，站主追加的 macOS 细节）
+
+> 站主：「想要"鼠标碰顶部就浮现菜单栏"那种细节」
+
+**只在浏览器级全屏里生效**（macOS 也只在全屏时自动隐藏菜单栏）；**非全屏时菜单栏常驻，行为一个字不变**。
+
+| 件 | 做法 |
+|---|---|
+| 收起 | `.menubar[data-fs='on'][data-hidden='true'] { transform: translateY(-100%); opacity: 0; pointer-events: none }` + `transition 180ms` |
+| 两个标记 | `data-fs`（真的在全屏里，来自 `Fullscreen API` 的 `fullscreenchange`）与 `data-hidden`（此刻收起），由 `MenuBar` 写 |
+| 热区 | `.menubar__hot`：贴 `y=0`、高 `--menubar-hot`（**5px**，两套主题都有值）、`z-index: 69`（比菜单栏 70 **低 1**） |
+| 唤起 | 热区 `pointerenter` → `wake()`（立刻显示）；菜单栏自身 `pointerenter` 也算 |
+| 收起 | 菜单栏 `pointerleave` → `sleep()`：**延迟 180ms** 再收 |
+| 键盘 | `focus` 进菜单栏也算 `wake()`；焦点跑到外面才 `sleep()` |
+
+⚠️ **四条别踩的**：
+1. **不许用 `display: none`**（原来的 `:fullscreen .menubar { display:none }` 就是它）—— 那样热区唤不回来、也没法"碰到就浮现"。也别用 `:fullscreen` 伪类驱动：Playwright 里不一定匹配得到，而且没法用属性断言。
+2. **收起必须延迟**（180ms）：指针在「热区 ↔ 菜单栏」之间来回时，两个元素的 `enter`/`leave` 会在同一次移动里先后触发，立刻收会**闪**一下 —— 和 `DshWindow` 工具条同一个坑，照那套 `wake`/`sleep` 抄的。
+3. **菜单开着时不收**（`sleep` 里 `if (open || posOpen) return`）：macOS 里下拉打开着菜单栏一定在，也免得和"点别处才收"打架。
+4. 进 / 出全屏都 `setRevealed(false)`：**进全屏从"收起"开始**（否则进全屏瞬间指针若停在顶部，会直接以展开态出现）。
+
+**实测**（`verify.mjs` 11d / 11d1，跑在**真·浏览器全屏**里，不是驱动标记）：
+热区 `top 0 / 高 5px / 与令牌一致`；进全屏后（指针移开）`data-hidden=true`、`display=flex`（**不是 none**）、整条 `bottom ≤ 0`；
+移到顶部后 `data-hidden=false`、`opacity 1`、`bottom > 0`，并且**真的点得开「显示」菜单**；
+移开 60ms 时仍 `false`（**没有立刻收**）、再等 420ms 才 `true`。
+
+## 7. 断言（122 → 126，一条没删）
+
+| 原断言 | 新断言 + 为什么 |
+|---|---|
+| 「全屏：菜单栏按 macOS 收起」用 `display === 'none'` 判 | 改成 **`data-fs=on` + `data-hidden=true` + `display !== 'none'` + 整条 `bottom ≤ 0`** —— 收起现在是"滑上去"，`display` 那条会永远红 |
+| 「退出全屏：菜单栏回来」只判 `display !== 'none'` | **加强**成还要 `data-fs=off` + `data-hidden=false` + 整条在视口里（`top 0`）—— 收起的两种成因都得复位才叫"回来" |
+| — | **新增 3 条**：热区几何（贴顶、4~6px、与令牌一致）／碰顶后滑下来且**能真的操作**（点开「显示」菜单 ≥3 项）／移开**不是立刻收**（60ms 仍可见、420ms 后收起） |
+| — | 进全屏后的探针前**先把指针移到屏幕中间**（`move(640,420)` + 等 320ms）：刚点完全屏按钮时指针还停在那一带，不挪开量到的是"指针恰好在顶部"，不是默认态 |

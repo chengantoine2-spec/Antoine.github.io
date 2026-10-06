@@ -902,31 +902,109 @@ async function run() {
   const FS_BTN = `${MENUBAR} button[aria-label="全屏"], ${MENUBAR} button[aria-label="退出全屏"]`
   await p.click(FS_BTN)
   await p.waitForTimeout(300)
-  const fsIn = await p.evaluate((sel) => ({
-    on: document.fullscreenElement !== null,
-    menuLabel:
-      document.querySelector(`${sel} button[aria-label="退出全屏"]`)?.getAttribute('aria-label') ?? '',
-    /* macOS 进真·全屏会收起菜单栏（CSS 里 `:fullscreen .menubar { display:none }`） */
-    menubarHidden: getComputedStyle(document.querySelector('[data-menubar]')).display === 'none',
-    stillInDock: !!document.querySelector(
-      'nav[aria-label="任务栏"] button[aria-label="退出全屏"], nav[aria-label="任务栏"] button[aria-label="全屏"]',
-    ),
-    titleButtons: [
-      ...document.querySelectorAll('[aria-label="博客 窗口"] [data-window-controls] button'),
-    ].map((b) =>
-      b.getAttribute('aria-label'),
-    ),
-  }), MENUBAR)
+  /* 2026-10-06：菜单栏进全屏后**收起**了（照 macOS），但指针这会儿还停在刚点过的按钮那一带 ——
+     先把它挪开，量的才是"指针不在顶部时它是收起的"这个默认态。 */
+  await p.mouse.move(640, 420)
+  await p.waitForTimeout(320)
+  const fsIn = await p.evaluate((sel) => {
+    const el = document.querySelector('[data-menubar]')
+    const cs = el ? getComputedStyle(el) : null
+    const r = el?.getBoundingClientRect()
+    return {
+      on: document.fullscreenElement !== null,
+      menuLabel:
+        document.querySelector(`${sel} button[aria-label="退出全屏"]`)?.getAttribute('aria-label') ?? '',
+      /* ⚠️ 收起**不是** `display: none`：站主 2026-10-06 要「鼠标碰顶部就浮现菜单栏」，
+         所以收起 = 滑上去（transform + opacity），这样热区才唤得回来。 */
+      dataFs: el?.getAttribute('data-fs') ?? '',
+      dataHidden: el?.getAttribute('data-hidden') ?? '',
+      display: cs?.display ?? '',
+      offscreen: (r?.bottom ?? 1) <= 0,
+      stillInDock: !!document.querySelector(
+        'nav[aria-label="任务栏"] button[aria-label="退出全屏"], nav[aria-label="任务栏"] button[aria-label="全屏"]',
+      ),
+      titleButtons: [
+        ...document.querySelectorAll('[aria-label="博客 窗口"] [data-window-controls] button'),
+      ].map((b) =>
+        b.getAttribute('aria-label'),
+      ),
+    }
+  }, MENUBAR)
   check(
-    '菜单栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住），菜单栏按 macOS 收起，任务栏里已无此按钮',
+    '菜单栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住），菜单栏按 macOS 收起（滑上去、不是 display:none），任务栏里已无此按钮',
     /* macOS 交通灯的**顺序**：左起 红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）。
        进全屏时会顺手最大化当前窗口，所以绿点是「还原」 */
     fsIn.on &&
       fsIn.menuLabel === '退出全屏' &&
-      fsIn.menubarHidden &&
+      fsIn.dataFs === 'on' &&
+      fsIn.dataHidden === 'true' &&
+      fsIn.display !== 'none' &&
+      fsIn.offscreen &&
       !fsIn.stillInDock &&
       fsIn.titleButtons.join(',') === '关闭,最小化,还原',
     JSON.stringify(fsIn),
+  )
+
+  /* 11d1 全屏里「鼠标碰顶部就浮现菜单栏」（站主 2026-10-06 点名要的 macOS 细节）。
+     ⚠️ 这三条跑在**真·浏览器全屏**里（上一条刚进去），不是驱动标记。 */
+  const hot = await p.evaluate(() => {
+    const el = document.querySelector('[data-menubar-hot]')
+    const r = el?.getBoundingClientRect()
+    const token =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--menubar-hot')) || 0
+    return { exists: !!el, top: Math.round(r?.top ?? -1), h: Math.round(r?.height ?? -1), token: Math.round(token) }
+  })
+  check(
+    '全屏里屏幕顶端有一条唤出菜单栏的热区（贴 y=0、高 4~6px、与令牌 --menubar-hot 一致）',
+    hot.exists && hot.top === 0 && hot.h >= 4 && hot.h <= 6 && hot.h === hot.token,
+    JSON.stringify(hot),
+  )
+
+  await p.mouse.move(640, 2)
+  await p.waitForTimeout(260)
+  const revealed = await p.evaluate(() => {
+    const el = document.querySelector('[data-menubar]')
+    const r = el?.getBoundingClientRect()
+    return {
+      dataHidden: el?.getAttribute('data-hidden') ?? '',
+      opacity: getComputedStyle(el).opacity,
+      bottom: Math.round(r?.bottom ?? -1),
+    }
+  })
+  check(
+    '鼠标碰到顶部热区 → 菜单栏滑下来（可见，且不是被 display 藏着的）',
+    revealed.dataHidden === 'false' && Number(revealed.opacity) > 0.9 && revealed.bottom > 0,
+    JSON.stringify(revealed),
+  )
+
+  /* 滑下来之后必须**真的能操作**（不许"看得见点不着"）：点开「显示」菜单 */
+  await p.click(`${MENUBAR} button[aria-label="显示"]`)
+  await p.waitForTimeout(150)
+  const interact = await p.evaluate(() => ({
+    open: !!document.querySelector('[data-menubar] [role="menu"]'),
+    items: document.querySelectorAll('[data-menubar] [role="menu"] [role="menuitem"]').length,
+  }))
+  check(
+    '浮现出来的菜单栏能真的操作（点开「显示」菜单，项都可点）',
+    interact.open && interact.items >= 3,
+    JSON.stringify(interact),
+  )
+
+  /* 移开指针：**不许立刻收**（立刻收就会在"热区↔菜单栏"之间闪，DSH 工具条踩过这个坑） */
+  await p.keyboard.press('Escape')
+  await p.mouse.move(640, 420)
+  await p.waitForTimeout(60)
+  const justLeft = await p.evaluate(
+    () => document.querySelector('[data-menubar]')?.getAttribute('data-hidden') ?? '',
+  )
+  await p.waitForTimeout(420)
+  const afterLeave = await p.evaluate(
+    () => document.querySelector('[data-menubar]')?.getAttribute('data-hidden') ?? '',
+  )
+  check(
+    '指针移开后**不是立刻**收（延迟约 180ms 才滑回去）',
+    justLeft === 'false' && afterLeave === 'true',
+    JSON.stringify({ justLeft, afterLeave }),
   )
 
   /* 全屏里菜单栏是收起的（照 macOS），所以退全屏不能再点那颗按钮。
@@ -935,14 +1013,27 @@ async function run() {
      这里显式调用 Fullscreen API 退出，然后照样断言"菜单栏回来了、按钮回到全屏" —— 覆盖的是同一条链路。 */
   await p.evaluate(() => document.exitFullscreen())
   await p.waitForTimeout(350)
-  const fsOut = await p.evaluate((sel) => ({
-    on: document.fullscreenElement !== null,
-    menuLabel: document.querySelector(`${sel} button[aria-label="全屏"]`)?.getAttribute('aria-label') ?? '',
-    menubarVisible: getComputedStyle(document.querySelector('[data-menubar]')).display !== 'none',
-  }), MENUBAR)
+  const fsOut = await p.evaluate((sel) => {
+    const el = document.querySelector('[data-menubar]')
+    const r = el?.getBoundingClientRect()
+    return {
+      on: document.fullscreenElement !== null,
+      menuLabel: document.querySelector(`${sel} button[aria-label="全屏"]`)?.getAttribute('aria-label') ?? '',
+      menubarVisible: getComputedStyle(el).display !== 'none',
+      /* 退出全屏 → 恢复**常驻**（`data-fs=off` / `data-hidden=false`、整条在视口里） */
+      dataFs: el?.getAttribute('data-fs') ?? '',
+      dataHidden: el?.getAttribute('data-hidden') ?? '',
+      onScreen: (r?.top ?? -1) === 0 && (r?.bottom ?? 0) > 0,
+    }
+  }, MENUBAR)
   check(
-    '退出全屏（走 Fullscreen API）：菜单栏回来、按钮回到「全屏」',
-    !fsOut.on && fsOut.menuLabel === '全屏' && fsOut.menubarVisible,
+    '退出全屏（走 Fullscreen API）：菜单栏恢复常驻（不再是收起态）、按钮回到「全屏」',
+    !fsOut.on &&
+      fsOut.menuLabel === '全屏' &&
+      fsOut.menubarVisible &&
+      fsOut.dataFs === 'off' &&
+      fsOut.dataHidden === 'false' &&
+      fsOut.onScreen,
     JSON.stringify(fsOut),
   )
 

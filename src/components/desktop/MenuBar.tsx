@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getApp, matchWindowRoute, pathOf } from '../../lib/apps'
 import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
+import { useFullscreen } from '../../hooks/useFullscreen'
 import { useWindows } from '../../hooks/useWindows'
 import { SITE } from '../../data/site'
 import type { SnapZone } from '../../types/desktop'
@@ -51,6 +52,41 @@ export function MenuBar({ onTile }: MenuBarProps) {
   const bar = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState<MenuId | null>(null)
   const [posOpen, setPosOpen] = useState(false)
+
+  /* ── 全屏里的菜单栏自动隐藏（macOS：鼠标碰顶部那条热区才浮现）──────────────────
+     站主 2026-10-06：「想要"鼠标碰顶部就浮现菜单栏"那种细节」。
+     **只在浏览器级全屏里生效**（macOS 也只在全屏时自动隐藏菜单栏）；非全屏时菜单栏常驻，
+     下面这些分支一律不参与。
+     收起要"晚一点点"：指针在「热区 ↔ 菜单栏」之间来回时，两个元素的 enter/leave 会在
+     同一次移动里先后触发，立刻收会闪一下 —— 和 DSH 工具条同一套解法（那边也是 180ms）。 */
+  const HIDE_MS = 180
+  const { fullscreen } = useFullscreen()
+  const [revealed, setRevealed] = useState(false)
+  const hideTimer = useRef<number | null>(null)
+  const cancelHide = useCallback(() => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current)
+      hideTimer.current = null
+    }
+  }, [])
+  const wake = useCallback(() => {
+    cancelHide()
+    setRevealed(true)
+  }, [cancelHide])
+  const sleep = useCallback(() => {
+    /* 菜单开着的时候不收：macOS 里下拉打开着，菜单栏一定在（也免得和"点别处才收"打架） */
+    if (open || posOpen) return
+    cancelHide()
+    hideTimer.current = window.setTimeout(() => setRevealed(false), HIDE_MS)
+  }, [cancelHide, open, posOpen])
+  useEffect(() => cancelHide, [cancelHide])
+  /* 进 / 出全屏都复位：进全屏从「收起」开始，退全屏自然回到常驻 */
+  useEffect(() => {
+    cancelHide()
+    setRevealed(false)
+  }, [fullscreen, cancelHide])
+  /** 收起态 = 全屏里 + 还没被热区唤起来。CSS 只认这两个标记（`[data-fs='on'][data-hidden='true']`） */
+  const menuHidden = fullscreen && !revealed
 
   const routeId = matchWindowRoute(pathname)?.app.id
   /* 聚焦的框 = 活动标签就是当前路由那个应用。没有就回落到站点名（macOS 里 Finder 也总有名字） */
@@ -211,7 +247,29 @@ export function MenuBar({ onTile }: MenuBarProps) {
   )
 
   return (
-    <div className="menubar" data-menubar="" role="menubar" aria-label="菜单栏" ref={bar}>
+    <>
+      {/* 顶部唤出热区：**只在浏览器级全屏里出场**（平时菜单栏常驻那一条，不需要它）。
+          z 比菜单栏低 1（见 globals.css），所以栏滑下来之后指针落在栏上，两边不打架。 */}
+      {fullscreen ? <div className="menubar__hot" data-menubar-hot="" onPointerEnter={wake} /> : null}
+
+      <div
+        className="menubar"
+        data-menubar=""
+        /* 收起 = 滑上去（`[data-fs='on'][data-hidden='true']`），**不是 `display: none`** ——
+           这样鼠标碰到顶部热区才滑得回来。两个标记同时成立才隐藏，非全屏永远常驻。 */
+        data-fs={fullscreen ? 'on' : 'off'}
+        data-hidden={menuHidden ? 'true' : 'false'}
+        role="menubar"
+        aria-label="菜单栏"
+        ref={bar}
+        onPointerEnter={wake}
+        onPointerLeave={sleep}
+        /* 键盘 Tab 进到菜单栏也保持显示；焦点跑到外面才收（同 DSH 工具条那条） */
+        onFocusCapture={wake}
+        onBlurCapture={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) sleep()
+        }}
+      >
       {menuButton('brand')}
 
       {/* 聚焦窗口的应用名：macOS 里这一段是加粗的，且随聚焦窗口实时变 */}
@@ -259,6 +317,7 @@ export function MenuBar({ onTile }: MenuBarProps) {
         {/* 日月时钟并进菜单栏（同一个组件，紧凑形态；元素与类名一个都不少） */}
         <CelestialClock variant="compact" />
       </div>
-    </div>
+      </div>
+    </>
   )
 }
