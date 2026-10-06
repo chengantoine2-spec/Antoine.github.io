@@ -1889,7 +1889,7 @@ async function run() {
     const t = await p.evaluate(
       (arg) => {
         const view = document.querySelector(arg.sel + ' [data-dock-view]')
-        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy='1']')]
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy=\'1\']')]
         if (!view || items.length < 3) return null
         const i = arg.which === 'first' ? 0 : arg.which === 'last' ? items.length - 1 : Math.floor(items.length / 2)
         const el = items[i]
@@ -1910,7 +1910,7 @@ async function run() {
     await p.mouse.move(t.x, t.y, { steps: 8 })
     await p.waitForTimeout(430)
     const r = await p.evaluate((sel) => {
-      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy='1']')]
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
       const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
       let argmax = 0
       scales.forEach((s, i) => {
@@ -1940,7 +1940,7 @@ async function run() {
       await p.waitForTimeout(800)
     }
     return p.evaluate((sel) => {
-      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy='1']')]
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
       if (items.length < 3) return null
       const ps = []
       for (let k = 0; k + 1 < items.length; k += 1) ps.push(items[k + 1].offsetLeft - items[k].offsetLeft)
@@ -1970,7 +1970,7 @@ async function run() {
     const t = await p.evaluate(
       (arg) => {
         const view = document.querySelector(arg.sel + ' [data-dock-view]')
-        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy='1']')]
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy=\'1\']')]
         const el = items.find((b) => b.getAttribute('aria-label') === arg.label)
         if (!view || !el) return null
         const track = el.closest('[data-dock-track]')
