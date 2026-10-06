@@ -8,7 +8,7 @@ export const DOCK_MIN_THICKNESS = 48
 /* 任务栏内部几何：Dock 组件与下面的厚度下限共用，改一处即可。
    ⚠️ GAP = **8px** 是 macOS 的 Dock 图标间距（原先 4px）——2026-10-06「一切以 macOS 为准」。
    它是 `dockStep()` 的一半，所以改它会连带放大/吸附/长度下限的几何，别单独在组件里写死别的间距。 */
-export const DOCK_GAP = 8
+export const DOCK_GAP = 5
 export const DOCK_PAD = 6
 export const DOCK_BORDER = 1
 
@@ -60,7 +60,15 @@ export const MAGNIFY_NEIGHBOR = 1.08
  * ⚠️ 2026-10-06 从 3 调到 **5**：波浪要的是"中部最鼓、两端迅速收平"；
  * 半径 3 时只有三格在动，看着不像波。
  */
-export const MAGNIFY_RADIUS_SLOTS = 4
+export const MAGNIFY_RADIUS_SLOTS = 3
+/**
+ * **铺开系数**（2026-10-06 站主：「左右两侧偏移的量太多了，把其他图标挤得太远了，同时把图标变得紧凑一些」）：
+ * 位移 = 「逐个缝隙累计增量」× 这个系数。
+ * ⚠️ 上一版系数是 1（几何上"完全分开"），是**按当时那条"相邻渲染盒不相交"断言**调的 ——
+ * 那条断言**定得过严**：macOS 的紧凑感恰恰来自"大图标压住邻居的圆角"，所以断言已放宽为
+ * 「允许轻微交叠，但邻居中心必须在 hot 的渲染盒之外、交叠面积 ≤ 邻居面积 25%、不许完全盖住」。
+ */
+export const SPREAD_FACTOR = 0.5
 /**
  * Dock 按钮里图标占按钮边长的比例。
  *

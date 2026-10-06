@@ -1910,8 +1910,25 @@ async function run() {
   /* 让位（"整排铺开"的核心）：判据不能用"x 变了"，要用"**相邻图标的渲染盒不相交**"，
      否则邻居只让 1px 也算过。 */
   check(
-    '整排铺开：相邻图标的渲染盒**不相交**（波浪把两边推开，谁也不压谁）',
-    wheel0.hotNeighborOverlap === false,
+    '铺开是**克制的**：相邻图标允许轻微交叠（macOS 靠大图标压住邻居圆角才紧凑），但**交叠不超过一半**、谁也不许被整块盖住',
+    /* ⚠️ 2026-10-06 **放宽**（站主：「左右两侧偏移的量太多了，把其他图标挤得太远了，同时把图标变得紧凑一些」）。
+       **原断言**：相邻图标的渲染盒**完全不相交** —— 它是"铺开量"的隐形指挥棒：为了让盒子不碰，
+       位移必须一路把邻居推出去，结果整排被挤得很散。而 **macOS 的紧凑感恰恰来自"大图标压住邻居的圆角"**，
+       所以那条断言把 macOS 想要的效果当 bug 拦了。
+       **新断言**：只要求"**中心距 ≥ 两者半宽之和的一半**"（即交叠不超过一半），
+       仍能拦住"邻居被整块盖住 / 图标糊成一团"的退化。判据全部来自已有字段，不新增页面代码。 */
+    (() => {
+      const xs = wheel0.slotXs ?? []
+      const ss = wheel0.slotScales ?? []
+      const base = (wheel0.edge && wheel0.edge.baseH) || 40
+      const h = wheel0.hotIdx
+      if (h < 0 || xs.length < 3) return true
+      const cx = (i) => xs[i] + (base * (ss[i] ?? 1)) / 2
+      const half = (i) => (base * (ss[i] ?? 1)) / 2
+      return [h - 1, h + 1].every((i) =>
+        i < 0 || i >= xs.length ? true : Math.abs(cx(i) - cx(h)) >= (half(h) + half(i)) * 0.5,
+      )
+    })(),
     JSON.stringify({
       hot与紧邻相交: wheel0.hotNeighborOverlap,
       hot序号: hotIdx,

@@ -14,6 +14,7 @@ import {
   DOCK_THICKNESS,
   MAGNIFY_PEAK,
   MAGNIFY_RADIUS_SLOTS,
+  SPREAD_FACTOR,
   MOVE_THRESHOLD,
   SPRING_DAMPING,
   SPRING_STIFFNESS,
@@ -114,6 +115,8 @@ interface HoverState {
   /** 被悬停按钮的视口矩形 */
   rect: DOMRect
   /** 任务栏自身的视口矩形，用来换算成任务栏内坐标 */
+  layoutW: number
+  layoutH: number
   bar: DOMRect
 }
 
@@ -321,7 +324,18 @@ export function Dock() {
   function showName(target: HTMLElement, name: string) {
     const barRect = bar.current?.getBoundingClientRect()
     if (!barRect) return
-    setHover({ name, rect: target.getBoundingClientRect(), bar: barRect })
+    setHover({
+      name,
+      rect: target.getBoundingClientRect(),
+      /* ⚠️ 再采一份**布局尺寸**（offsetWidth/Height 不含 transform）：
+         站主 2026-10-06 第三条「从一个图标移动到另一个图标时气泡的位置会变高」的根因就是
+         原来只用 `getBoundingClientRect()` —— 它含放大中的 scale，动画每推进一帧那个高度都在变，
+         切换图标时又按"新图标当时的中间态"重算一次，于是气泡忽高忽低。
+         贴栏侧 `transform-origin` 让**贴栏那条边不动**，所以 layoutTop = rect.bottom − 布局高 是常量。 */
+      layoutW: target.offsetWidth,
+      layoutH: target.offsetHeight,
+      bar: barRect,
+    })
   }
 
   function hoverStyle(state: HoverState): CSSProperties {
@@ -332,30 +346,35 @@ export function Dock() {
        气泡原来贴的是**布局盒**的边，于是被 2× 的图标顶穿。
        这里按"放大后的可见包围盒"算：贴栏侧 `transform-origin` → 增量 `(PEAK − 1) × 盒子边长`
        **整个长到栏外**，所以往外挪这么多再加上 8px 间距就永远在图标上方。 */
+    const layoutH = state.layoutH || state.rect.height
+    const layoutW = state.layoutW || state.rect.width
+    /* 贴栏那条边不动 → 布局顶边 = 渲染盒底边 − 布局高（竖排同理取另一条边） */
+    const layoutTop = state.rect.bottom - layoutH
+    const layoutLeft = state.rect.right - layoutW
     const grownY = (MAGNIFY_PEAK - 1) * state.rect.height
     const grownX = (MAGNIFY_PEAK - 1) * state.rect.width
     switch (position) {
       case 'bottom':
         return {
           left: cx,
-          top: state.rect.top - state.bar.top - grownY - 8,
+          top: layoutTop - state.bar.top - grownY - 8,
           transform: 'translate(-50%, -100%)',
         }
       case 'top':
         return {
           left: cx,
-          top: state.rect.bottom - state.bar.top + grownY + 8,
+          top: layoutTop + layoutH - state.bar.top + grownY + 8,
           transform: 'translateX(-50%)',
         }
       case 'left':
         return {
-          left: state.rect.right - state.bar.left + grownX + 8,
+          left: layoutLeft + layoutW - state.bar.left + grownX + 8,
           top: cy,
           transform: 'translateY(-50%)',
         }
       default:
         return {
-          left: state.rect.left - state.bar.left - grownX - 8,
+          left: layoutLeft - state.bar.left - grownX - 8,
           top: cy,
           transform: 'translate(-100%, -50%)',
         }
@@ -447,7 +466,7 @@ export function Dock() {
     const magBtn = Math.max(1, step - GAP)
     /* ① macOS 的**波浪**（站主 2026-10-06 最终口径：「想要 macOS 那种指针扫过时的"波浪"，
        越想 macOS 越好，最好一模一样」；中间那条三档模型已被否）：
-       `wave(d) = (1 − min(d/RADIUS, 1))^1.5` —— d = 离指针的**格数**（`hot` 是连续浮点，
+       `wave(d) = (1 − min(d/RADIUS, 1))^2.0` —— d = 离指针的**格数**（`hot` 是连续浮点，
        所以波峰会跟着指针平滑移动）。
        ⚠️ **实测教训**：半径 5 + 余弦曲线时紧邻那个也到 **1.89×** —— "中部最鼓"变成"一大片都鼓"，
        而且邻居让不开、渲染盒相交（被"不相交"断言当场抓住）。换成幂 1.5 后曲线是
@@ -455,7 +474,7 @@ export function Dock() {
        正是站主说的"中部最鼓、两端迅速收平"。 */
     const wave = (d: number) => {
       const t = Math.min(1, Math.abs(d) / MAGNIFY_RADIUS_SLOTS)
-      return Math.pow(1 - t, 1.5)
+      return Math.pow(1 - t, 2.0)
     }
     const scales = items.map((_, i) => 1 + (MAGNIFY_PEAK - 1) * wave(i - hot) * (active ? fade : 0))
     /* ② **整排铺开**（波浪的关键，也是 macOS 的做法）：图标被放大 `(s−1)·边长`，每侧涨出一半；
@@ -463,7 +482,8 @@ export function Dock() {
        `gapShift(j) = ((s_j − 1) + (s_{j+1} − 1)) · 边长 / 2`。
        这条式子的好处：`step ≥ 边长` 时**数学上必然不相交**，剩下的正好是 `GAP` 那点缝 ——
        不用拍脑袋乘系数（上一版用固定倍数，余弦曲线下被断言抓出重叠）。 */
-    const gapShift = (j: number) => ((scales[j] - 1) + (scales[j + 1] - 1)) * magBtn * 0.5
+    const gapShift = (j: number) =>
+      ((scales[j] - 1) + (scales[j + 1] - 1)) * magBtn * 0.5 * SPREAD_FACTOR
     const hotInt = Math.round(hot)
     const shifts = items.map((_, i) => {
       if (!active || i === hotInt) return 0
