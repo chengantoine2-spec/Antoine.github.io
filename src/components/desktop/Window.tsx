@@ -4,7 +4,6 @@ import { SNAP_LABEL, snapRect, snapZoneAt, type Rect } from '../../lib/snap'
 import { useWindows } from '../../hooks/useWindows'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
 import type { AppId, SnapZone, WindowState, WindowTab } from '../../types/desktop'
-import { MaximizeGlyph } from '../icons'
 import { FrameTabs } from './FrameTabs'
 
 interface WindowProps {
@@ -208,7 +207,7 @@ export function Window({
       data-snap={win.snap ?? ''}
       data-merge-hover={overFrame ?? ''}
       data-frame-body={win.key}
-      className={`window absolute flex flex-col overflow-hidden rounded-window border border-edge bg-surface shadow-2xl ${
+      className={`window absolute flex flex-col overflow-hidden rounded-window border border-edge bg-surface shadow-[var(--shadow-window)] ${
         win.maximized ? 'window--max' : ''
       }`}
       style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}
@@ -217,26 +216,60 @@ export function Window({
         onActivate?.()
       }}
     >
-      {/* **一行到底**（2026-10-05 用户："图一只有一行，为什么我们有两行"）：
-          标签行与窗口按钮同排，跟浏览器一样 —— 不再有"标题栏 + 标签行"两行。
+      {/* **一行到底**，但按 macOS 排：**交通灯在左 + 标签行居中**（站主 2026-10-06「其他照 macOS 全改」）。
+          原来右侧那套 – □ × 已经撤掉，别再往回加。
           - 拖标签 = 换顺序；竖直拖出框外 = 拆成独立窗口
-          - 拖这一行的**空白处** = 移动窗口；拖到别的框上 = 合并
-          宿主契约：那三个窗口按钮放在 `[data-window-controls]` 里 —— 标签按钮也在 `<header>` 里了，
-          所以别再按 `header button` 去数标题栏按钮 */}
+          - 拖这一行的空白处 = 移动窗口；拖到别的框上 = 合并
+          宿主契约：交通灯放在 [data-window-controls] 里，按钮 aria-label 保持「最小化 / 最大化|还原 / 关闭」不变
+          （tools/verify.mjs 靠 [data-frame-head] button[aria-label="关闭"] 关窗口）——
+          所以别再按位置或 header button 去数标题栏按钮。
+          右端那颗等宽占位是让标签行**真正居中**用的：左边有交通灯，右边不留白就会偏左。 */}
       <header
         data-frame-head={win.key}
-        className="flex h-9 shrink-0 cursor-default select-none items-center gap-2 border-b border-edge bg-surface-2 pl-1.5 pr-2"
+        className="flex h-[var(--titlebar-h)] shrink-0 cursor-default select-none items-center border-b border-edge bg-surface-2"
         onPointerDown={startDrag}
         onPointerMove={onDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onDoubleClick={() =>
-          /* 吸附着的先解吸附（回到自由尺寸），否则才是最大化 / 还原 */
           win.snap
             ? dispatch({ type: 'unsnap', key: win.key })
             : dispatch({ type: 'toggle-maximize', key: win.key })
         }
       >
+        <span
+          data-window-controls=""
+          className="traffic-lights"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {/* 顺序与 macOS 一致：左红（关闭）、中黄（最小化）、右绿（最大化 / 还原） */}
+          <button
+            type="button"
+            className="traffic traffic--close"
+            aria-label="关闭"
+            onClick={onCloseFrame}
+          >
+            <span aria-hidden>&#215;</span>
+          </button>
+          <button
+            type="button"
+            className="traffic traffic--min"
+            aria-label="最小化"
+            onClick={() => dispatch({ type: 'minimize', key: win.key })}
+          >
+            <span aria-hidden>&#8211;</span>
+          </button>
+          <button
+            type="button"
+            className="traffic traffic--max"
+            aria-label={win.maximized ? '还原' : '最大化'}
+            aria-pressed={win.maximized}
+            onClick={() => dispatch({ type: 'toggle-maximize', key: win.key })}
+          >
+            <span aria-hidden>{win.maximized ? '−' : '+'}</span>
+          </button>
+        </span>
+
         <FrameTabs
           tabs={win.tabs}
           active={win.active}
@@ -247,43 +280,14 @@ export function Window({
           onDetach={onDetachTab}
         />
 
+        {/* 右端等宽占位：让标签行在标题栏里真正居中（左边交通灯占多少，右边就留多少） */}
         <span
-          data-window-controls=""
-          className="flex shrink-0 items-center gap-1"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            /* ⚠️ 字形尺寸回到原来的 12px（用户 2026-10-05 中途改主意：「图标改回原来的样式」）；
-               悬停时露出的"按钮形状"用 --c-control-hover —— 比 --c-hover 实、比 --c-accent 淡 */
-            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-[var(--c-control-hover)] hover:text-ink"
-            aria-label="最小化"
-            onClick={() => dispatch({ type: 'minimize', key: win.key })}
-          >
-            &#8211;
-          </button>
-          <button
-            type="button"
-            className="grid h-6 w-6 place-items-center rounded text-dim hover:bg-[var(--c-control-hover)] hover:text-ink"
-            aria-label={win.maximized ? '还原' : '最大化'}
-            aria-pressed={win.maximized}
-            onClick={() => dispatch({ type: 'toggle-maximize', key: win.key })}
-          >
-            {/* 最大化 / 还原的图形在 components/icons/glyphs/MaximizeGlyph.tsx（默认就是 12px） */}
-            <MaximizeGlyph maximized={win.maximized} />
-          </button>
-          <button
-            type="button"
-            /* 关闭 = 破坏性操作，悬停给**红底**（用户 2026-10-05：「删除键要改成红色背景」）；
-               红底 + 浅字走 --c-danger / --c-danger-fg，三套主题各一份 */
-            className="grid h-6 w-6 place-items-center rounded text-xs text-dim hover:bg-[var(--c-danger)] hover:text-[var(--c-danger-fg)]"
-            aria-label="关闭"
-            /* 这一行的 × = 关掉整个框（标签上那个 × 才只关一个标签） */
-            onClick={onCloseFrame}
-          >
-            &#215;
-          </button>
-        </span>
+          aria-hidden
+          className="h-full shrink-0"
+          style={{
+            width: 'calc(var(--traffic-inset) + 3 * var(--traffic-size) + 2 * var(--traffic-gap))',
+          }}
+        />
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto p-5 text-sm">

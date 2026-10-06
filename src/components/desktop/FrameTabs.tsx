@@ -121,9 +121,11 @@ export function FrameTabs({
       data-frame-tabs=""
       role="tablist"
       aria-label="窗口标签栏"
-      /* 占满这一行剩下的宽度（右边留给窗口按钮）；**空白处的 pointerdown 要冒泡给标题栏**，
-         这样"拖这一行的空档"仍然是移动 / 合并整扇窗（浏览器同款手感） */
-      className="no-scrollbar flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+      /* 占满这一行剩下的宽度（左边是交通灯、右边留等宽占位，所以这行**正好居中**）；
+         **空白处的 pointerdown 要冒泡给标题栏**，这样"拖这一行的空档"仍然是移动 / 合并整扇窗。
+         ⚠️ `frame-tabs` 那个类给的是 `justify-content: safe center`（装得下居中、装不下退化成 start）——
+         别写成裸 `center`：溢出时左边那半截会滚不到（项目「坑 5」） */
+      className="frame-tabs no-scrollbar flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto"
     >
       {tabs.map((tab, index) => {
         const app = getApp(tab.id)
@@ -146,7 +148,9 @@ export function FrameTabs({
             /* 双击标签不该最大化窗口（空白处的双击才是） */
             onDoubleClick={(e) => e.stopPropagation()}
             title={`${app.name} · ${label}`}
-            className={`group flex h-[26px] max-w-[13rem] shrink-0 cursor-default items-center gap-1.5 rounded-md border px-2 text-xs ${
+            /* macOS 观感（2026-10-06「其他照 macOS 全改」）：标题栏只有 **24px**
+               （`--titlebar-h`），所以标签压到 18px、字号 11px；圆角从 md 收到默认档 */
+            className={`group flex h-[18px] max-w-[13rem] shrink-0 cursor-default items-center gap-1 rounded border px-1.5 text-[11px] ${
               isActive
                 ? 'border-edge bg-surface text-ink shadow-sm'
                 : 'border-transparent text-dim hover:bg-hover hover:text-ink'
@@ -162,7 +166,7 @@ export function FrameTabs({
               }}
               className="flex min-w-0 items-center gap-1.5 text-left"
             >
-              <AppIcon name={app.icon} className="h-3.5 w-3.5 shrink-0" />
+              <AppIcon name={app.icon} className="h-3 w-3 shrink-0" />
               <span className="truncate">{label}</span>
             </button>
             <button
@@ -171,10 +175,9 @@ export function FrameTabs({
               aria-label={`关闭 ${app.name} 标签`}
               title="关闭这个标签"
               onClick={() => onClose(index)}
-              /* 「左侧那个删除窗口的小按钮」：和标题行的关闭键同一套 —— **悬停红底**
-                 （用户 2026-10-05「删除键要改成红色背景」）。不悬停时仍是 60% 不透明度的淡 ×，
-                 免得一排标签上到处是红点 */
-              className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] opacity-60 hover:bg-[var(--c-danger)] hover:text-[var(--c-danger-fg)] hover:opacity-100"
+              /* 标签上那个小 ×：**撤掉红底**（macOS 观感下红色只属于交通灯里的关闭圆点，
+                 见 MACOS-BRIEF 第 4.2 节），改成中性悬停底 + 变清楚 */
+              className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded text-[10px] opacity-60 hover:bg-[var(--c-control-hover)] hover:text-ink hover:opacity-100"
             >
               &#215;
             </button>

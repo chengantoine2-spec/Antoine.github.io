@@ -12,13 +12,19 @@
   body {
     margin: 0;
     overflow: hidden;
-    background: #111;
+    background: var(--c-surface-2);
     color: var(--c-text);
+    /* 字体栈在 tokens.css 的 --font-sans 里（macOS 优先系统字体，Web 端兜底 Inter）。
+       ⚠️ 这里覆盖 Tailwind preflight 默认栈，别删；也不许把任何字体文件打进仓库 */
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   :focus-visible {
     outline: 2px solid var(--c-accent);
     outline-offset: 2px;
+    box-shadow: var(--focus-ring);
   }
 
   /* 四边让位的兜底值；真实值由 DesktopShell 按任务栏位置写行内变量 */
@@ -678,6 +684,65 @@
 .md-table {
   max-width: 100%;
   overflow-x: auto;
+}
+
+/* ── 窗口标题栏：macOS 交通灯（左）+ 居中的标签行 ──
+   规格见 MACOS-BRIEF 第 2.2 节：12px 圆点、间距 8px、距左 8px；**字形平时隐藏、hover 才显**（9px）。
+   站主 2026-10-06 批准「其他照 macOS 全改」——所以右侧那套 `– □ ×`、
+   关闭键的红底（`--c-danger`）与"悬停显按钮形状"那套**都撤掉了**。
+   ⚠️ 按钮的 `aria-label` 与容器 `[data-window-controls]` **不许改**：
+   `tools/verify.mjs` 靠 `[data-frame-head] button[aria-label="关闭"]` 关窗口（别按位置去数按钮）。 */
+.traffic-lights {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--traffic-gap);
+  padding-left: var(--traffic-inset);
+}
+
+.traffic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--traffic-size);
+  height: var(--traffic-size);
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  font-size: var(--traffic-glyph-size);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--traffic-glyph);
+  cursor: default;
+}
+
+.traffic--close {
+  background: var(--c-traffic-close);
+}
+
+.traffic--min {
+  background: var(--c-traffic-min);
+}
+
+.traffic--max {
+  background: var(--c-traffic-max);
+}
+
+/* 平时就是三个纯色圆点，指针进到这一簇 / 键盘聚焦到某个按钮时才显字形 */
+.traffic > span {
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+
+.traffic-lights:hover .traffic > span,
+.traffic:focus-visible > span {
+  opacity: 1;
+}
+
+/* 标签行：装得下**居中**（macOS 的标题在正中间）、装不下退化成 start。
+   必须用 `safe center` —— 裸 `center` 溢出时会把左边那半截推到滚动原点之外（项目「坑 5」，滚不到） */
+.frame-tabs {
+  justify-content: safe center;
 }
 
 /* 一期唯一动画：窗口打开 */

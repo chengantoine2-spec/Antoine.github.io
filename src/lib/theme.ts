@@ -5,11 +5,20 @@ export const DEFAULT_WALLPAPER: WallpaperId = 'gradient'
 export const DEFAULT_WALLPAPER_FIT: WallpaperFit = 'cover'
 export const DEFAULT_WALLPAPER_DIM = 0
 
-/** 主题清单：设置窗口按它渲染，顺序即展示顺序 */
+/** 主题清单：设置窗口按它渲染，顺序即展示顺序。
+ *
+ *  ⚠️ **现在只有两套**（macOS 浅 / 深，站主 2026-10-06「一切以 macOS 为准」，规格见
+ *  `MACOS-BRIEF.md` 第 2.1 节）。但 `id` **仍然是历史键名** `caramel` / `night`：
+ *  `ThemeId` 定义在 `src/types/desktop.ts`，改键名要连 `hooks/useAppearance.tsx` 一起动，
+ *  那两个文件不在本轮改动范围。
+ *  取名不对应的问题用**别名选择器**在 `tokens.css` 里抹平了：
+ *    `caramel` / `linen` / `light` → 浅色；`night` / `dark` → 深色。
+ *  所以老存档天然平滑：存 `caramel`/`linen` 的人看到新浅色，存 `night` 的人看到新深色。
+ *  ⚠️ `linen` 已经从这份清单里去掉 → 老 `linen` 存档过不了 `isThemeId`、会落回 `DEFAULT_THEME`
+ *  （= 浅色），结果一样是"平滑落到浅色"，**不要为了它再加回一条**。 */
 export const THEMES: Array<{ id: ThemeId; name: string; hint: string }> = [
-  { id: 'caramel', name: '焦糖布丁', hint: '暖棕渐变 · 默认' },
-  { id: 'linen', name: '亚麻纸', hint: '米白纸感' },
-  { id: 'night', name: '暗夜', hint: '深色' },
+  { id: 'caramel', name: '浅色', hint: 'macOS 浅色 · 默认' },
+  { id: 'night', name: '深色', hint: 'macOS 深色' },
 ]
 
 /** 桌面背景清单；纹理全部是纯 CSS，不加载任何素材 */

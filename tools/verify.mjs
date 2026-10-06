@@ -64,7 +64,7 @@ async function run() {
     wall: getComputedStyle(document.querySelector('.desktop__wall')).backgroundImage,
   }))
   check('桌面能打开，任务栏在', shell.dock)
-  check('默认主题 caramel，且没有残留的 data-skin', shell.theme === 'caramel' && shell.skin === null, shell.theme)
+  check('默认主题是 macOS 浅色（id 仍是 caramel），且没有残留的 data-skin', shell.theme === 'caramel' && shell.skin === null, shell.theme)
   check('默认壁纸是主题渐变', shell.wall.includes('linear-gradient'))
 
   // 2 「关于」窗口
@@ -168,7 +168,7 @@ async function run() {
         Math.round(outer.bottom - (rect?.bottom ?? 0)),
         Math.round((rect?.left ?? 0) - outer.left),
       ],
-      /* 上边距 = 标题栏 36 + 框内那行标签（工具条是浮层，不占高度） */
+      /* 上边距 = 标题栏 24（macOS 值；工具条是浮层，不占高度） */
       topOffset: Math.round((rect?.top ?? 0) - outer.top),
       tabRowH: Math.round(win.querySelector('[data-frame-tabs]')?.getBoundingClientRect().height ?? 0),
       barH: Math.round(barRect?.height ?? 0),
@@ -190,8 +190,8 @@ async function run() {
       dshEmbed.h > dshEmbed.winH * 0.8 &&
       dshEmbed.gaps.every((gap) => Math.abs(gap) <= 2) &&
       /* 正文区从框顶往下就是**一行**（标签行与窗口按钮同排，2026-10-05 改的），
-         所以偏移量就是那一行的高度，不再额外加一行标签栏 */
-      Math.abs(dshEmbed.topOffset - 36) <= 3 &&
+         所以偏移量就是标题栏那一行的高度（24px），不再额外加一行标签栏 */
+      Math.abs(dshEmbed.topOffset - 24) <= 3 &&
       dshEmbed.hasHot &&
       dshEmbed.barH >= 44 &&
       dshEmbed.barH - dshEmbed.btnH <= 24 &&
@@ -279,7 +279,9 @@ async function run() {
   })
   const bar = await p.evaluate(() => {
     const r = document.querySelector('[aria-label="关于 窗口"] header').getBoundingClientRect()
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    /* ⚠️ 抓标题栏**右端的空白占位区**，别抓中点：macOS 排版下标签行是**居中**的，
+       标题栏正中间正好压在一个标签上 —— 那是"拖标签"而不是"拖窗口"（踩过，位置就变不动了） */
+    return { x: r.right - 24, y: r.y + r.height / 2 }
   })
   await p.mouse.move(bar.x, bar.y)
   await p.mouse.down()
@@ -320,13 +322,13 @@ async function run() {
   check('设置窗口用了自己的默认尺寸（720×620）', settings?.w === 720 && settings?.h === 620, `${settings?.w}×${settings?.h}`)
 
   // 5 主题切换
-  await p.getByRole('button', { name: /^暗夜/ }).click()
+  await p.getByRole('button', { name: /^深色/ }).click()
   await p.waitForTimeout(300)
   const themed = await p.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
     accent: getComputedStyle(document.documentElement).getPropertyValue('--c-accent').trim(),
   }))
-  check('切到暗夜主题生效', themed.theme === 'night' && themed.accent === '#c68a5b', themed.accent)
+  check('切到深色主题（macOS 深）+ 强调蓝 #0a85ff', themed.theme === 'night' && themed.accent === '#0a85ff', themed.accent)
 
   // 6 壁纸纹理
   await p.getByRole('button', { name: /网格纹理/ }).click()
@@ -860,7 +862,9 @@ async function run() {
   }), DOCK)
   check(
     '任务栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住）',
-    fsIn.on && fsIn.dockLabel === '退出全屏' && fsIn.titleButtons.join(',') === '最小化,还原,关闭',
+    /* macOS 交通灯的**顺序**：左起 红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）。
+       进全屏时会顺手最大化当前窗口，所以绿点是「还原」 */
+    fsIn.on && fsIn.dockLabel === '退出全屏' && fsIn.titleButtons.join(',') === '关闭,最小化,还原',
     JSON.stringify(fsIn),
   )
 
@@ -895,7 +899,9 @@ async function run() {
       label: btn?.getAttribute('aria-label') ?? '',
       pressed: btn?.getAttribute('aria-pressed') === 'true',
       isMax: (win?.className ?? '').includes('window--max'),
-      shapes: btn ? btn.querySelectorAll('svg rect, svg path').length : 0,
+      /* macOS 的绿点用**文字字形**，不再是 SVG（旧的 – □ × 那套连同 MaximizeGlyph 一起撤了）：
+         未最大化时是 `+`，最大化 / 还原态是 `−`（U+2212） */
+      glyph: (btn?.querySelector('span')?.textContent ?? '').trim(),
       /* 标签栏是浮层、不让位，所以最大化照旧铺满整个视口（含任务栏） */
       fillsViewport:
         !!w && Math.round(w.width) === window.innerWidth && Math.round(w.height) === window.innerHeight,
@@ -904,9 +910,9 @@ async function run() {
     }
   })
   check(
-    '最大化后标题栏按钮变成「还原」（图标换成两个方块）',
-    maxed.label === '还原' && maxed.pressed && maxed.isMax && maxed.shapes === 2,
-    JSON.stringify({ label: maxed.label, pressed: maxed.pressed, isMax: maxed.isMax, shapes: maxed.shapes }),
+    '最大化后交通灯绿点变成「还原」态（label=还原、aria-pressed、字形 −）',
+    maxed.label === '还原' && maxed.pressed && maxed.isMax && maxed.glyph === '\u2212',
+    JSON.stringify({ label: maxed.label, pressed: maxed.pressed, isMax: maxed.isMax, glyph: maxed.glyph }),
   )
   check(
     '最大化后铺满视口并盖住任务栏',
@@ -2126,31 +2132,42 @@ async function run() {
     JSON.stringify({ ...merged, mergeHint }),
   )
 
-  /* 标签行必须画在窗口边框**里面**，而且和窗口按钮**同一行**（用户 2026-10-05：
-     「图一只有一行，为什么我们的有两行」→ 一行到底，跟浏览器一样）。
-     所以这里量三件事：横向不越出窗框、纵向就在标题行里、和右边那三个按钮同一水平线 */
+  /* 标签行必须画在窗口边框**里面**，而且和交通灯**同一行**。
+     macOS 排版（站主 2026-10-06「其他照 macOS 全改」）：**交通灯在最左、标签行居中**。
+     这里量五件事：不越出窗框、纵向在标题行里、与交通灯同一水平线、交通灯贴左边、标签在交通灯右边 */
   const stripIn = await p.evaluate(() => {
     const win = document.querySelector('section[aria-label="博客 窗口"]')
     const strip = win?.querySelector('[data-frame-tabs]')
     const controls = win?.querySelector('[data-window-controls]')
     const head = win?.querySelector('[data-frame-head]')
     const w = win?.getBoundingClientRect()
-    const s = strip?.getBoundingClientRect()
+    const s2 = strip?.getBoundingClientRect()
     const c = controls?.getBoundingClientRect()
     const h = head?.getBoundingClientRect()
-    if (!w || !s || !c || !h) return null
+    if (!w || !s2 || !c || !h) return null
     const mid = (r) => (r.top + r.bottom) / 2
     return {
-      stripH: Math.round(s.height),
-      gap: Math.round(s.top - w.top),
-      sameRow: Math.round(Math.abs(mid(s) - mid(c))) <= 2,
-      inHead: s.top >= h.top - 1 && s.bottom <= h.bottom + 1,
-      inside: s.left >= w.left - 1 && s.right <= w.right + 1 && s.top >= w.top - 1,
+      headH: Math.round(h.height),
+      stripH: Math.round(s2.height),
+      gap: Math.round(s2.top - w.top),
+      sameRow: Math.round(Math.abs(mid(s2) - mid(c))) <= 2,
+      inHead: s2.top >= h.top - 1 && s2.bottom <= h.bottom + 1,
+      inside: s2.left >= w.left - 1 && s2.right <= w.right + 1 && s2.top >= w.top - 1,
+      ctrlAtLeft: Math.round(c.left - w.left) <= 12,
+      tabsRightOfCtrl: s2.left >= c.right - 1,
     }
   })
   check(
-    '整扇窗只有一行：标签行与窗口按钮同排（不再有第二行标签栏）',
-    !!stripIn && stripIn.inside && stripIn.inHead && stripIn.sameRow && stripIn.stripH <= 40 && stripIn.gap <= 6,
+    '整扇窗只有一行：macOS 排版（交通灯贴左、标签行与它同排）',
+    !!stripIn &&
+      stripIn.inside &&
+      stripIn.inHead &&
+      stripIn.sameRow &&
+      stripIn.headH === 24 &&
+      stripIn.stripH <= 26 &&
+      stripIn.gap <= 8 &&
+      stripIn.ctrlAtLeft &&
+      stripIn.tabsRightOfCtrl,
     JSON.stringify(stripIn),
   )
 
@@ -2163,14 +2180,12 @@ async function run() {
     await p.waitForTimeout(120)
     return p.evaluate((s) => getComputedStyle(document.querySelector(s)).backgroundColor, sel)
   }
+  /* macOS 交通灯（站主 2026-10-06 批准「其他照 macOS 全改」）：
+     12px 圆点 / 间距 8px / 距左 8px，顺序红黄绿、都在**左侧**；
+     **字形平时隐藏、hover 才显**；悬停**不给底色** ——
+     旧的「悬停显按钮形状 + 关闭键红底」那套已经撤掉（--c-danger 只留令牌，不再用于关闭键）。
+     标签上那个小 × 也不再是红底（红色只属于交通灯里的关闭圆点）。 */
   const WIN = 'section[aria-label="博客 窗口"] '
-  const ctrlBgs = {
-    minus: await hoverBg(`${WIN}[data-window-controls] button[aria-label="最小化"]`),
-    /* 最大化 / 还原共用一个按钮，用 aria-pressed 认它，免得窗口恰好在最大化态时选不中 */
-    maximize: await hoverBg(`${WIN}[data-window-controls] button[aria-pressed]`),
-    close: await hoverBg(`${WIN}[data-window-controls] button[aria-label="关闭"]`),
-    tabClose: await hoverBg(`${WIN}[data-tab-close]`),
-  }
   const hasFill = (v) => !!v && v !== 'transparent' && v !== 'rgba(0, 0, 0, 0)'
   /** 红底判定：红通道明显压过绿蓝（令牌换成别的红也照样过，不钉死具体色值） */
   const isRed = (v) => {
@@ -2179,14 +2194,67 @@ async function run() {
     const [r, g, b] = m[1].split(',').map((n) => parseFloat(n))
     return r > g + 20 && r > b + 20
   }
+  const chan = (v) => {
+    const m = /rgba?\(([^)]+)\)/.exec(v || '')
+    return m ? m[1].split(',').map(Number) : [0, 0, 0]
+  }
+  const lights = await p.evaluate((sel) => {
+    const win = document.querySelector(sel)
+    const box = win?.querySelector('[data-window-controls]')
+    const head = win?.querySelector('[data-frame-head]')
+    const dots = [...(box?.querySelectorAll('button') ?? [])]
+    /* "距左"以**标题栏**为基准量：窗口本身还有 1px 边框，拿窗口量会多出 1px */
+    const w = head.getBoundingClientRect()
+    const r = dots.map((d) => d.getBoundingClientRect())
+    return {
+      n: dots.length,
+      size: Math.round(r[0]?.width ?? 0),
+      gap: Math.round((r[1]?.left ?? 0) - (r[0]?.right ?? 0)),
+      inset: Math.round((r[0]?.left ?? 0) - w.left),
+      colors: dots.map((d) => getComputedStyle(d).backgroundColor),
+      glyph: dots.map((d) => getComputedStyle(d.querySelector('span')).opacity),
+      labels: dots.map((d) => d.getAttribute('aria-label')),
+    }
+  }, WIN)
+  const [cr, cg, cb] = chan(lights.colors[0])
+  const [mr, mg, mb] = chan(lights.colors[1])
+  const [gr, gg, gb] = chan(lights.colors[2])
   check(
-    '悬停：最小化 / 最大化是淡按钮形状，关闭键（标题行 + 标签上那个小 ×）是红底',
-    hasFill(ctrlBgs.minus) &&
-      hasFill(ctrlBgs.maximize) &&
-      isRed(ctrlBgs.close) &&
-      isRed(ctrlBgs.tabClose) &&
-      ctrlBgs.close === ctrlBgs.tabClose,
-    JSON.stringify(ctrlBgs),
+    '交通灯在左：12px 圆点 / 间距 8px / 距左 8px，字形平时隐藏（aria-label 仍是 关闭 / 最小化 / 最大化|还原）',
+    lights.n === 3 &&
+      lights.size === 12 &&
+      lights.gap === 8 &&
+      lights.inset === 8 &&
+      lights.glyph.every((o) => Number(o) === 0) &&
+      lights.labels[0] === '关闭' &&
+      lights.labels[1] === '最小化' &&
+      (lights.labels[2] === '最大化' || lights.labels[2] === '还原'),
+    JSON.stringify(lights),
+  )
+  check(
+    '交通灯三色 = 红 / 黄 / 绿（按通道判定，不钉死 hex）',
+    cr > cg + 20 && cr > cb + 20 && mr > mb + 20 && mg > mb + 20 && gg > gr + 20 && gg > gb + 20,
+    JSON.stringify(lights.colors),
+  )
+  await p.hover(WIN + '[data-window-controls] button[aria-label="关闭"]')
+  await p.waitForTimeout(150)
+  const litHover = await p.evaluate((sel) => {
+    const d = document.querySelector(sel)
+    return {
+      glyph: getComputedStyle(d.querySelector('span')).opacity,
+      bg: getComputedStyle(d).backgroundColor,
+    }
+  }, WIN + '[data-window-controls] button[aria-label="关闭"]')
+  check(
+    '交通灯悬停：字形显现，且不给底色（旧的悬停显形状已撤）',
+    Number(litHover.glyph) === 1 && litHover.bg === lights.colors[0],
+    JSON.stringify(litHover),
+  )
+  const tabCloseBg = await hoverBg(WIN + '[data-tab-close]')
+  check(
+    '标签上那个小 × 悬停是中性淡底（不再是红底）',
+    hasFill(tabCloseBg) && !isRed(tabCloseBg),
+    tabCloseBg,
   )
 
   /* 拖拽排序：把「关于」标签拖到「博客」右边 */

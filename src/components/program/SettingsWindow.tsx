@@ -130,7 +130,8 @@ export function SettingsWindow() {
   return (
     <div className="space-y-5">
       <Section title="主题">
-        <div className="grid gap-2 sm:grid-cols-3">
+        {/* macOS 只有浅 / 深两套（2026-10-06），列数跟着从 3 改成 2 */}
+        <div className="grid gap-2 sm:grid-cols-2">
           {THEMES.map((item) => (
             <OptionButton
               key={item.id}
@@ -344,7 +345,7 @@ export function SettingsWindow() {
             disabled={atDefault}
             className="rounded border border-edge px-3 py-1.5 text-xs text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            恢复默认（焦糖布丁 · 主题渐变 · 底部任务栏 · 全部应用 · 自适应尺寸）
+            恢复默认（浅色 · 主题渐变 · 底部任务栏 · 全部应用 · 自适应尺寸）
           </button>
 
           <button

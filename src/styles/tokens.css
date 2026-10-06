@@ -1,103 +1,131 @@
-/* 主题令牌：三套主题只是三组变量值。
+/* 主题令牌：**macOS 浅 / 深两套**。
+   站主 2026-10-06 拍板「一切以 macOS 为准」（总原则见仓库根目录 MACOS-BRIEF.md 第 0 节），
+   下面每个数值都取自第 2 节「可直接抄的数」（来源已在那边逐条标注，均为 MIT 项目的源码正文）。
+
+   ⚠️ **data-theme 的取值仍然是历史键名**（caramel / linen / night），用**别名选择器**映射到新配色：
+       caramel / linen / light → 浅色（macOS 浅）
+       night / dark            → 深色（macOS 深）
+   为什么不直接改键名：`ThemeId` 定义在 `src/types/desktop.ts`，改它要连 `hooks/useAppearance.tsx`
+   一起动，那两个文件不在本轮范围（见 AGENTS.md「主题令牌」一节）。
+   别名带来一个额外好处：**老用户的 localStorage 存档天然平滑落地** ——
+   存着 `linen` 的人会看到新浅色、存着 `night` 的人看到新深色，**不需要任何迁移代码**。
+   ⚠️ 因此这三块选择器**不许删**（删了老存档会掉回默认浅色）。
+
    组件只读变量、不写死颜色，所以换主题不需要动任何组件。
-   色板沿用焦糖布丁：caramel-50 #FFF8F0 → caramel-900 #3D2B1F */
+   加新令牌时的规矩：**所有颜色键在两套主题里都要给值**（滚动条滑块、站标投影、日月时钟四档、
+   月亮亮/暗面……少一个就会有元素读不到变量而变透明）。 */
 
 :root,
-:root[data-theme='caramel'] {
-  /* 默认桌面背景：焦糖布丁渐变（纯 CSS，不加载图片） */
-  --c-wallpaper: linear-gradient(160deg, #fff8f0 0%, #f7e6d0 30%, #e0b98a 64%, #855434 100%);
-  --c-chrome: rgba(61, 43, 31, 0.82);
-  --c-chrome-fg: #fff8f0;
-  --c-surface: #fff8f0;
-  --c-surface-2: #f7e6d0;
-  --c-border: #efd3b0;
-  --c-text: #3d2b1f;
-  --c-text-dim: #855434;
-  --c-accent: #a96f44;
-  --c-accent-fg: #fff8f0;
-  /* 关闭 / 删除这类"破坏性"按钮悬停时的红底 + 上面的字色（用户 2026-10-05：删除键要红底） */
-  --c-danger: #c0392b;
-  --c-danger-fg: #fff8f0;
-  --c-hover: rgba(255, 248, 240, 0.18);
-  /* 窗口标题行那几个小按钮（– □ ×，以及标签上那个小 ×）**悬停时露出的按钮形状**。
-     用户 2026-10-05：「鼠标到按钮上时应该显示按钮的形状……不过颜色可以不用那么深」——
-     所以它比 --c-hover 实、比 --c-accent 淡：一眼看出"这是个按钮"，又不抢眼。 */
-  --c-control-hover: rgba(61, 43, 31, 0.12);
-  /* 滚动条滑块（悬停/拖动时更亮的那档同时给正文列宽拖动条用） */
-  --c-scroll-thumb: rgba(61, 43, 31, 0.18);
-  --c-scroll-thumb-hover: rgba(61, 43, 31, 0.36);
-  /* 日月时钟：夜 / 拂晓 / 正午 / 黄昏 四档主色，颜色随时刻在相邻两档之间插值；
-     月亮本体 + 月亮暗面（暗面就是底色墨水压深，好和卡片底色咬合） */
-  --c-celestial-night: #5b6ba8;
-  --c-celestial-dawn: #ef9a63;
-  --c-celestial-noon: #f5c451;
-  --c-celestial-dusk: #d9714a;
-  --c-celestial-moon: #fdf6e6;
-  --c-celestial-moon-shade: rgba(61, 43, 31, 0.55);
-  /* 站标的投影：透明底图形在浅色面上靠它把轮廓托出来（.logo-mark 只读这个变量） */
-  --logo-shadow: drop-shadow(0 1px 1.5px rgba(61, 43, 31, 0.38));
-
-  --r-window: 12px;
-  --r-dock: 16px;
-}
-
+:root[data-theme='light'],
+:root[data-theme='caramel'],
 :root[data-theme='linen'] {
-  --c-wallpaper: linear-gradient(165deg, #fbf7ee 0%, #f0e6d2 45%, #dccbb0 100%);
-  --c-chrome: rgba(74, 63, 50, 0.78);
-  --c-chrome-fg: #fbf7ee;
-  --c-surface: #fbf7ee;
-  --c-surface-2: #f1e8d8;
-  --c-border: #dccdb4;
-  --c-text: #3a3226;
-  --c-text-dim: #7a6a52;
-  --c-accent: #8a6a45;
-  --c-accent-fg: #fbf7ee;
-  --c-danger: #b23a2c;
-  --c-danger-fg: #fbf7ee;
-  --c-hover: rgba(120, 100, 75, 0.18);
-  --c-control-hover: rgba(58, 50, 38, 0.12);
-  --c-scroll-thumb: rgba(58, 50, 38, 0.18);
-  --c-scroll-thumb-hover: rgba(58, 50, 38, 0.36);
-  --c-celestial-night: #55618f;
-  --c-celestial-dawn: #e89a68;
-  --c-celestial-noon: #f0c05a;
-  --c-celestial-dusk: #d0744f;
-  --c-celestial-moon: #fdfaf2;
-  --c-celestial-moon-shade: rgba(58, 50, 38, 0.55);
-  --logo-shadow: drop-shadow(0 1px 1.5px rgba(58, 50, 38, 0.35));
+  /* 桌面背景：自生成的冷蓝渐变（macOS 那种"抽象光晕"感）。
+     ⚠️ 不用 Apple 原版壁纸 —— 那是 Apple 版权物（MACOS-BRIEF 第 5 节红线）。 */
+  --c-wallpaper: linear-gradient(160deg, #e9eff8 0%, #cfdbee 34%, #a9bddd 66%, #7d95bf 100%);
+  /* 菜单栏 / 任务栏底板：macOS 是**半透明白 + 背景模糊**（模糊在组件里用 backdrop-blur） */
+  --c-chrome: rgba(255, 255, 255, 0.72);
+  --c-chrome-fg: hsl(240, 6%, 12%);
+  /* 窗口 / 卡片：macOS 浅面 hsl(240,24%,100%)（≈纯白带一点冷） */
+  --c-surface: hsl(240, 24%, 100%);
+  --c-surface-2: hsl(240, 20%, 96%);
+  /* 窗口描边：macOS 的 border-gray-500/30 */
+  --c-border: rgba(107, 114, 128, 0.3);
+  --c-text: hsl(240, 6%, 12%);
+  --c-text-dim: hsl(240, 4%, 44%);
+  --c-accent: hsl(211, 100%, 50%);
+  --c-accent-fg: hsl(240, 24%, 100%);
+  /* 悬停底色（给浅面用：macOS 的灰阶悬停很轻） */
+  --c-hover: rgba(0, 0, 0, 0.05);
+  /* 浅面上小按钮的悬停底（比 --c-hover 略实一点，仍不抢眼）。
+     交通灯本身不用它 —— macOS 的交通灯是**悬停显字形**，不给底色 */
+  --c-control-hover: rgba(0, 0, 0, 0.06);
+  /* ⚠️ macOS 观感下关闭键**不再用红底**（交通灯自带红黄绿）。
+     这两个令牌留着给以后的破坏性操作（删除确认之类）用，**空着会让人以为漏了**，所以继续给值 */
+  --c-danger: hsl(3, 74%, 49%);
+  --c-danger-fg: hsl(240, 24%, 100%);
+  --c-scroll-thumb: rgba(0, 0, 0, 0.22);
+  --c-scroll-thumb-hover: rgba(0, 0, 0, 0.36);
+  /* 日月时钟：四档主色（冷色版，和冷灰主题咬合）+ 月亮亮面/暗面 */
+  --c-celestial-night: #5b6ba8;
+  --c-celestial-dawn: #e39a63;
+  --c-celestial-noon: #f2c14e;
+  --c-celestial-dusk: #cf6f4c;
+  --c-celestial-moon: #fbfcff;
+  --c-celestial-moon-shade: rgba(29, 29, 31, 0.55);
+  /* 站标的投影：透明底图形在浅面上靠它把轮廓托出来 */
+  --logo-shadow: drop-shadow(0 1px 1.5px rgba(29, 29, 31, 0.32));
+  /* 窗口投影：macOS 的 shadow-lg + shadow-black/30（同一套值在深色下也成立） */
+  --shadow-window: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  /* 焦点环：macOS primary 的 3px 半透明外环 */
+  --focus-ring: 0 0 0 3px hsla(211, 100%, 50%, 0.5);
 
-  --r-window: 10px;
-  --r-dock: 14px;
+  /* 圆角：窗口 8px（最大化时 0，见 .window--max）；Dock 底板 12px */
+  --r-window: 8px;
+  --r-dock: 12px;
+  /* 窗口标题栏高度（macOS 的 h-6 = 24px） */
+  --titlebar-h: 24px;
+  /* 交通灯：12px 圆点、间距 8px、距左 8px；字形平时隐藏、hover 才显（9px） */
+  --traffic-size: 12px;
+  --traffic-gap: 8px;
+  --traffic-inset: 8px;
+  --traffic-glyph: rgba(0, 0, 0, 0.55);
+  --traffic-glyph-size: 9px;
+  /* 交通灯三色：取自 playground-macos 用的 Tailwind 500 档
+     （⚠️ Apple 原版 hex 未核实，见 MACOS-BRIEF 第 6 节；深浅两套主题都用这三个值） */
+  --c-traffic-close: #ef4444;
+  --c-traffic-min: #eab308;
+  --c-traffic-max: #22c55e;
+
+  /* 字体栈：**优先用户系统字体**（Mac 上就是 SF Pro，由系统提供、站点不分发 → 合规），
+     Web 端兜底到 Inter / Helvetica；中文照旧落到系统黑体，别把中文交给 Inter。
+     ⚠️ 不许把任何字体文件打进仓库（SF Pro 与 Avenir Next LT Pro 都是红线，见 MACOS-BRIEF 第 5 节） */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
+:root[data-theme='dark'],
 :root[data-theme='night'] {
-  --c-wallpaper: linear-gradient(160deg, #1b1d22 0%, #14161a 55%, #0c0d10 100%);
-  --c-chrome: rgba(32, 34, 40, 0.86);
-  --c-chrome-fg: #e8e6e1;
-  --c-surface: #22252b;
-  --c-surface-2: #2a2e35;
-  --c-border: #3a3f48;
-  --c-text: #e8e6e1;
-  --c-text-dim: #9aa1ac;
-  --c-accent: #c68a5b;
-  --c-accent-fg: #1b1d22;
-  --c-danger: #b8443a;
-  --c-danger-fg: #f7f7f5;
-  --c-hover: rgba(255, 255, 255, 0.1);
+  --c-wallpaper: linear-gradient(160deg, #2b3245 0%, #1c2130 46%, #0d0f16 100%);
+  --c-chrome: rgba(30, 30, 34, 0.72);
+  --c-chrome-fg: hsl(240, 10%, 92%);
+  /* macOS 深面 hsl(240,3%,11%)（≈ #1b1b1d） */
+  --c-surface: hsl(240, 3%, 11%);
+  --c-surface-2: hsl(240, 4%, 15%);
+  --c-border: rgba(107, 114, 128, 0.3);
+  --c-text: hsl(240, 10%, 92%);
+  --c-text-dim: hsl(240, 5%, 62%);
+  /* 深色强调蓝：macos-web 的 #0a85ff */
+  --c-accent: #0a85ff;
+  --c-accent-fg: hsl(210, 92%, 5%);
+  --c-hover: rgba(255, 255, 255, 0.08);
   --c-control-hover: rgba(255, 255, 255, 0.12);
+  --c-danger: hsl(3, 72%, 55%);
+  --c-danger-fg: hsl(240, 10%, 96%);
   /* 深色面上滑块要用浅色墨水，不然在深底上看不见 */
-  --c-scroll-thumb: rgba(232, 230, 225, 0.18);
-  --c-scroll-thumb-hover: rgba(232, 230, 225, 0.34);
-  /* 深色主题的夜空要亮一点才看得出天空条，月亮暗面则压得比底色更深 */
+  --c-scroll-thumb: rgba(255, 255, 255, 0.22);
+  --c-scroll-thumb-hover: rgba(255, 255, 255, 0.38);
   --c-celestial-night: #6f83c4;
   --c-celestial-dawn: #e5a06b;
   --c-celestial-noon: #f2cd77;
   --c-celestial-dusk: #cd7a5c;
   --c-celestial-moon: #eef1f8;
-  --c-celestial-moon-shade: rgba(18, 20, 24, 0.72);
+  --c-celestial-moon-shade: rgba(8, 10, 14, 0.72);
   /* 深色面上阴影几乎看不见，但还是给一点，让布丁和盘子的边缘有厚度 */
   --logo-shadow: drop-shadow(0 1.5px 2px rgba(0, 0, 0, 0.5));
+  --shadow-window: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --focus-ring: 0 0 0 3px hsla(211, 100%, 50%, 0.5);
 
-  --r-window: 12px;
-  --r-dock: 16px;
+  --r-window: 8px;
+  --r-dock: 12px;
+  --titlebar-h: 24px;
+  --traffic-size: 12px;
+  --traffic-gap: 8px;
+  --traffic-inset: 8px;
+  --traffic-glyph: rgba(0, 0, 0, 0.55);
+  --traffic-glyph-size: 9px;
+  --c-traffic-close: #ef4444;
+  --c-traffic-min: #eab308;
+  --c-traffic-max: #22c55e;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Helvetica, Arial,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
 }

@@ -34,7 +34,8 @@
   拖左右两条「白色长条」可以改这个宽度（复刻 DSH 会话页，见「正文列宽拖动条 / 滚动条」一节）。
   右栏断点别写成 960 —— 博客窗口默认 1000 宽，扣掉内边距只剩 958，卡在 960 上就永远看不到右栏。
   目录 id 由标题文字推导（`lib/toc.ts`），`Markdown.tsx` 给 h2/h3 挂同一个 id，两边不共享计数器
-- 窗口那**一行**里是：标签们 + `– □ ×` 三个按钮（浏览器那样，**整扇窗只有一行**）
+- 窗口那**一行**里是：**macOS 交通灯在最左（红黄绿三个圆点，字形平时隐藏、hover 才显）+ 标签行居中**
+  （**整扇窗只有一行**）。右侧那套 `– □ ×` 已经在 2026-10-06「其他照 macOS 全改」时撤掉，别再往回加
 - **桌面能同时开好几个窗口**（2026-10-05，用户要求"可叠加、像浏览器一样用标签栏切换"）：
   - 窗口列表（`useWindows` 的 `windows[]` + z 序）是唯一事实来源；**路由只表示当前聚焦的那个窗口**
     （`/blog` 打开并聚焦博客窗口、`/blog/17` 还会把它的子页面切到第 17 篇）。深链、刷新、前进后退照旧
@@ -47,17 +48,24 @@
     → 改成浏览器那样的一行到底）：`components/desktop/FrameTabs.tsx` 就画在 `<header>`
     这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
     **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
-    验证里那条检查也叫「整扇窗只有一行」并断言"标签行与窗口按钮同一水平线"
-  - **悬停态**：最小化 / 最大化 = 淡按钮形状 `hover:bg-[var(--c-control-hover)]`；
-    **关闭键（标题行的 × 和标签上那个小 ×）悬停是红底** `hover:bg-[var(--c-danger)]` +
-    `hover:text-[var(--c-danger-fg)]` —— 用户 2026-10-05：「删除键要改成红色背景」（破坏性操作给红底，
-    和真桌面一致），同时要求「颜色不用那么深」所以红值是压过的（三套主题各一份，不是纯正红）。
-    ⚠️ 非悬停时关闭键仍是淡色（标签上那个还是 60% 不透明度），一排标签不会到处是红点。
-    字形尺寸是**原来的 12px**（`–` / `×` 走 `text-xs`，最大化图形用 `MaximizeGlyph` 的默认尺寸）——
-    中途先放大到 14px 又被用户改回来了，别自作主张再放大。
-    ⚠️ 要调大小就在 `Window.tsx` 传 `className`，**别去改 `components/icons/**`**（那是图标负责人的）
+    验证里那条检查也叫「整扇窗只有一行」并断言"**交通灯贴左、标签行与它同排**"
+  - **交通灯（macOS，2026-10-06「其他照 macOS 全改」）**：左起 **红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）**，
+    12px 圆点、间距 8px、距标题栏左边 8px；**字形平时隐藏、hover 到这一簇才显**（9px）。
+    样式在 `globals.css` 的 `.traffic-lights` / `.traffic*`，尺寸与颜色全走令牌
+    （`--traffic-size/-gap/-inset/-glyph`、`--c-traffic-close/min/max`）。
+    ⚠️ **撤掉的旧做法，别往回加**：右侧的 `– □ ×`（连同 `MaximizeGlyph` 的引用）、
+    关闭键的**红底** `hover:bg-[var(--c-danger)]`、以及"悬停显按钮形状"那套 `--c-control-hover`。
+    `--c-danger` / `--c-danger-fg` **令牌仍然留着并有值**（给以后的破坏性操作，比如删除确认用），
+    只是关闭键不再用它。标签上那个小 × 也跟着改成**中性淡底**（红色只属于交通灯里的关闭圆点）。
+    ⚠️ **要抓标题栏拖动就抓右端的空白占位区**，别抓中点：标签行是居中的，正中间压着一个标签，
+    拖它会变成"拖标签换顺序"（`verify.mjs` 那条"窗口位置被记住"就是这么踩到并改过来的）
+  - ⚠️ **标题栏高度 = `--titlebar-h` = 24px**（macOS 值），所以标签压到 18px / 字号 11px。
+    标签行靠 `justify-content: safe center`（`.frame-tabs`）**装得下居中、装不下退化成 start** ——
+    别写裸 `center`（溢出时左边那半截滚不到，见坑 5）。
+    右端有一颗**等宽占位**（宽 = 交通灯那一簇），这是让标签行**真正居中**用的，别删。
+    ⚠️ DSH 内嵌那条断言量的 `topOffset` 因此从 36 变成 **24**
   - ⚠️ **`--c-hover` 是给任务栏那种深色面设计的浅色叠加**，放到浅色标签 / 标题行上几乎看不见 ——
-    给浅色面上的小按钮做悬停底，用 `--c-control-hover`（三套主题各一份），别再退回 `bg-hover`
+    浅面上的小按钮悬停底用 `--c-control-hover`，别再退回 `bg-hover`
   - 手势：**拖标签左右 = 换顺序**（位移超 4px 才算拖动）、**竖直拖出框外 24px = 拆成独立窗口**、
     **拖标签右边的空白 = 移动窗口**、**拖一扇窗到另一扇上 = 合并**（目标框描一圈 `data-merge-target`，
     拖动的那个显示 `data-merge-drop`）。合并与吸附互斥：先判"落在别的框上"，没有再判边缘吸附
@@ -412,7 +420,7 @@ npm run typecheck    # 只做类型检查
 | `src/components/program/` | **窗口内容一律放这里**（`AboutWindow`、`SettingsWindow`、`DshWindow`＝DSH 就地内嵌窗口、`AppPlaceholder`、`WidthHandle`＝正文列宽拖动条），以及 **`views.tsx`＝「窗口 id → 装什么」的登记表** |
 | `src/hooks/` | `useAppearance`（主题+壁纸）、`useDock`（任务栏）、`useWindows`（窗口状态与几何记忆）、`useFullscreen`（浏览器级全屏）、`useArticleWidth`（正文列宽）、`useColumnRails`（内容列两侧栏的宽度，博客首页与 Wiki 共用） |
 | `src/lib/` | `apps`（窗口登记表 + `visibleApps()` + `matchWindowRoute()` / `pathOf()`，含每窗口的 `veggie` 菜名与 `localOnly`）、`celestial`（日月弧线 / 颜色档位 / 月相）、`columnRails`（`RailSpec` 配置 + 栏宽几何与钳制）、`columnWidth`（列宽存取与钳制）、`dsh`（DSH 地址存取与守卫，`desktop.dshUrl`）、`dock`（任务栏几何）、`readingWidth`（正文列宽几何与让位规则）、`snap`（吸附/平铺的分区几何与预览矩形）、`theme`（主题与壁纸清单）、`windowManager`（纯 reducer）、`windowStore`（几何 + 会话记忆持久化）、`veggies`（48 张菜图的登记表与查表：`veggieOfName()` / `dishRows()`） |
-| `src/styles/tokens.css` | 三套主题的**全部**色值与圆角变量 |
+| `src/styles/tokens.css` | **macOS 浅 / 深两套**主题的**全部**色值与尺寸变量（含交通灯、标题栏高度、字体栈） |
 | `src/styles/globals.css` | 全局基础样式 + 自定义类（见下方"坑 1"） |
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
 | `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
@@ -488,8 +496,17 @@ border-edge                      所有边框
 text-ink / text-dim              正文 / 次要文字
 bg-accent / text-accent-ink      强调（当前项、主按钮）
 bg-hover                         悬停底色（**给任务栏那种深色面用**）
-bg-[var(--c-control-hover)]      窗口标题行小按钮 / 标签上小 × 悬停时的「淡按钮形状」（浅色面用这个）
-bg-[var(--c-danger)]             关闭 / 删除这类破坏性按钮**悬停时的红底**（配 --c-danger-fg 当字色）
+bg-[var(--c-control-hover)]      浅面上小按钮（含标签上那个小 ×）悬停时的淡底色
+bg-[var(--c-danger)]             ⚠️ **关闭键已经不用它了**（macOS 交通灯自带红黄绿）。令牌仍然有值，
+                                 留给以后的破坏性操作（删除确认之类）；别拿它去做普通关闭键的悬停底
+--traffic-size/-gap/-inset       交通灯：12px 圆点 / 间距 8px / 距标题栏左边 8px
+--traffic-glyph(-size)           交通灯字形色与字号（平时 opacity:0，悬停到那一簇才显）
+--c-traffic-close/min/max        交通灯三色（红 / 黄 / 绿；取自 playground-macos 用的 Tailwind 500 档）
+--titlebar-h                     标题栏高度 = 24px（macOS 值，标签行跟着压到 18px）
+--shadow-window                  窗口投影（macOS 的 shadow-lg + black/30）
+--focus-ring                     焦点环（macOS primary 的 3px 半透明外环）
+--font-sans                      字体栈：-apple-system → Inter → Helvetica → 系统中文黑体
+                                 ⚠️ **不许把字体文件打进仓库**（SF Pro / Avenir 都是红线，见 MACOS-BRIEF 第 5 节）
 rounded-window / rounded-dock    圆角
 logo-mark                        站标：读 --logo-shadow，给透明底图形托一层轻投影
 变宽拖动条 / 滚动条滑块           读 --c-scroll-thumb（滑块）、--c-scroll-thumb-hover（悬停与拖动条）
@@ -499,15 +516,27 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 
 **禁止写死颜色**（`#fff`、`rgb(...)`、`bg-white` 这类字面量一律不许出现在组件里）。
 要加主题就在 `tokens.css` 里加一组变量块 —— 组件一行都不用改。
-站标的投影同理：三套主题各有一个 `--logo-shadow`，加主题时别忘了补上它。
+站标的投影同理：**两套主题**各有一个 `--logo-shadow`，加主题时别忘了补上它。
 滚动条那两个同理：**加新主题时必须一起补 `--c-scroll-thumb` / `--c-scroll-thumb-hover`**，
 不然滚动条滑块会变成透明（读不到变量）。
+
+⚠️ **主题现在是 macOS 浅 / 深两套**（2026-10-06「一切以 macOS 为准」，规格见 **`MACOS-BRIEF.md` 第 2 节**，
+数值来源是 `PuruVJ/macos-web` 与 `Renovamen/playground-macos` 两个 **MIT** 项目的源码正文 ——
+**只取了数值，没有抄代码**，所以不需要在仓库里附它们的 LICENSE；真要抄代码就必须在这里记明出处与 license）：
+- 浅：`hsl(240,24%,100%)` 面 + 灰阶 + 强调蓝 `hsl(211,100%,50%)`；深：`hsl(240,3%,11%)` 面 + 强调蓝 `#0a85ff`
+- 圆角 8px（最大化 0）、描边 `1px rgba(107,114,128,.3)`、投影 = macOS 的 `shadow-lg + black/30`
+- ⚠️ **`data-theme` 的取值仍是历史键名**（`caramel` / `linen` / `night`）：`ThemeId` 在
+  `src/types/desktop.ts`，改名要连 `hooks/useAppearance.tsx` 一起动。`tokens.css` 用**别名选择器**
+  把老键名映射到新配色（caramel / linen → 浅，night → 深），所以老存档天然平滑落地。
+  **那几块别名选择器不许删**；真正改名（键名也换成 light / dark）留给以后单独一单。
+- ⚠️ 暖色（焦糖 / 亚麻那套）是"菜地"的身份色，按总原则**让位**给 macOS 冷灰；
+  菜地的名字与 48 张菜图**留在代码里备着**（`SITE.name` / `AppDef.veggie` / `lib/veggies.ts` 一个字没删）
 
 ## localStorage 键
 
 | 键 | 内容 |
 |---|---|
-| `desktop.theme` | `caramel` \| `linen` \| `night` |
+| `desktop.theme` | **两套**：`caramel`（= macOS **浅色**，默认）\| `night`（= macOS **深色**）。⚠️ 键名是历史遗留，值已经是 macOS 冷灰配色；老值 `linen` 会被 `isThemeId` 判非法 → 落回默认浅色（效果一样是"平滑落到浅色"）。别名映射见 `tokens.css` |
 | `desktop.wallpaper` | `gradient` \| `grid` \| `noise` \| `stripe` \| `image` |
 | `desktop.wallpaperFit` | `cover` \| `contain` \| `repeat`（仅图片） |
 | `desktop.wallpaperDim` | `0` \| `0.15` \| `0.3` \| `0.45` |
@@ -595,8 +624,19 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   它**独立于** `verify.mjs`：条目之间的引用只存 id，**页面不会因为引用写错而报错**，
   只会安静地少渲染一个按钮，所以那类问题必须单独验。改这个窗口的数据或搜索后一定要跑。
 - 改动后至少跑一遍 `npm run build`；涉及交互的再跑 `npm run verify`
-  （当前 `verify.mjs` **共 107 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
-  bare `localhost` 在有些机器上解析成 `::1` 会连不上）
+  （当前 `verify.mjs` **共 110 项**；跑的时候把地址显式给它：`npm run verify -- http://127.0.0.1:5173`，
+  bare `localhost` 在有些机器上解析成 `::1` 会连不上 —— 反过来若 dev server 只绑了 localhost，
+  就用 `-- http://localhost:5173`，两个都试一下再决定）
+- ⚠️ **macOS 换皮那一批断言是「改写」不是「删掉」**（2026-10-06，逐条对应）：
+  ① 原「悬停：最小化 / 最大化是淡按钮形状，关闭键是红底」→ **拆成四条**（交通灯几何 12/8/8 + 字形平时隐藏、
+  三色按通道判定、悬停**不给底色**、标签小 × 不再是红底）；
+  ② 原「整扇窗只有一行」→ 加了 `headH === 24`（标题栏 24px）与「交通灯贴左、标签在它右边」两条；
+  ③ 原「最大化后标题栏按钮变成还原（图标换成两个方块）」→ 改成判**绿点的字形**（`+` → `−`），
+  因为 SVG 那套已经换成文字字形了；
+  ④ 原「进全屏」那条的按钮顺序断言 → 从 `最小化,还原,关闭` 改成 macOS 的 `关闭,最小化,还原`；
+  ⑤ DSH 内嵌那条量的 `topOffset` → 36 改 **24**；
+  ⑥ 主题那条 → 点的是「深色」按钮，强调色断言改成 `#0a85ff`；默认主题那条只改文案（id 仍是 `caramel`）；
+  ⑦ 「窗口位置被记住」那条的拖动起点 → 从标题栏**中点**挪到**右端空白占位区**（中点在 macOS 排版下是标签）
 - ⚠️ **dev server 一改文件就没了的真凶**（排查过两次）：Vite 的 watcher 会去 watch
   **原子写留下的临时目录**（`.X.tsx.<pid>.<guid>.tmpdir/X.tsx.tmp`），它一被锁住/删掉就抛
   `EBUSY: resource busy or locked` 并**直接结束进程**。`vite.config.ts` 里已经忽略
@@ -610,7 +650,7 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
   **整扇窗只有一行（标签行与窗口按钮同排）**、拖标签换顺序、点标签切页面（URL 跟着）、
   把标签拖出框外拆成两个框、关掉一个标签帧还在（焦点交给同帧另一个标签）、刷新后合并过的框仍是多标签。
   ⚠️ 顺序有讲究：**先测拆帧再测关标签**（关掉之后那框只剩一个标签，没得拆）；抓标题行要抓
-  **标签右边的空白区**（左边按在标签上那是"拖标签换顺序"，`width - 90` 那一带又是 `– □ ×` 按钮组）
+  **右端的空白占位区**（最左边是**交通灯**，按上去就是关窗 / 最小化；正中间压着标签，那是"拖标签换顺序"）
 - **多窗口**还有：窗口能一路拖到 (0, 0)（用户报过的"不能超过最左边和最上面"）、
   **刷新后把上次开着的窗口都开回来**、`closeAllWindows()` 清场后再跑"只看某一个窗口"的小节
   ⚠️ 小节之间要先清场：全局选择器会串窗口，而且"会话记忆"会把上一节的窗口开回来
