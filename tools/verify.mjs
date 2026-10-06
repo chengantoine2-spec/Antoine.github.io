@@ -940,6 +940,12 @@ async function run() {
   //     2026-10-06（macOS P2）：这颗按钮**从任务栏挪进了菜单栏**（macOS 的 Dock 两端只有
   //     启动台与废纸篓），所以选择器从 DOCK 换成 MENUBAR，并顺手断言"任务栏里已经没有它了"。
   const FS_BTN = `${MENUBAR} button[aria-label="全屏"], ${MENUBAR} button[aria-label="退出全屏"]`
+  /* 进全屏**之前**的窗口尺寸：2026-10-06 起「进全屏不改变窗口几何」（站主要全屏里也能拖边缘缩放），
+     所以下面拿它对照 —— 这条比"绿点是不是还原"更直接。 */
+  const beforeFs = await p.evaluate(() => {
+    const r = document.querySelector('[aria-label="博客 窗口"]')?.getBoundingClientRect()
+    return r ? [Math.round(r.width), Math.round(r.height)] : []
+  })
   await p.click(FS_BTN)
   await p.waitForTimeout(300)
   /* 2026-10-06：菜单栏进全屏后**收起**了（照 macOS），但指针这会儿还停在刚点过的按钮那一带 ——
@@ -968,12 +974,21 @@ async function run() {
       ].map((b) =>
         b.getAttribute('aria-label'),
       ),
+      /* 窗口几何（宽/高）：和进全屏前对照，见下面那条断言 */
+      winSize: (() => {
+        const r = document.querySelector('[aria-label="博客 窗口"]')?.getBoundingClientRect()
+        return r ? [Math.round(r.width), Math.round(r.height)] : []
+      })(),
     }
   }, MENUBAR)
   check(
     '菜单栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住），菜单栏按 macOS 收起（滑上去、不是 display:none），任务栏里已无此按钮',
     /* macOS 交通灯的**顺序**：左起 红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）。
-       进全屏时会顺手最大化当前窗口，所以绿点是「还原」 */
+       ⚠️ **2026-10-06 改**：进全屏**不再顺手最大化**当前窗口（站主报的「全屏之后拖不了窗口边缘」，
+       根因就是"全屏→最大化→缩放柄禁用"，见 `useFullscreen.ts` 的注释），
+       所以这里绿点应仍是「最大化」、且窗口尺寸与进全屏前一致。
+       **原断言 → 新断言**：`titleButtons === '关闭,最小化,还原'` → 改成 `'关闭,最小化,最大化'`，
+       并**新增** `winSize` 与进全屏前一致 —— 把"不改几何"这条新行为钉住。 */
     fsIn.on &&
       fsIn.menuLabel === '退出全屏' &&
       fsIn.dataFs === 'on' &&
@@ -981,8 +996,9 @@ async function run() {
       fsIn.display !== 'none' &&
       fsIn.offscreen &&
       !fsIn.stillInDock &&
-      fsIn.titleButtons.join(',') === '关闭,最小化,还原',
-    JSON.stringify(fsIn),
+      fsIn.titleButtons.join(',') === '关闭,最小化,最大化' &&
+      fsIn.winSize.join(',') === beforeFs.join(','),
+    JSON.stringify({ ...fsIn, beforeFs }),
   )
 
   /* 11d1 全屏里「鼠标碰顶部就浮现菜单栏」（站主 2026-10-06 点名要的 macOS 细节）。
@@ -1077,9 +1093,11 @@ async function run() {
     JSON.stringify(fsOut),
   )
 
-  /* 进全屏时顺手把当前窗口最大化了 —— 还原掉，别留给后面那几条"最大化"的检查 */
-  await p.click(MAX_BTN)
-  await p.waitForTimeout(200)
+  /* ⚠️ **这里原来有一句"进全屏时顺手最大化了 → 点一下还原"的清理点击**（2026-10-06 删）。
+     全屏不再自动最大化之后，那句点击反而会把窗口**点成最大化** —— 于是下面那组"最大化"断言
+     量到的状态整个反过来（绿点标签 / 铺满判定 / "再点一次还原" 三条一起红，已实测）。
+     现在不需要任何清理：进全屏本来就**不改窗口几何**，窗口保持进全屏前的状态。
+     **别再加回来**：要"归零"请写进下面的断言，而不是靠一次点击的副作用。 */
 
   } catch (error) {
     /* 本节炸了也不要紧：标红一条、继续跑后面的检查 —— 不许让"少跑了几百项"看着像通过。 */
