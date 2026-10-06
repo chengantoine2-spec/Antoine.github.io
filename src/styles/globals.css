@@ -970,18 +970,21 @@
   animation: win-in 130ms ease-out both;
 }
 
-/* 最大化：铺满**工作区**——从菜单栏下沿到屏幕底（任务栏那一带照旧盖住，见 .window--max 的
-   "任务栏不挡窗口"那条规则）。
-   ⚠️ 2026-10-06（macOS P2）：顶部多了常驻菜单栏，所以 `top` 从 0 改成 `--menubar-h` ——
-   macOS 里最大化 / 缩放**不盖菜单栏**（只有真·浏览器全屏才盖，走到 `useFullscreen` 那条路）。
-   这里**别写回 top: 0**：那样窗口会盖住菜单栏，连自己的交通灯都点不到（实测：绿点落在菜单栏底下、
-   Playwright 的 click 被菜单栏拦下）。 */
+/* 最大化 = macOS 的「缩放」：铺满**工作区**（菜单栏下沿 → 任务栏上沿），
+   **既不盖菜单栏、也不盖任务栏**（只有真·浏览器全屏才全盖，那走 `useFullscreen`）。
+   ⚠️ 演进（别退回旧写法）：P2 时只扣了 `--menubar-h`，任务栏那一带照旧盖住；站主后来按
+   「一切以 macOS 为准」要求**连 Dock 一起留出来**，所以现在直接用外壳算好的让位变量 `--inset-*`
+   （`dockInsets()` 已把菜单栏高度 + 任务栏位置/厚度都算进去，任务栏搬到左/右也自动生效）。
+   **别写回 `top/left/width/height` 的固定值** —— 那样任务栏换边就让位失效。
+   ⚠️ **别顺手把「边缘吸附」也改了**：吸附是站主点名的功能，**要求贴到真正的屏幕边**
+   （`innerHeight - win.bottom === 0` 那几条回归），只有"最大化"这一处按 macOS 留 Dock。
+   详见 `ARCH-WINDOW.md`。 */
 .window--max {
   position: fixed;
-  left: 0 !important;
-  top: var(--menubar-h, 0px) !important;
-  width: 100% !important;
-  height: calc(100% - var(--menubar-h, 0px)) !important;
+  left: var(--inset-left, 0px) !important;
+  top: var(--inset-top, var(--menubar-h, 0px)) !important;
+  width: calc(100% - var(--inset-left, 0px) - var(--inset-right, 0px)) !important;
+  height: calc(100% - var(--inset-top, var(--menubar-h, 0px)) - var(--inset-bottom, 0px)) !important;
   border-radius: 0;
 }
 

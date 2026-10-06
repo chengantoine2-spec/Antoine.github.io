@@ -1063,11 +1063,50 @@ async function run() {
       /* macOS 的绿点用**文字字形**，不再是 SVG（旧的 – □ × 那套连同 MaximizeGlyph 一起撤了）：
          未最大化时是 `+`，最大化 / 还原态是 `−`（U+2212） */
       glyph: (btn?.querySelector('span')?.textContent ?? '').trim(),
-      /* ⚠️ 2026-10-06（macOS P2）：顶部多了菜单栏，所以"铺满"= **菜单栏之下到屏幕底**
-         （macOS 里最大化不盖菜单栏，只有真·全屏才盖 —— 那是全屏按钮那一条） */
+      /* "铺满"的定义随 macOS 口径走了两步：P2 = 菜单栏之下到**屏幕底**；P4 = 菜单栏下沿到
+         **任务栏上沿**（macOS 的缩放连 Dock 一起留出来）。这里量的是后者：四边都贴工作区。 */
       menuH: Math.round(m?.height ?? 0),
-      fillsWorkArea:
-        !!w && !!m && Math.round(w.width) === window.innerWidth && Math.round(w.top) === Math.round(m.height) && Math.round(w.bottom) === window.innerHeight,
+      /* 期望的工作区 = 外壳算好的让位（`--inset-*` 继承了菜单栏高度 + 任务栏位置/厚度）。
+         不拿任务栏那条"药丸"的矩形当基准：让位余量含 DOCK_MARGIN*2，和药丸的实际边缘差几像素。 */
+      insets: (() => {
+        const layer = document.querySelector('.desktop__layer')
+        const cs = layer ? getComputedStyle(layer) : null
+        const num = (k) => (cs ? parseFloat(cs.getPropertyValue(k)) || 0 : 0)
+        return {
+          top: num('--inset-top'),
+          right: num('--inset-right'),
+          bottom: num('--inset-bottom'),
+          left: num('--inset-left'),
+        }
+      })(),
+      fillsWorkArea: (() => {
+        const layer = document.querySelector('.desktop__layer')
+        const cs = layer ? getComputedStyle(layer) : null
+        const num = (k) => (cs ? parseFloat(cs.getPropertyValue(k)) || 0 : 0)
+        if (!w || !m) return false
+        return (
+          Math.abs(w.top - num('--inset-top')) <= 1 &&
+          Math.abs(w.left - num('--inset-left')) <= 1 &&
+          Math.abs(w.right - (window.innerWidth - num('--inset-right'))) <= 1 &&
+          Math.abs(w.bottom - (window.innerHeight - num('--inset-bottom'))) <= 1 &&
+          Math.abs(w.top - m.bottom) <= 1
+        )
+      })(),
+      /* 换任务栏位置（左/右）时"也让位"不在这里量：`.window--max` 用的是外壳算好的 `--inset-*`
+         （`dockInsets()` 已把位置算进去），所以换边自动生效；这条由下面那条 CSS 契约断言守住。 */
+      maxUsesInsets: (() => {
+        const el = [...document.styleSheets]
+          .flatMap((s) => {
+            try {
+              return [...s.cssRules]
+            } catch {
+              return []
+            }
+          })
+          .find((r) => r.selectorText === '.window--max')
+        const css = el?.style ?? null
+        return !!css && /var\(--inset-(top|bottom|left|right)/.test(css.cssText)
+      })(),
       coversMenuBar: !!w && !!m && w.top < m.bottom - 1,
       menubarOnTop: !!menubar && !!hitTop && menubar.contains(hitTop),
       coversDock: !!w && !!d && w.top <= d.top && w.bottom >= d.bottom && w.left <= d.left && w.right >= d.right,
@@ -1080,11 +1119,20 @@ async function run() {
     JSON.stringify({ label: maxed.label, pressed: maxed.pressed, isMax: maxed.isMax, glyph: maxed.glyph }),
   )
   check(
-    '最大化 = 铺满「工作区」（菜单栏下沿 → 屏幕底）并盖住任务栏，但**不盖菜单栏**',
-    maxed.fillsWorkArea && maxed.coversDock && !maxed.dockOnTop && !maxed.coversMenuBar && maxed.menubarOnTop,
+    '最大化 = macOS 的「缩放」：铺满工作区（菜单栏下沿 → 任务栏上沿），**既不盖菜单栏也不盖任务栏**',
+    maxed.fillsWorkArea &&
+      maxed.maxUsesInsets &&
+      !maxed.coversDock &&
+      /* 语义反转：以前"最大化盖住任务栏"所以要求 `!dockOnTop`；现在 macOS 缩放留出 Dock，
+         任务栏**应该**点得到 —— 必须断言 `dockOnTop`，否则就是又把 Dock 盖回去了 */
+      maxed.dockOnTop &&
+      !maxed.coversMenuBar &&
+      maxed.menubarOnTop,
     JSON.stringify({
       menuH: maxed.menuH,
       fillsWorkArea: maxed.fillsWorkArea,
+      maxUsesInsets: maxed.maxUsesInsets,
+      leavesDockVisible: !maxed.coversDock,
       coversDock: maxed.coversDock,
       dockOnTop: maxed.dockOnTop,
       coversMenuBar: maxed.coversMenuBar,
