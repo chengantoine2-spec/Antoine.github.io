@@ -1878,6 +1878,137 @@ async function run() {
       },
       { sel: DOCK, label },
     )
+
+  /* ⚠️ 2026-10-06 站主：「我是说**鼠标在一个图标上面，放大的却是右边的图标**」= 系统性 off-by-one。
+     根因是实现里用 `getBoundingClientRect()`（**渲染盒**）找"离指针最近的图标" —— 而渲染盒含波浪的
+     `scale` 与铺开位移、会随 `hot` 变化 → **自指环**：指针在 i → 算 hot → 波浪把图标推走 →
+     渲染盒中心变了 → 下次算 hot 落到邻居 → 稳定在 i+1。
+     **为什么老断言没抓住它**：那条"指针正对那个是峰"的落点也是用渲染盒量的 —— 它和实现**共享同一套
+     被污染的坐标**，于是一起错、一起绿。所以这条**必须用纯布局坐标**（`offset*` + 布局尺寸，不含 transform）。 */
+  const identityAt = async (which) => {
+    const t = await p.evaluate(
+      (arg) => {
+        const view = document.querySelector(arg.sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy='1']')]
+        if (!view || items.length < 3) return null
+        const i = arg.which === 'first' ? 0 : arg.which === 'last' ? items.length - 1 : Math.floor(items.length / 2)
+        const el = items[i]
+        const track = el.closest('[data-dock-track]')
+        /* 拖动偏移只从 track 的 transform 拿（那是拖动产生的），与图标的放大/铺开无关 */
+        const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+        const off = m ? -m.e : 0
+        const vr = view.getBoundingClientRect()
+        return {
+          idx: i,
+          x: vr.left + el.offsetLeft + el.offsetWidth / 2 - off,
+          y: vr.top + el.offsetHeight / 2,
+        }
+      },
+      { sel: DOCK, which },
+    )
+    if (!t) return null
+    await p.mouse.move(t.x, t.y, { steps: 8 })
+    await p.waitForTimeout(430)
+    const r = await p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy='1']')]
+      const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
+      let argmax = 0
+      scales.forEach((s, i) => {
+        if (s > scales[argmax]) argmax = i
+      })
+      return { argmax, scales }
+    }, DOCK)
+    return { which: t.idx, want: t.idx, argmax: r.argmax, ok: r.argmax === t.idx, curve: r.scales }
+  }
+  const ids = []
+  for (const which of ['first', 'middle', 'last']) ids.push(await identityAt(which))
+  check(
+    '恒等映射（off-by-one 的护栏）：**纯布局坐标**取图标 i 的中心 → 指针移过去 → 整排 scale 的 argmax **严格 == i**（首/中/末三个工况）',
+    ids.length === 3 && ids.every((x) => x && x.ok),
+    JSON.stringify(ids),
+  )
+
+  /* ② 相邻中心距 == 图标边长 + DOCK_GAP（紧凑化那轮的护栏，量两档） */
+  const pitchOf = async (len) => {
+    if (len !== null) {
+      await p.evaluate((v) => {
+        const raw = JSON.parse(localStorage.getItem('desktop.dock') || '{}')
+        raw.length = v
+        localStorage.setItem('desktop.dock', JSON.stringify(raw))
+      }, len)
+      await p.reload({ waitUntil: 'load' })
+      await p.waitForTimeout(800)
+    }
+    return p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy='1']')]
+      if (items.length < 3) return null
+      const ps = []
+      for (let k = 0; k + 1 < items.length; k += 1) ps.push(items[k + 1].offsetLeft - items[k].offsetLeft)
+      return { btn: items[0].offsetWidth, pitch: ps, uniq: [...new Set(ps.map(Math.round))] }
+    }, DOCK)
+  }
+  const p1 = await pitchOf(null)
+  const p2 = await pitchOf(700)
+  const pitchOk = (x) => !!x && Math.abs(x.btn + 5 - Math.round(x.pitch[0])) <= 2
+  check(
+    'Dock 图标间距：相邻中心距 == 图标边长 + DOCK_GAP(5)（两档长度各量一次）',
+    pitchOk(p1) && pitchOk(p2),
+    JSON.stringify({ 第一档: p1, 第二档: p2 }),
+  )
+  /* 复原长度，别影响后面的检查 */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') || '{}')
+    raw.length = null
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(800)
+
+  /* ③ 气泡 top 恒定（站主：「从一个图标移动到另一个图标时气泡的位置会变高」）：
+     三个不同图标上 top 一致（±1px），**过渡中途**采样也一致 —— 它的 y 只由布局常量算，与动画帧无关。 */
+  const tipTopAt = async (label) => {
+    const t = await p.evaluate(
+      (arg) => {
+        const view = document.querySelector(arg.sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy='1']')]
+        const el = items.find((b) => b.getAttribute('aria-label') === arg.label)
+        if (!view || !el) return null
+        const track = el.closest('[data-dock-track]')
+        const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+        const off = m ? -m.e : 0
+        const vr = view.getBoundingClientRect()
+        return {
+          x: vr.left + el.offsetLeft + el.offsetWidth / 2 - off,
+          y: vr.top + el.offsetHeight / 2,
+        }
+      },
+      { sel: DOCK, label },
+    )
+    if (!t) return null
+    await p.mouse.move(t.x, t.y, { steps: 6 })
+    await p.waitForTimeout(60)
+    const at = async () =>
+      p.evaluate((sel) => {
+        const tip = document.querySelector(sel + ' [role=tooltip]')
+        if (!tip) return null
+        const r = tip.getBoundingClientRect()
+        return { top: Math.round(r.top), bottom: Math.round(r.bottom) }
+      }, DOCK)
+    const mid = await at()
+    await p.waitForTimeout(420)
+    return { label, mid, settled: await at() }
+  }
+  const tipTops = []
+  for (const label of ['博客', '塔罗牌', '设置']) tipTops.push(await tipTopAt(label))
+  const st = tipTops.map((x) => (x && x.settled ? x.settled.top : NaN))
+  const md = tipTops.map((x) => (x && x.mid ? x.mid.top : NaN))
+  check(
+    '气泡 top **恒定**：三个不同图标上一致（±1px），过渡中途采样也一致（钉住「切图标时气泡变高」）',
+    tipTops.every((x) => x && x.settled && x.mid) &&
+      Math.max(...st) - Math.min(...st) <= 1 &&
+      Math.max(...md) - Math.min(...md) <= 1,
+    JSON.stringify(tipTops),
+  )
     if (!t) return null
     await p.mouse.move(t.x, t.y, { steps: 8 })
     await p.waitForTimeout(420)
