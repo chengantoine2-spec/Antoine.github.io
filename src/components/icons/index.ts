@@ -8,6 +8,7 @@ import { DshIcon } from './DshIcon'
 import { ProjectsIcon } from './ProjectsIcon'
 import { SettingsIcon } from './SettingsIcon'
 import { SkillsIcon } from './SkillsIcon'
+import { TarotIcon } from './TarotIcon'
 import { TerminalIcon } from './TerminalIcon'
 import { WikiIcon } from './WikiIcon'
 import { WriteIcon } from './WriteIcon'
@@ -32,6 +33,7 @@ export const ICON_SET: Record<IconName, ComponentType<IconProps>> = {
   settings: SettingsIcon,
   wiki: WikiIcon,
   dsh: DshIcon,
+  tarot: TarotIcon,
 }
 
 export { iconBase } from './base'

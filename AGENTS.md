@@ -14,8 +14,8 @@
 
 把个人站做成一个**桌面**：桌面背景 + 任务栏 + 窗口。每个窗口是一个功能单元，个人博客是其中一个子项目。
 
-- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**、**终端**、**饥荒 Wiki**
-- 其余 2 个（技能 / 联系 / 资产库）走 `AppPlaceholder` 占位
+- 已完成窗口：**设置**、**关于**、**项目**、**博客**、**博客创作**、**终端**、**饥荒 Wiki**、**塔罗牌**
+- 其余 3 个（技能 / 联系 / 资产库）走 `AppPlaceholder` 占位
 - **终端**窗口跑的是**真命令**：浏览器只当屏幕，命令在本机执行。为此需要一个本地服务
   `npm run term`（`tools/term-server.mjs`，只用 Node 内置模块，不引依赖）。
   ⚠️ 它的安全面比那个 GitHub PAT 大得多 —— 等价于把本机 shell 开给这个页面，所以三条底线：
@@ -175,6 +175,8 @@ npm run build        # tsc --noEmit + vite build
 npm run build:pages  # 追加生成 dist/404.html（GitHub Pages 深链兜底）
 npm run verify       # Playwright 冒烟验证（需要 dev 已在跑）
 npm run verify:dst   # 饥荒 Wiki 专属校验：数据完整性 + 搜索回归 + 配方反查（需要 dev 已在跑）
+npm run verify:tarot # 塔罗牌专属校验：牌表 + 78 张牌图 + 抽牌逻辑 + 窗口流程（需要 dev 已在跑）
+npm run tarot:assets # 塔罗素材流水线：源图 → public/tarot/cards/（要 python + Pillow，见 docs/tarot.md 第九节）
 npm run typecheck    # 只做类型检查
 ```
 
@@ -192,7 +194,7 @@ npm run typecheck    # 只做类型检查
 | `src/data/` | 站点文案与项目列表（`site.ts`、`projects.ts`）；`dst/` 是饥荒 Wiki 的数据，**归 wiki 负责人** |
 | `src/lib/github.ts` | 博客数据源与写入：Issues 读/写 + 图片上传（img 分支）+ 各自缓存与限流回退 |
 | `public/` | 原样拷进构建产物的静态文件：站标 `logo.svg`（矢量源，标签页图标 + 站内品牌）+ `logo.png`（512 位图，iOS 主屏图标）。**站内引用一律走 `SITE.logo`**（它拼了 `BASE_URL`）；别在组件里写死 `/logo.svg`——`src` 里的字符串 Vite 不会改写 base，子路径部署会 404 |
-| `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1） |
+| `tools/` | `verify.mjs`（全站冒烟验证）、`verify-dst.mjs`（饥荒 Wiki 专属校验，归 wiki 负责人）、`verify-tarot.mjs`（塔罗牌专属校验）、`pages-postbuild.mjs`（404 兜底）、`make-logo.mjs`（把 `logo.svg` 渲染成 PNG）、`term-server.mjs`（本机终端服务，只监听 127.0.0.1）。⚠️ **唯一一个非 Node 的**：`tarot-assets.py`（塔罗素材流水线，`npm run tarot:assets`）—— Node 内置模块编不出 WebP 而不能引依赖，所以借 Pillow；**只在换素材时用，不进构建**，要求 `python` 在 PATH 上且有 Pillow（见 `docs/tarot.md` 第九节） |
 | `docs/` | `dst-wiki.md`（饥荒 Wiki 的实现说明：数据模型 / 打分规则 / chunk 拆分 / 踩坑）、`dst-guides/`（3 篇新手教程稿件 + 发布脚本 + 说明），**归 wiki 负责人** |
 | `design/` | 设计稿与任务书：`ICON-BRIEF.md`（给「UI 平面设计」那个对话的自包含任务书）、`icons/*.svg`、`preview.html`、`veggies/*.svg`（48 张菜图）、`veggies.html`、两个 `build-*.mjs`（生成预览页）。**除了 `veggies/*.svg` 被 `lib/veggies.ts` 引用（进构建）以外，其余不参与构建**，归图标设计负责人 |
 
@@ -280,6 +282,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 | `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
 | `desktop.dshUrl` | DSH 快捷入口指向的地址（`lib/dsh.ts`）。**默认跟着页面的主机名走**：页面是 `127.0.0.1` 就默认 `http://127.0.0.1:3080`，是 `localhost` 就默认 `http://localhost:3080`（DSH 的登录 Cookie 是 SameSite=Strict，主机名不一致就带不过去）。只在窗口里改过才写；**复位 = 删掉这个键** |
+| `desktop.tarot` | 塔罗牌窗口的占卜记录：`{ history: [{ at, seed, spreadId, question, cards: [{ id, reversed }] }] }`，最多 30 条、最近的在最前。**只存牌 id 不存图片**；回顾时按存的牌 id 重建，`seed` 留着是为了"能精确复现当时的随机"（`lib/tarot/history.ts` 的 guard 逐条校验，坏数据回空列表） |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 

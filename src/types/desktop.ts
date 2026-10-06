@@ -34,6 +34,7 @@ export type IconName =
   | 'settings'
   | 'wiki'
   | 'dsh'
+  | 'tarot'
 
 export type AppId = IconName
 

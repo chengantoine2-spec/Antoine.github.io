@@ -62,6 +62,17 @@ export const APPS: AppDef[] = [
     defaultSize: { w: 1000, h: 680 },
   },
   {
+    id: 'tarot',
+    name: '塔罗牌',
+    path: '/tarot',
+    source:
+      '本机数据（src/data/tarot/）：牌义来自 github.com/look-fate/tarot-lab（MIT），牌面是「阿卡西之眼」那套，已转 webp 放进 public/tarot/cards/',
+    icon: 'tarot',
+    veggie: '茄子',
+    /* 牌阵要地方：凯尔特十字 10 张牌，窗口窄了每张牌就看不清了（和博客一样给到 1000） */
+    defaultSize: { w: 1000, h: 680 },
+  },
+  {
     id: 'skills',
     name: '技能',
     path: '/skills',

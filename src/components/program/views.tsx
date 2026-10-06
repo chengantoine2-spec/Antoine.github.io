@@ -10,6 +10,7 @@ import { DshWindow } from './DshWindow'
 import { ProjectDetailWindow } from './ProjectDetailWindow'
 import { ProjectsWindow } from './ProjectsWindow'
 import { SettingsWindow } from './SettingsWindow'
+import { TarotWindow } from './TarotWindow'
 import { TerminalWindow } from './TerminalWindow'
 import { WriteWindow } from './WriteWindow'
 
@@ -30,6 +31,7 @@ const VIEWS: Partial<Record<AppId, ViewFactory>> = {
   dsh: () => <DshWindow />,
   projects: (param) => (param ? <ProjectDetailWindow id={param} /> : <ProjectsWindow />),
   settings: () => <SettingsWindow />,
+  tarot: () => <TarotWindow />,
   terminal: () => <TerminalWindow />,
   wiki: () => <DstWikiWindow />,
   write: () => <WriteWindow />,
