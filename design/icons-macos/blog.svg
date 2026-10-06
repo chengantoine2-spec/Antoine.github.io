@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 草稿 A · 博客：纸 + 折角 + **两行**字（原来三行、行距 3 —— 12px 下线宽 2 就把三行焊成一块） -->
+  <path d="M13.6 4H6.6A1.8 1.8 0 0 0 4.8 5.8v12.4a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8V9.4z" />
+  <path d="M13.6 4v5.4h5.6" />
+  <path d="M8.8 13.6h6.4M8.8 17.4h4.4" />
+</svg>

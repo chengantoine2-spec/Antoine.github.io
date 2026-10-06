@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 草稿 A · 关于：两只大形状（头 + 半圆胸像），头和肩之间留 2.7 单位净空 ——
+       1.6 时代那个 1.6 的间隙在 12px 下会和线宽抵消，两条线糊在一起 -->
+  <circle cx="12" cy="7.4" r="3.3" />
+  <path d="M5.4 20A6.6 6.6 0 0 1 18.6 20" />
+</svg>
