@@ -1684,6 +1684,43 @@ async function run() {
     return { n: hit.length, text: hit[0]?.textContent?.trim() ?? '' }
   })
   check('悬停应用图标浮出**名称气泡**，文字就是应用名（不掺菜名）', bubble.n > 0 && bubble.text === '博客', JSON.stringify(bubble))
+  /* ① 气泡要贴在**放大之后**图标的上面（站主第三条：「气泡放在放大之后的图标上面，现在是在放大图标的内部」）。
+     ⚠️ 放大是 `transform: scale()`、**不动布局** —— 必须用**渲染盒**（`getBoundingClientRect` 拿到的
+     就是变换后的坐标）；用 `offsetTop` 会量到没放大的布局盒，永远"没被压到"。
+     判据：气泡底边距"那个放大图标"的顶边 ≥4px，且**不压到任何别的图标**。 */
+  const tipGeom = await p.evaluate((sel) => {
+    const tip = document.querySelector(sel + ' [role="tooltip"]')
+    const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy="1"]')]
+    if (!tip || items.length === 0) return null
+    const tr = tip.getBoundingClientRect()
+    const cx = tr.x + tr.width / 2
+    const rects = items.map((b) => ({ id: b.dataset.dockItem, r: b.getBoundingClientRect() }))
+    let hot = null
+    for (const it of rects) {
+      const d = Math.abs(it.r.x + it.r.width / 2 - cx)
+      if (!hot || d < hot.d) hot = { id: it.id, r: it.r, d: d }
+    }
+    const overlapOthers = rects
+      .filter((it) => it.id !== hot.id)
+      .some(
+        (it) =>
+          tr.right > it.r.x + 0.5 &&
+          tr.x < it.r.right - 0.5 &&
+          tr.bottom > it.r.y + 0.5 &&
+          tr.y < it.r.bottom - 0.5,
+      )
+    return {
+      间距: Number((hot.r.top - tr.bottom).toFixed(1)),
+      压到别的图标: overlapOthers,
+      气泡: { w: Math.round(tr.width), h: Math.round(tr.height), bottom: Math.round(tr.bottom) },
+      悬浮图标: { id: hot.id, top: Math.round(hot.r.top), 高: Math.round(hot.r.height) },
+    }
+  }, DOCK)
+  check(
+    '气泡在**放大后图标的上方**（底边距它顶边 ≥4px、且不压到任何别的图标）',
+    !!tipGeom && tipGeom.间距 >= 4 && !tipGeom.压到别的图标,
+    JSON.stringify(tipGeom),
+  )
   /* 气泡是不是 **macOS 的材质**（站主 2026-10-06 给了实拍图，按图对齐）：
      「浅灰半透明 + 深色粗体字」+ **backdrop-filter 吃背景色**（图上偏粉就是因为透出红壁纸）。
      ⚠️ 对比度必须**把气泡底的 alpha 与它下面的底合成后再算**（只量 `color` 会算错 ——
@@ -1808,6 +1845,67 @@ async function run() {
     '波是**两边一起收**：峰的两侧各自单调下降（不是"峰偏在一端、另一半平的"假波）',
     leftScales.length >= 2 && rightScales.length >= 2 && descFromPeak(leftScales) && descFromPeak(rightScales),
     JSON.stringify({ 峰: Number(hotScale.toFixed(3)), 左侧: leftScales, 右侧: rightScales }),
+  )
+
+  /* ② **波峰跟着指针走**（站主点名要的证据）：指针移到任务栏上**三个不同位置**
+     （偏左 / 中间 / 偏右），每次取整排 scale 数组 → 断言 argmax（峰）的**索引随指针改变**，
+     且每次曲线仍满足"从峰向两侧单调不递增 + 4 格回 1.0"。
+     ⚠️ 落点用**布局坐标 + 分步移动**：波浪会把图标 translateX 推开，按渲染盒取中点会落到隔壁
+     （上一轮实测 tooltip 显示成"项目"/"饥荒 Wiki"）；波峰图标位移为 0、停在布局位。 */
+  const waveShapeOk = (scales, argmax) => {
+    if (!scales || scales.length < 5) return false
+    if (scales[argmax] < 1.8) return false
+    for (let i = argmax; i > 0; i -= 1) if (scales[i - 1] > scales[i] + 0.03) return false
+    for (let i = argmax; i < scales.length - 1; i += 1) if (scales[i + 1] > scales[i] + 0.03) return false
+    return scales.every((s, i) => (Math.abs(i - argmax) >= 4 ? s <= 1.02 : true))
+  }
+  const peakAt = async (label) => {
+    const t = await p.evaluate(
+      (arg) => {
+        const view = document.querySelector(arg.sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy="1"]')]
+        if (!view || items.length < 5) return null
+        const vr = view.getBoundingClientRect()
+        const i =
+          arg.label === 'left' ? 1 : arg.label === 'right' ? items.length - 2 : Math.floor(items.length / 2)
+        const el = items[i]
+        const track = el.parentElement
+        return {
+          want: i,
+          x: vr.left + el.offsetLeft - (track ? track.offsetLeft : 0) + el.offsetWidth / 2,
+          y: vr.top + el.offsetHeight / 2,
+        }
+      },
+      { sel: DOCK, label },
+    )
+    if (!t) return null
+    await p.mouse.move(t.x, t.y, { steps: 8 })
+    await p.waitForTimeout(420)
+    const r = await p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy="1"]')]
+      const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
+      let argmax = 0
+      scales.forEach((s, i) => {
+        if (s > scales[argmax]) argmax = i
+      })
+      return { scales, argmax, labels: items.map((b) => b.getAttribute('aria-label')) }
+    }, DOCK)
+    return {
+      want: t.want,
+      argmax: r.argmax,
+      峰图标: r.labels[r.argmax],
+      曲线: r.scales,
+      ok: waveShapeOk(r.scales, r.argmax),
+    }
+  }
+  const peaks = []
+  for (const label of ['left', 'middle', 'right']) peaks.push(await peakAt(label))
+  const peakIdxs = peaks.map((x) => (x ? x.argmax : -1))
+  check(
+    '**波峰跟着指针走**：指针在偏左/中间/偏右三处时 argmax（峰）索引随之改变（≥2 个不同位置），且每次曲线都满足"从峰向两侧单调不递增 + 4 格回 1.0"'
+    ,
+    peaks.every((x) => x && x.ok) && new Set(peakIdxs).size >= 2 && Math.abs(peakIdxs[0] - peakIdxs[2]) >= 2,
+    JSON.stringify(peaks),
   )
   /* 让位（"整排铺开"的核心）：判据不能用"x 变了"，要用"**相邻图标的渲染盒不相交**"，
      否则邻居只让 1px 也算过。 */
