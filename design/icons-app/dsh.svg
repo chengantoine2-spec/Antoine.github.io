@@ -1,9 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="DSH">
   <!-- 本站原创（自绘），无任何第三方素材；形状 = squircle 44..468 圆角 96 -->
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0.55" y2="1">
-      <stop offset="0" stop-color="#93C5FD"/><stop offset="1" stop-color="#1D4ED8"/>
-    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#60A5FA"/><stop offset="1" stop-color="#1D4ED8"/></linearGradient>
     <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/>
     </linearGradient>
@@ -11,5 +9,5 @@
   </defs>
   <rect x="44" y="44" width="424" height="424" rx="96" fill="url(#g)"/>
   <g clip-path="url(#c)"><rect x="44" y="44" width="424" height="424" fill="url(#hl)"/></g>
-  <g fill="#fff"><path d="M150 178 h212 a30 30 0 0 1 30 30 v108 a30 30 0 0 1 -30 30 h-96 l-52 46 v-46 h-64 a30 30 0 0 1 -30 -30 v-108 a30 30 0 0 1 30 -30 z"/><g fill="#1D4ED8" opacity=".8"><circle cx="216" cy="262" r="14"/><circle cx="256" cy="262" r="14"/><circle cx="296" cy="262" r="14"/></g></g>
+  <g transform="translate(256 256) scale(1.16) translate(-256 -256)" fill="#fff"><path d="M150 178 h212 a30 30 0 0 1 30 30 v108 a30 30 0 0 1 -30 30 h-96 l-52 46 v-46 h-64 a30 30 0 0 1 -30 -30 v-108 a30 30 0 0 1 30 -30 z"/><g fill="#1D4ED8" opacity=".8"><circle cx="216" cy="262" r="14"/><circle cx="256" cy="262" r="14"/><circle cx="296" cy="262" r="14"/></g></g>
 </svg>

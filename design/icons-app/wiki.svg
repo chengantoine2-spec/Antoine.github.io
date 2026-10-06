@@ -1,9 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="饥荒 Wiki">
   <!-- 本站原创（自绘），无任何第三方素材；形状 = squircle 44..468 圆角 96 -->
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0.55" y2="1">
-      <stop offset="0" stop-color="#FCD34D"/><stop offset="1" stop-color="#B45309"/>
-    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0.55" y2="1"><stop offset="0" stop-color="#FCD34D"/><stop offset="1" stop-color="#B45309"/></linearGradient>
     <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/>
     </linearGradient>
@@ -11,5 +9,5 @@
   </defs>
   <rect x="44" y="44" width="424" height="424" rx="96" fill="url(#g)"/>
   <g clip-path="url(#c)"><rect x="44" y="44" width="424" height="424" fill="url(#hl)"/></g>
-  <g fill="#fff"><path d="M256 192 C220 168 174 164 146 174 V332 C174 322 220 326 256 350 Z"/><path d="M256 192 C292 168 338 164 366 174 V332 C338 322 292 326 256 350 Z"/><rect x="250" y="196" width="12" height="150" rx="6" fill="#B45309" opacity=".45"/></g>
+  <g transform="translate(256 256) scale(1.16) translate(-256 -256)" fill="#fff"><path d="M256 192 C220 168 174 164 146 174 V332 C174 322 220 326 256 350 Z"/><path d="M256 192 C292 168 338 164 366 174 V332 C338 322 292 326 256 350 Z"/><rect x="250" y="196" width="12" height="150" rx="6" fill="#B45309" opacity=".45"/></g>
 </svg>
