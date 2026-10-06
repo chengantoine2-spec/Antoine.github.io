@@ -1,24 +1,18 @@
 import type { ThemeId, WallpaperFit, WallpaperId } from '../types/desktop'
 
-export const DEFAULT_THEME: ThemeId = 'caramel'
+export const DEFAULT_THEME: ThemeId = 'light'
 export const DEFAULT_WALLPAPER: WallpaperId = 'gradient'
 export const DEFAULT_WALLPAPER_FIT: WallpaperFit = 'cover'
 export const DEFAULT_WALLPAPER_DIM = 0
 
 /** 主题清单：设置窗口按它渲染，顺序即展示顺序。
  *
- *  ⚠️ **现在只有两套**（macOS 浅 / 深，站主 2026-10-06「一切以 macOS 为准」，规格见
- *  `MACOS-BRIEF.md` 第 2.1 节）。但 `id` **仍然是历史键名** `caramel` / `night`：
- *  `ThemeId` 定义在 `src/types/desktop.ts`，改键名要连 `hooks/useAppearance.tsx` 一起动，
- *  那两个文件不在本轮改动范围。
- *  取名不对应的问题用**别名选择器**在 `tokens.css` 里抹平了：
- *    `caramel` / `linen` / `light` → 浅色；`night` / `dark` → 深色。
- *  所以老存档天然平滑：存 `caramel`/`linen` 的人看到新浅色，存 `night` 的人看到新深色。
- *  ⚠️ `linen` 已经从这份清单里去掉 → 老 `linen` 存档过不了 `isThemeId`、会落回 `DEFAULT_THEME`
- *  （= 浅色），结果一样是"平滑落到浅色"，**不要为了它再加回一条**。 */
+ *  只有两套（macOS 浅 / 深，站主 2026-10-06「一切以 macOS 为准」，规格见 `MACOS-BRIEF.md` 第 2 节）。
+ *  `id` 就是正名 `light` / `dark`；2026-10-06 之前是 `caramel` / `linen` / `night`（暖色三套），
+ *  老存档由下面的 normalizeTheme() 迁移，`tokens.css` 里也留着老键名的别名选择器兜底。 */
 export const THEMES: Array<{ id: ThemeId; name: string; hint: string }> = [
-  { id: 'caramel', name: '浅色', hint: 'macOS 浅色 · 默认' },
-  { id: 'night', name: '深色', hint: 'macOS 深色' },
+  { id: 'light', name: '浅色', hint: 'macOS 浅色 · 默认' },
+  { id: 'dark', name: '深色', hint: 'macOS 深色' },
 ]
 
 /** 桌面背景清单；纹理全部是纯 CSS，不加载任何素材 */
@@ -52,6 +46,21 @@ export const ICON_SIZES: Array<{ id: number | null; name: string }> = [
 
 export function isThemeId(value: unknown): value is ThemeId {
   return THEMES.some((t) => t.id === value)
+}
+
+/** 历史键名 -> 正名。**别删**（老存档里存的就是这些值） */
+const LEGACY_THEME: Record<string, ThemeId> = { caramel: 'light', linen: 'light', night: 'dark' }
+
+/** 读存档用：新键名与历史键名都算合法（历史值随后交给 normalizeTheme 迁移） */
+export function isStoredTheme(value: unknown): value is ThemeId {
+  return isThemeId(value) || (typeof value === 'string' && value in LEGACY_THEME)
+}
+
+/** 把存档里的主题值迁移成正名：caramel / linen -> light，night -> dark，其它 -> 默认 */
+export function normalizeTheme(value: unknown): ThemeId {
+  if (isThemeId(value)) return value
+  if (typeof value === 'string' && value in LEGACY_THEME) return LEGACY_THEME[value]
+  return DEFAULT_THEME
 }
 
 export function isWallpaperId(value: unknown): value is WallpaperId {

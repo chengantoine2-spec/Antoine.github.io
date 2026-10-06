@@ -1,5 +1,8 @@
 /** 主题：只影响颜色与圆角 */
-export type ThemeId = 'caramel' | 'linen' | 'night'
+export type ThemeId = 'light' | 'dark'
+/* 2026-10-06 之前是 caramel / linen / night（暖色那三套）。老存档的迁移在
+   lib/theme.ts 的 normalizeTheme()：caramel / linen -> light、night -> dark。
+   tokens.css 里也留着老键名的别名选择器兜底 —— 两边都别删。 */
 
 /** 桌面背景：主题渐变 / 三种纯 CSS 纹理 / 图片 */
 export type WallpaperId = 'gradient' | 'grid' | 'noise' | 'stripe' | 'image'
@@ -12,7 +15,9 @@ export type DockPosition = 'bottom' | 'top' | 'left' | 'right'
 
 /**
  * 任务栏图标区的展示模式（用户 2026-10-05 追加：「旧的展示方式也作为可选项放进设置里面」）：
- * - `wheel`：新的**循环轮盘** —— 永远单行/单列、首尾相接循环、中央放大、按住拖动浏览、竖拖换位（**默认**）
+ * - `wheel`：**图标区（macOS 观感 + 回弹）** —— 永远单行/单列、中央放大、按住拖动浏览、
+ *   到两端被阻尼拉住、松手弹回；竖拖换位（**默认**）。2026-10-06「一切以 macOS 为准」把
+ *   原来的"首尾相接循环"换成了"两端回弹"；设置里那个按钮的 `aria-label` 是「任务栏图标区：回弹」
  * - `wrap`：**完全旧行为** —— 最多 3 行折行、静态、不放大、没有拖拽手势，顺序仍由设置里那份清单决定
  */
 export type DockMode = 'wheel' | 'wrap'

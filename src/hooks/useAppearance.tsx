@@ -11,7 +11,8 @@ import {
   DEFAULT_WALLPAPER,
   DEFAULT_WALLPAPER_DIM,
   DEFAULT_WALLPAPER_FIT,
-  isThemeId,
+  isStoredTheme,
+  normalizeTheme,
   isWallpaperFit,
   isWallpaperId,
 } from '../lib/theme'
@@ -59,7 +60,7 @@ const AppearanceContext = createContext<AppearanceContextValue | null>(null)
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(() =>
-    readStored(THEME_KEY, DEFAULT_THEME, isThemeId),
+    normalizeTheme(readStored(THEME_KEY, DEFAULT_THEME, isStoredTheme)),
   )
   const [wallpaper, setWallpaperState] = useState<WallpaperId>(() =>
     readStored(WALLPAPER_KEY, DEFAULT_WALLPAPER, isWallpaperId),

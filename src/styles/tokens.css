@@ -2,7 +2,8 @@
    站主 2026-10-06 拍板「一切以 macOS 为准」（总原则见仓库根目录 MACOS-BRIEF.md 第 0 节），
    下面每个数值都取自第 2 节「可直接抄的数」（来源已在那边逐条标注，均为 MIT 项目的源码正文）。
 
-   ⚠️ **data-theme 的取值仍然是历史键名**（caramel / linen / night），用**别名选择器**映射到新配色：
+   ⚠️ **正名现在是 light / dark**（2026-10-06 改的，ThemeId 在 src/types/desktop.ts）；
+老键名 caramel / linen / night 仍用**别名选择器**兜住，让老存档平滑落地：
        caramel / linen / light → 浅色（macOS 浅）
        night / dark            → 深色（macOS 深）
    为什么不直接改键名：`ThemeId` 定义在 `src/types/desktop.ts`，改它要连 `hooks/useAppearance.tsx`

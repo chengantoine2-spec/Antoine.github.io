@@ -64,7 +64,7 @@ async function run() {
     wall: getComputedStyle(document.querySelector('.desktop__wall')).backgroundImage,
   }))
   check('桌面能打开，任务栏在', shell.dock)
-  check('默认主题是 macOS 浅色（id 仍是 caramel），且没有残留的 data-skin', shell.theme === 'caramel' && shell.skin === null, shell.theme)
+  check('默认主题是 macOS 浅色（id = light），且没有残留的 data-skin', shell.theme === 'light' && shell.skin === null, shell.theme)
   check('默认壁纸是主题渐变', shell.wall.includes('linear-gradient'))
 
   // 2 「关于」窗口
@@ -328,7 +328,7 @@ async function run() {
     theme: document.documentElement.dataset.theme,
     accent: getComputedStyle(document.documentElement).getPropertyValue('--c-accent').trim(),
   }))
-  check('切到深色主题（macOS 深）+ 强调蓝 #0a85ff', themed.theme === 'night' && themed.accent === '#0a85ff', themed.accent)
+  check('切到深色主题（macOS 深）+ 强调蓝 #0a85ff', themed.theme === 'dark' && themed.accent === '#0a85ff', themed.accent)
 
   // 6 壁纸纹理
   await p.getByRole('button', { name: /网格纹理/ }).click()
@@ -1685,8 +1685,8 @@ async function run() {
     JSON.stringify({ mode: wrapProbe?.mode, hasView: wrapProbe?.hasView }),
   )
 
-  /* 切回循环轮盘：单行 + 循环轨道都回来 */
-  await setDockMode('循环轮盘')
+  /* 切回回弹：单行 + 图标区都回来 */
+  await setDockMode('回弹')
   await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
     raw.thickness = null
@@ -1697,7 +1697,7 @@ async function run() {
   await p.waitForTimeout(900)
   const backToWheel = await wheelProbe()
   check(
-    '切回「循环轮盘」：回到单行 + 循环轨道（mode 落盘 wheel）',
+    '切回「回弹」：回到单行 + 图标区（mode 落盘 wheel）',
     backToWheel.mode === 'wheel' && backToWheel.rows === 1 && backToWheel.hasView && backToWheel.hasTrack,
     JSON.stringify({ mode: backToWheel.mode, rows: backToWheel.rows, view: backToWheel.hasView }),
   )
@@ -1776,7 +1776,7 @@ async function run() {
 
   /* 挑一个"旧死区"里的 length（186 < 200 < 274）—— 以前正是这个区间会跳 */
   await setDockLength(200)
-  await pickDockMode('循环轮盘')
+  await pickDockMode('回弹')
   await p.goto(`${BASE}/`, { waitUntil: 'load' })
   await p.waitForTimeout(700)
   const wheel200 = await dockProbe()
@@ -1799,7 +1799,7 @@ async function run() {
   )
 
   /* 来回切一次：结论必须不变（第二类残留就该在这一条上现形） */
-  await pickDockMode('循环轮盘')
+  await pickDockMode('回弹')
   const wheel200b = await dockProbe()
   await pickDockMode('折行')
   const wrap200b = await dockProbe()
@@ -1951,7 +1951,7 @@ async function run() {
     (sel) => document.querySelector(`${sel} .m-auto`)?.parentElement?.scrollLeft ?? null,
     DOCK,
   )
-  await p.click('button[aria-label="任务栏图标区：循环轮盘"]')
+  await p.click('button[aria-label="任务栏图标区：回弹"]')
   await p.waitForTimeout(500)
   await p.click('button[aria-label="任务栏图标区：折行"]')
   await p.waitForTimeout(700)
@@ -1964,7 +1964,7 @@ async function run() {
 
   /* 收尾：长度回到自适应、模式回到轮盘，别影响后面几段 */
   await setDockLength(null)
-  await pickDockMode('循环轮盘')
+  await pickDockMode('回弹')
   await p.goto(`${BASE}/`, { waitUntil: 'load' })
   await p.waitForTimeout(700)
   await closeAllWindows()

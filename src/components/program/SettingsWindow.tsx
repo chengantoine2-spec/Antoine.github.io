@@ -279,12 +279,12 @@ export function SettingsWindow() {
 
       <Section
         title="任务栏图标区"
-        hint="循环轮盘：单行首尾相接，按住左右拖就能一直转、中间的图标更大，按住图标上下拖还能换位置。折行：以前那样堆成最多 3 行、位置固定。"
+        hint="回弹：单行、中间的图标更大，按住左右拖能滑到两头，到边会被阻尼拉住、松手弹回；按住图标上下拖还能换位置。折行：以前那样堆成最多 3 行、位置固定。"
       >
         <div className="flex flex-wrap gap-2">
           {(
             [
-              { id: 'wheel' as const, name: '循环轮盘', hint: '单行 + 循环 + 中央放大，可拖着浏览 / 换位' },
+              { id: 'wheel' as const, name: '回弹', hint: 'macOS 观感：单行 + 中央放大 + 两端回弹，可拖着浏览 / 换位' },
               { id: 'wrap' as const, name: '折行', hint: '旧行为：最多 3 行折行，位置固定' },
             ] as const
           ).map((item) => (
@@ -307,8 +307,8 @@ export function SettingsWindow() {
           ))}
         </div>
         <p className="mt-2 text-xs text-dim">
-          当前：{mode === 'wheel' ? '循环轮盘（单行，可拖着转）' : '折行（最多 3 行，位置固定）'}
-          ｜默认是循环轮盘；老设置里没有这一项时也按循环轮盘走。
+          当前：{mode === 'wheel' ? '回弹（单行，可左右拖，到边回弹）' : '折行（最多 3 行，位置固定）'}
+          ｜默认是回弹；老设置里没有这一项时也按回弹走。
         </p>
       </Section>
 
