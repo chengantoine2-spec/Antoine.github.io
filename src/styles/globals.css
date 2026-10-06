@@ -1663,3 +1663,20 @@ button.tarot-card {
     transition: none;
   }
 }
+
+/* 点任务栏图标时"弹一下"（macOS 的启动反馈）。
+   ⚠️ 动画挂在**图标**上、不是按钮上：按钮的 transform 是 rAF 逐帧写进去的放大值，
+   动画挂在按钮上会跟它抢（图标会先跳回 1× 再弹）。 */
+@keyframes dock-bounce {
+  0% { transform: scale(1) translateY(0); }
+  35% { transform: scale(1.14) translateY(-7px); }
+  100% { transform: scale(1) translateY(0); }
+}
+.dock__item--bounce img,
+.dock__item--bounce svg {
+  animation: dock-bounce 280ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock__item--bounce img,
+  .dock__item--bounce svg { animation: none; }
+}

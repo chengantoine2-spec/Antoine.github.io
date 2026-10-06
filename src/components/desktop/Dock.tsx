@@ -147,6 +147,8 @@ export function Dock() {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
+  /* 点图标时的"弹一下"（macOS 的启动反馈）：只挂 300ms 的类名，纯离散事件，不进逐帧路径 */
+  const [bouncing, setBouncing] = useState<AppId | null>(null)
   const bar = useRef<HTMLElement | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
   const drag = useRef<{ px: number; py: number; sx: number; sy: number; moved: boolean } | null>(
@@ -855,14 +857,18 @@ export function Dock() {
         data-dock-item={loop ? app.id : undefined}
         data-dock-copy={loop ? '1' : undefined}
         data-dock-index={loop ? opts.index : undefined}
-        onClick={() => openApp(app.id)}
-        onMouseEnter={(e) => showName(e.currentTarget, label)}
+        onClick={() => {
+          setBouncing(app.id)
+          window.setTimeout(() => setBouncing((b) => (b === app.id ? null : b)), 300)
+          openApp(app.id)
+        }}
+        onMouseEnter={(e) => showName(e.currentTarget, app.name)}
         onMouseLeave={() => setHover(null)}
-        onFocus={(e) => showName(e.currentTarget, label)}
+        onFocus={(e) => showName(e.currentTarget, app.name)}
         onBlur={() => setHover(null)}
         className={`relative grid shrink-0 place-items-center rounded text-chrome-ink hover:bg-hover ${
           loop ? 'dock__item' : ''
-        } ${active ? 'bg-accent text-accent-ink' : ''}`}
+        } ${active ? 'bg-accent text-accent-ink' : ''} ${bouncing === app.id ? 'dock__item--bounce' : ''}`}
       >
         {/* 图标区（wheel）用 `.dock__glyph`（占按钮 72%，macOS 那种填满格子）；
             折行（wrap）仍是 `h-1/2 w-1/2` —— 那是它的旧观感，按规矩不动。 */}

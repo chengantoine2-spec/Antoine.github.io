@@ -1491,6 +1491,42 @@ async function run() {
     JSON.stringify({ 期望: 0.72, 实测样本: iconFillProbe.sample }),
   )
 
+  /* 14a3 悬停出**名称气泡**（站主 2026-10-06：macOS 那个 "Photos" 式气泡）。
+     气泡是任务栏里的浮层、不在按钮里；文字 = **应用名**（菜名仍留在 title 里）。
+     取"叶子节点且文字正好等于应用名、又不在任何窗口或按钮里"的元素 —— 这样窗口标签
+     （"博客"）与按钮本身都不会误命中，只有气泡会。 */
+  await p.hover(`${DOCK} button[aria-label="博客"]`)
+  await p.waitForTimeout(350)
+  const bubble = await p.evaluate(() => {
+    const hit = [...document.querySelectorAll('body *')].filter(
+      (el) =>
+        el.children.length === 0 &&
+        el.textContent?.trim() === '博客' &&
+        !el.closest('section[aria-label]') &&
+        !el.closest('button'),
+    )
+    return { n: hit.length, text: hit[0]?.textContent?.trim() ?? '' }
+  })
+  check('悬停应用图标浮出**名称气泡**，文字就是应用名（不掺菜名）', bubble.n > 0 && bubble.text === '博客', JSON.stringify(bubble))
+
+  /* 14a4 点击"弹一下"：要有弹跳类名，但**窗口必须照常打开**（动画与动作并行，不许等动画）。 */
+  await p.click(`${DOCK} button[aria-label="博客"]`)
+  const bounce = await p.evaluate((sel) => {
+    const btn = document.querySelector(`${sel} button[aria-label="博客"]`)
+    const icon = btn?.querySelector('img, svg')
+    return {
+      cls: btn?.className.includes('dock__item--bounce') ?? false,
+      anim: icon ? getComputedStyle(icon).animationName : '',
+    }
+  }, DOCK)
+  await p.waitForTimeout(600)
+  const openedByBounce = await p.locator('section[aria-label="博客 窗口"]').count()
+  check(
+    '点图标会"弹一下"（dock__item--bounce + 动画），而且窗口照常打开',
+    bounce.cls && openedByBounce > 0,
+    JSON.stringify({ ...bounce, opened: openedByBounce }),
+  )
+
   /* 放大 = **指针驱动**（2026-10-06「一切以 macOS 为准」）：上面已经把指针移到某个图标正中，
      所以 `centerScale` 现在是"**指针正对的那个图标**"的 scale，`monoOk` 是"按离指针的距离单调递减"。
      PEAK = 2、MIN = 1.0（macOS 不缩边缘图标）、影响半径 `MAGNIFY_RADIUS_SLOTS = 3` 格。 */
