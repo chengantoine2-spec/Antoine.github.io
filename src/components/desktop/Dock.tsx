@@ -609,22 +609,28 @@ export function Dock() {
        改成直接用**渲染盒**找最近的那个 —— 居中与否都对，也顺带支持放大后的盒子。 */
     const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
     if (!items || items.length === 0) return null
+    /* ⚠️ 2026-10-06 **必须用布局几何**（offset* + 布局尺寸）：站主报「鼠标在一个图标上面，放大的却是
+       右边的图标」= 系统性 off-by-one。根因就是这里曾改用 getBoundingClientRect —— 渲染盒含波浪的
+       scale 与铺开位移、会随 hot 变化，于是形成**自指环**：指针在 i → 算 hot → 波浪把图标推走 →
+       渲染盒中心变了 → 下次算 hot 落到邻居 → 稳定在 i+1。布局值不受 transform 影响，天然免疫。 */
+    const off0 = dampedOffset(offset.current, maxOffset, viewLen)
     const p = alongOf(e) - (vertical ? rect.top : rect.left)
+    const centreOf = (el: HTMLElement) =>
+      (vertical ? el.offsetTop : el.offsetLeft) + (vertical ? el.offsetHeight : el.offsetWidth) / 2 - off0
     let idx = -1
     let best = Infinity
     ;[...items].forEach((el, i) => {
-      const r = el.getBoundingClientRect()
-      const c = (vertical ? r.top + r.height / 2 : r.left + r.width / 2) - (vertical ? rect.top : rect.left)
-      const d = Math.abs(c - p)
+      const d = Math.abs(centreOf(el) - p)
       if (d < best) {
         best = d
         idx = i
       }
     })
-    /* 再确认指针真的压在某个图标上（点空白不进入换位） */
+    /* 再确认指针真的压在某个图标上（点空白不进入换位）—— 同样只用布局盒 */
     const hit = [...items].some((el) => {
-      const r = el.getBoundingClientRect()
-      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+      const a = (vertical ? el.offsetTop : el.offsetLeft) - off0
+      const b = a + (vertical ? el.offsetHeight : el.offsetWidth)
+      return p >= a && p <= b
     })
     return hit && idx >= 0 ? idx : null
   }
@@ -670,8 +676,34 @@ export function Dock() {
       /* ② **连续**的 hot 槽位（带小数）：指针在两格之间时它是 k+0.5 这种值，
          于是放大与让位会**在相邻两个图标之间平滑滑动**（站主要的那种"看得见"的过渡）。
          指针刚进图标区（fade 还≈0）时**直接吸到目标**，免得从最左边滑过来。 */
-      const raw = (pointer.current.pos + offset.current - btn / 2) / step
-      pointer.current.hotTarget = clamp(raw, 0, Math.max(0, itemCount - 1))
+      /* ⚠️ 同样只用**布局几何**：在相邻两个图标的**布局中心**之间线性插值出连续槽位。
+         旧式子 (pos + offset − btn/2)/step 默认"内容从视口原点开始"，而轨道现在会居中
+         （margin:auto，实测余量约 7px）且不看预览态条数 → 也会引入偏差。 */
+      const els = trackEl.current
+        ? [...trackEl.current.querySelectorAll<HTMLElement>('[data-dock-item]')]
+        : []
+      if (els.length) {
+        const offNow = dampedOffset(offset.current, maxOffset, viewLen)
+        const centre = (el: HTMLElement) =>
+          (vertical ? el.offsetTop : el.offsetLeft) +
+          (vertical ? el.offsetHeight : el.offsetWidth) / 2 -
+          offNow
+        const here = pointer.current.pos + offNow
+        let target = 0
+        if (here <= centre(els[0])) target = 0
+        else if (here >= centre(els[els.length - 1])) target = els.length - 1
+        else {
+          for (let i = 0; i + 1 < els.length; i += 1) {
+            const a = centre(els[i])
+            const b = centre(els[i + 1])
+            if (here >= a && here <= b) {
+              target = i + (here - a) / Math.max(1, b - a)
+              break
+            }
+          }
+        }
+        pointer.current.hotTarget = target
+      }
       if (pointer.current.fade < 0.02) pointer.current.hot = pointer.current.hotTarget
       scheduleTick()
     }
@@ -920,7 +952,7 @@ export function Dock() {
       onClick={() => {
         setMenuOpen((v) => !v)
       }}
-      className={`grid shrink-0 place-items-center rounded hover:bg-hover ${
+        className={`grid shrink-0 place-items-center rounded hover:bg-hover ${
         menuOpen ? 'bg-accent text-accent-ink' : 'text-chrome-ink'
       }`}
     >
