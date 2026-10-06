@@ -116,36 +116,42 @@ export function wrapPerLine(count: number, lines: number): number {
 }
 
 /**
- * 折行模式要在**主轴起点**补多少内边距 —— 专门修「图标往左偏、不在中间」
- * （站主 2026-10-05 报的：转成折行老是往左偏，要让图标保持在中间）。
+ * 折行模式要在**哪一侧**补多少内边距，图标块才会居中
+ * （站主 2026-10-05 报的「转成折行老是往左偏」）。
  *
- * 根因：任务栏两端的固定按钮**不对称** —— 主轴起点只有一颗「所有项目」，
- * 终点却是「全屏 + 位置」两颗（竖排还要多一颗「所有项目」），所以图标块的中线天生
- * 比任务栏中线偏向起点。实测（视口 1280×800、图标 40、横排、length = null）：
- * 任务栏 626 宽、图标块左留白 **51** / 右留白 **95** → 中线**偏左 22px**。
+ * 根因：图标块是在"两端固定按钮之间的可用框"里居中的，所以它的中线天生偏离任务栏中线
+ * `(起点固定区 S − 终点固定区 E) / 2`。在**起点**补内边距 p，居中后的中线右移 p/2；
+ * 在**终点**补 p，中线左移 p/2 —— 所以偏移要用"两侧之差"来抵消。
  *
- * 返回值 = 两端固定区的差（横排 88 − 44 = **44**，竖排 132 − 44 = **88**）。
- * 加在滚动容器的 `padding-inline-start` / `padding-block-start` 上之后：
- * - **装得下时**：内边距把"居中的自由度"缩小一半，正好把 22px 的偏移抵消 → 图标块居中
- *   （实测左右留白 95 / 95）；
- * - **装不下时**：它只是内边距，内容的滚动原点仍在它之后 → 起点那几个图标照样看得见、够得到。
+ * 返回值**带符号**：
+ * - `> 0` → 补在**起点**（`padding-inline-start` / `padding-block-start`）
+ * - `< 0` → 补在**终点**（取绝对值补 `padding-inline-end` / `padding-block-end`）
  *
- * ⚠️ 别换成 `margin`（会过量一倍）：内边距同时缩小了用于居中的空闲空间，这才是它"正好抵消"的原因。
+ * 两个方向的固定按钮摆在哪一侧（`Dock.tsx` 里定的，改布局要一起看）：
+ * - **横排**：起点一颗「所有项目」（≈ 启动台），终点**没有**了 → 补终点；
+ * - **竖排**：菜单按钮在**终点**，起点没有 → 补起点。
+ *
+ * 它只是内边距，所以**装不下时**滚动原点仍在内容之前 —— 起点那几个图标照样看得见、够得到
+ * （实测过：第一个图标仍在栏内 +95px 处，不会被裁到滚动原点之外）。
+ * ⚠️ 别换成 `margin`：内边距同时缩小了"用于居中的空闲空间"，这才是它"正好抵消"的原因。
  */
 export function wrapSideGap(btn: number, vertical: boolean): number {
-  const start = btn + DOCK_GAP
-  const end = DOCK_GAP + btn + DOCK_GAP + btn + (vertical ? DOCK_GAP + btn : 0)
-  return Math.max(0, end - start)
+  const fixed = btn + DOCK_GAP
+  /* 竖排：固定按钮在终点 → 补起点（正）；横排：固定按钮在起点 → 补终点（负） */
+  return vertical ? fixed : -fixed
 }
 /** 折行的长度下限：至少要装得下两端三个固定按钮 + 一个图标 */
 export function wrapMinLength(btn: number): number {
   return btn * 4 + DOCK_GAP * 3 + (DOCK_PAD + DOCK_BORDER) * 2
 }
 
-/* ---- wheel（循环轮盘） ---- */
-/** 循环轮盘里"固定按钮之外"那一截的长度：三个固定按钮 + 图标区 + 间距与内边距 */
+/* ---- wheel（图标区，macOS 观感 + 回弹） ---- */
+/** 图标区里"固定按钮之外"那一截的长度。
+ *  ⚠️ 2026-10-06（macOS P2）：**任务栏只剩一颗固定按钮**（左端的「所有项目」≈ 启动台）——
+ *  「全屏 ⛶」与「任务栏位置」已经挪进顶部菜单栏（macOS 的 Dock 两端只有启动台和废纸篓，
+ *  没有这类系统按钮）。所以这里从"3 颗固定按钮"改成"1 颗 + 两处间距"，长度下限也跟着降。 */
 export function wheelChrome(btn: number): number {
-  return btn * 3 + DOCK_GAP * 3 + (DOCK_PAD + DOCK_BORDER) * 2
+  return btn + DOCK_GAP * 2 + (DOCK_PAD + DOCK_BORDER) * 2
 }
 /** 图标区可视长度的下限：至少 3 个图标位（少了中心放大出来的图标会被裁一半） */
 export function wheelViewMin(btn: number): number {
@@ -217,11 +223,13 @@ export function maxDockLength(position: DockPosition, viewport: { w: number; h: 
     : viewport.w * MAX_LENGTH_RATIO_H
 }
 
-/** 窗口层要躲开的四边：任务栏在哪边就占哪边，按实际厚度算 */
-export function dockInsets(position: DockPosition, thickness = DOCK_THICKNESS) {
+/** 窗口层要躲开的四边：任务栏在哪边就占哪边，按实际厚度算。
+ *  ⚠️ 2026-10-06（macOS P2）：**顶部还要让给菜单栏** —— 菜单栏是常驻 chrome，
+ *  不管任务栏停在哪一边，`top` 都至少是 `menubarH`（macOS 里最大化窗口不盖菜单栏）。 */
+export function dockInsets(position: DockPosition, thickness = DOCK_THICKNESS, menubarH = 0) {
   const reserve = thickness + DOCK_MARGIN * 2
   return {
-    top: position === 'top' ? reserve : 0,
+    top: menubarH + (position === 'top' ? reserve : 0),
     right: position === 'right' ? reserve : 0,
     bottom: position === 'bottom' ? reserve : 0,
     left: position === 'left' ? reserve : 0,

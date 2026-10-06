@@ -245,6 +245,193 @@
   z-index: 60;
 }
 
+/* ── 顶部菜单栏（macOS P2，2026-10-06「一切以 macOS 为准」）──────────────────────
+   常驻 chrome：贴顶、跨整宽、高度走 --menubar-h（浅 / 深两套都有值）。
+   层次 = 70：窗口层 10、任务栏 50、"伸出去的窗口" 60 —— 菜单栏在它们之上，
+   而窗口层的 top inset 已经把这条让出来了（正常不会有窗口压到它）。
+   底板与 Dock 同一套观感（半透明 + 模糊 + 描边），数值见 MACOS-BRIEF 第 2 节。 */
+.menubar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--menubar-h, 28px);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--c-chrome-fg);
+  background: var(--c-dock-bg);
+  border-bottom: var(--dock-border);
+  backdrop-filter: blur(var(--dock-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--dock-blur)) saturate(180%);
+}
+
+/* 真·浏览器级全屏里 macOS 会收起菜单栏（退出靠 Esc / F11）。 */
+:fullscreen .menubar {
+  display: none;
+}
+
+.menubar__wrap {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.menubar__btn {
+  display: flex;
+  height: calc(100% - 6px);
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.menubar__btn:hover {
+  background: var(--c-hover);
+}
+
+.menubar__btn[data-open='true'] {
+  background: var(--c-accent);
+  color: var(--c-accent-fg);
+}
+
+/* 聚焦窗口的应用名：macOS 里是加粗那一段 */
+.menubar__app {
+  font-weight: 600;
+}
+
+.menubar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+/* 菜单栏里的字形统一 14px。
+   ⚠️ 必须显式给尺寸：`FullscreenButton` 的 svg 自己没有尺寸类（在任务栏里它靠外层固定方框约束），
+   不写的话 SVG 按替换元素的默认 **300×150** 渲染，把 `.menubar__right` 撑成 456×150 ——
+   在 28px 高的栏里居中后上缘跑到 **y = −61**，直接压住窗口标题栏那块拖拽带
+   （实测：合并 / 标签排序两条拖拽断言全被它拦下，后面还连带一串 click 超时）。 */
+.menubar__btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 下拉：从菜单栏下沿展开（`top: 100%` —— 外层 .menubar__wrap 是整条栏那么高） */
+.menubar__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 90;
+  min-width: 176px;
+  padding: 4px;
+  border: var(--dock-border);
+  border-radius: var(--r-window);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-window);
+}
+
+.menubar__dropdown--right {
+  left: auto;
+  right: 0;
+}
+
+.menubar__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menubar__item:hover {
+  background: var(--c-accent);
+  color: var(--c-accent-fg);
+}
+
+.menubar__item[aria-checked='true']::after {
+  content: '✓';
+  font-size: 11px;
+}
+
+.menubar__hint {
+  font-size: 11px;
+  color: var(--c-text-dim);
+}
+
+.menubar__item:hover .menubar__hint {
+  color: inherit;
+}
+
+.menubar__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--c-border);
+}
+
+/* 点空白处收起下拉：一层透明遮罩，压在页面之上、下拉之下 */
+.menubar__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+/* ── 菜单栏里的紧凑时钟（同一个 CelestialClock，换一种排布）────────────────────
+   ⚠️ 元素与类名**一个都不许少**：`verify.mjs` 的时钟那几条读的是
+   `.celestial__time` / `__seconds` / `__phase` / `__illum` / `__disc[data-disc]` / `__sky` 的背景。
+   这里只把它从"竖排卡片"改成"横排小条"，并把日期 / 月相那两行收起来（`textContent` 仍在）。 */
+.celestial--compact {
+  position: static;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 天空条 34×20 + 圆盘 10px：这两个尺寸是按"圆盘走 17%~83% / 29%~71% 那条带"算过的 ——
+   两端各留 0.8px 余量，圆盘不会被天空条裁掉（改尺寸要一起算，别只改一个）。 */
+.celestial--compact .celestial__sky {
+  width: 34px;
+  height: 20px;
+}
+
+.celestial--compact .celestial__disc {
+  width: 10px;
+  height: 10px;
+}
+
+.celestial--compact .celestial__readout {
+  gap: 4px;
+}
+
+.celestial--compact .celestial__time {
+  font-size: 12px;
+}
+
+.celestial--compact .celestial__seconds {
+  font-size: 11px;
+}
+
+/* 日期与月相在 28px 的栏里放不下：视觉上收起来，但 DOM 保留（无障碍名与验证都还要） */
+.celestial--compact .celestial__meta {
+  display: none;
+}
+
 /* ── 阅读区：跟着「窗口」宽度自适应（容器查询，看的是窗口宽度而不是视口） ──
    .reading 建立容器，.reading__inner 是真正的正文列；窄窗缩字号与间距，宽窗放大并放宽列宽 */
 .reading {
@@ -758,13 +945,18 @@
   animation: win-in 130ms ease-out both;
 }
 
-/* 最大化：铺满**整个视口**，连任务栏那块一起盖住。 */
+/* 最大化：铺满**工作区**——从菜单栏下沿到屏幕底（任务栏那一带照旧盖住，见 .window--max 的
+   "任务栏不挡窗口"那条规则）。
+   ⚠️ 2026-10-06（macOS P2）：顶部多了常驻菜单栏，所以 `top` 从 0 改成 `--menubar-h` ——
+   macOS 里最大化 / 缩放**不盖菜单栏**（只有真·浏览器全屏才盖，走到 `useFullscreen` 那条路）。
+   这里**别写回 top: 0**：那样窗口会盖住菜单栏，连自己的交通灯都点不到（实测：绿点落在菜单栏底下、
+   Playwright 的 click 被菜单栏拦下）。 */
 .window--max {
   position: fixed;
   left: 0 !important;
-  top: 0 !important;
+  top: var(--menubar-h, 0px) !important;
   width: 100% !important;
-  height: 100% !important;
+  height: calc(100% - var(--menubar-h, 0px)) !important;
   border-radius: 0;
 }
 
@@ -1051,6 +1243,349 @@
   }
 }
 
+/* ── 塔罗牌窗口 ────────────────────────────────────────────────
+   牌阵是一块**等比画布**：牌心的位置是百分比、牌宽是组件量好写在 `--card-w` 上的 px，
+   角标字号、圆角、内边距全部由 `--card-w` 用 calc 推出来。
+   所以窗口拉大拉小、换成别的牌阵，都不需要第二套数值。
+
+   ⚠️ 自定义 CSS 写在 @layer 之外（坑 1：放进 @layer components 会被 Tailwind 裁掉）。 */
+
+.tarot {
+  container-type: inline-size;
+  width: 100%;
+  /* 窗口正文区是 flex-1 的滚动容器，h-full = 它的内容盒高度。再给个下限：
+     窗口被拖得很矮时宁可让正文滚动，也别把牌阵挤成一条 */
+  height: 100%;
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 一、选牌阵（还没抽牌） ── */
+.tarot__setup {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.tarot__spreads {
+  display: grid;
+  margin-top: 8px;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 700px) {
+  .tarot__spreads {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.tarot__spread {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-window);
+  background: var(--c-surface-2);
+  padding: 10px 12px;
+  text-align: left;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.tarot__spread:hover {
+  background: var(--c-control-hover);
+}
+
+.tarot__spread[aria-pressed='true'] {
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+}
+
+.tarot__spreadTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tarot__primary {
+  border-radius: var(--r-window);
+  background: var(--c-accent);
+  color: var(--c-accent-fg);
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 120ms ease;
+}
+
+.tarot__primary:hover {
+  opacity: 0.88;
+}
+
+.tarot__ghost {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-window);
+  padding: 5px 11px;
+  font-size: 12px;
+  color: var(--c-text);
+  transition: background-color 120ms ease;
+}
+
+.tarot__ghost:hover:not(:disabled) {
+  background: var(--c-control-hover);
+}
+
+.tarot__ghost:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tarot__link {
+  font-size: 11px;
+  color: var(--c-text-dim);
+  text-decoration: underline;
+}
+
+.tarot__link:hover {
+  color: var(--c-text);
+}
+
+.tarot__history {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.tarot__history:hover {
+  background: var(--c-control-hover);
+}
+
+/* ── 二、牌阵 + 解读 ── */
+.tarot__playWrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.tarot__bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--c-border);
+  padding-bottom: 10px;
+}
+
+.tarot__play {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+  padding-top: 12px;
+  /* 窄窗：上下各占一半，两边各自滚 —— 都比"挤成一条"好 */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+@container (min-width: 780px) {
+  .tarot__play {
+    /* 宽窗：牌阵吃满剩下的，解读栏固定宽、自己滚 */
+    grid-template-columns: minmax(0, 1fr) 316px;
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+/* 牌阵画布：一个居中的等比盒子，尺寸由组件算好（同时受宽与高约束） */
+.tarot-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tarot-board {
+  position: relative;
+}
+
+.tarot-slot {
+  position: absolute;
+  /* 组件给的是**牌心**的百分比，这里挪成左上角 —— 少了这句整个牌阵会朝右下偏半张牌 */
+  transform: translate(-50%, -50%);
+}
+
+.tarot-slot__rot {
+  transform-origin: center;
+}
+
+/* ── 一张牌：3D 翻牌 ── */
+.tarot-card {
+  position: relative;
+  width: var(--card-w);
+  aspect-ratio: 350 / 600;
+  border: 0;
+  background: none;
+  padding: 0;
+  perspective: 900px;
+}
+
+button.tarot-card {
+  cursor: pointer;
+}
+
+.tarot-card__inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 620ms cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.tarot-card[data-revealed='true'] .tarot-card__inner {
+  transform: rotateY(180deg);
+}
+
+.tarot-card__side {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: calc(var(--card-w) * 0.05);
+  box-shadow: 0 2px 7px var(--c-border);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.tarot-card__side--up {
+  transform: rotateY(180deg);
+}
+
+.tarot-card__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 各套牌图尺寸不齐（阿卡西那套是 350×600，整齐；别的风格就不是），
+     统一 cover 裁进同一个框，牌阵里才不会忽大忽小 */
+  object-fit: cover;
+  border-radius: inherit;
+  transition: transform 320ms ease;
+}
+
+/* 逆位：只把**牌面**转过来，位置与序号角标不动 */
+.tarot-card__art--reversed {
+  transform: rotate(180deg);
+}
+
+.tarot-card__fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--c-border);
+  border-radius: inherit;
+  background: var(--c-surface-2);
+  padding: calc(var(--card-w) * 0.1);
+}
+
+/* 序号角标画在翻转层**外面**：翻牌时它不该跟着转，牌阵位置 ↔ 解读条目靠它对上 */
+.tarot-card__ordinal {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--card-w) * -0.05);
+  left: calc(var(--card-w) * -0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--card-w) * 0.25);
+  height: calc(var(--card-w) * 0.25);
+  border-radius: 999px;
+  background: var(--c-accent);
+  color: var(--c-accent-fg);
+  font-size: calc(var(--card-w) * 0.145);
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 1px 3px var(--c-border);
+}
+
+/* ── 解读栏 ── */
+.tarot-reading {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  border-left: 1px solid var(--c-border);
+  padding-right: 2px;
+  padding-left: 14px;
+}
+
+@container (max-width: 779px) {
+  .tarot-reading {
+    border-top: 1px solid var(--c-border);
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+}
+
+.tarot-reading__question {
+  margin-top: 6px;
+  border-radius: 6px;
+  background: var(--c-surface-2);
+  padding: 6px 9px;
+  font-size: 12px;
+  color: var(--c-text);
+}
+
+.tarot-reading__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tarot-reading__item {
+  display: flex;
+  gap: 9px;
+}
+
+.tarot-reading__ordinal {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  font-size: 11px;
+  color: var(--c-text);
+}
+
+.tarot-reading__more {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--c-text-dim);
+}
+
+.tarot-reading__more summary {
+  cursor: pointer;
+}
+
+.tarot-reading__notes {
+  border-top: 1px solid var(--c-border);
+  padding-top: 10px;
+}
+
 @keyframes win-in {
   from {
     opacity: 0;
@@ -1068,6 +1603,12 @@
   }
 
   .celestial__disc {
+    transition: none;
+  }
+
+  /* 翻牌动画关掉：牌会直接出现在正面（`data-revealed` 换的那一帧就到位） */
+  .tarot-card__inner,
+  .tarot-card__art {
     transition: none;
   }
 }

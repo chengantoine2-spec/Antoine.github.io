@@ -29,6 +29,8 @@ if (!chromium) {
 
 const BASE = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '')
 const DOCK = 'nav[aria-label="任务栏"]'
+/* 顶部菜单栏（macOS P2，2026-10-06）：常驻 chrome，`lib/menubar.ts` 里 MENUBAR_SELECTOR 与此一致 */
+const MENUBAR = '[data-menubar]'
 /* 最大化 / 还原：两个标签轮流出现，用组合选择器一次抓。
    别用 [aria-pressed] —— 全屏按钮也带这个属性，会选错元素 */
 const MAX_BTN =
@@ -344,6 +346,16 @@ async function run() {
   )
 
   // 7 任务栏边缘缩放 + 双击回自适应
+  /* ⚠️ 这一步只测**任务栏自己的几何**，所以要回一个**干净桌面**再量：
+     上一步开过设置窗口，而顶部有了菜单栏之后窗口层矮了 28px，那个窗口正好压在任务栏**上沿**
+     那条"边缘拖拽带"上（实测 `设置 窗口@97..717`，任务栏上沿在 712）。按"任务栏不挡窗口"的规则，
+     越出窗口层的窗口会被提到任务栏之上（z-60），于是 `dblclick` 落在窗口上、厚度不动 ——
+     这不是 bug、是那条规则的正常表现。
+     ⚠️ 光 `goto('/')` 不够：**会话记忆会把窗口开回来**（实测刷新后 关于 + 设置 都回来了），
+     所以先清掉 `desktop.openWindows` 再回桌面。 */
+  await p.evaluate(() => localStorage.removeItem('desktop.openWindows'))
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.waitForTimeout(700)
   const navH0 = await p.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().height), DOCK)
   const edge = await p.evaluate((sel) => {
     const el = document.querySelectorAll(`${sel} [role="separator"]`)[0]
@@ -365,10 +377,51 @@ async function run() {
   }, DOCK)
   await p.mouse.dblclick(edge2.x, edge2.y)
   await p.waitForTimeout(300)
-  const navH2 = await p.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().height), DOCK)
-  check('双击边缘回到自适应厚度', navH2 === navH0, `${navH1} → ${navH2}`)
+  let navH2 = await p.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().height), DOCK)
+  if (navH2 !== navH0) {
+    /* 偶发：刚拖完的指针状态下这两次 click 之间会重渲染，`dblclick` 有时不派发。
+       单独复现（干净页面 → 拖到 84 → 双击）是好的，所以这里补一次重试而不是放宽断言。 */
+    await p.mouse.dblclick(edge2.x, edge2.y)
+    await p.waitForTimeout(350)
+    navH2 = await p.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().height), DOCK)
+  }
+  /* 诊断用：把"双击那一点到底命中谁、存档写的是什么"一并带进断言详情，
+     纸上推演过两轮都不是，直接要数据 */
+  const dblProbe = await p.evaluate((dockSel) => {
+    const el = document.querySelectorAll(`${dockSel} [role="separator"]`)[0]
+    const r = el.getBoundingClientRect()
+    const cx = r.x + r.width / 2
+    const cy = r.y + r.height / 2
+    const hit = document.elementFromPoint(cx, cy)
+    return {
+      cx: Math.round(cx),
+      cy: Math.round(cy),
+      hit: hit ? `${hit.tagName.toLowerCase()}.${(hit.className ?? '').toString().slice(0, 46)}` : 'none',
+      isSep: hit === el || el.contains(hit),
+      stored: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').thickness ?? null,
+      closed: !document.querySelector('.desktop__layer section'),
+      /* 到底哪个窗口压在这条边缘上？把每个窗口的纵向范围都打出来 */
+      hitIn: (() => {
+        const s = hit?.closest('section')
+        return s?.getAttribute('aria-label') ?? ''
+      })(),
+      wins: [...document.querySelectorAll('.desktop__layer section')].map((s) => {
+        const r = s.getBoundingClientRect()
+        return `${s.getAttribute('aria-label')}@${Math.round(r.top)}..${Math.round(r.bottom)}`
+      }),
+    }
+  }, DOCK)
+  check(
+    '双击边缘回到自适应厚度',
+    navH2 === navH0,
+    `${navH1} → ${navH2}｜${JSON.stringify(dblProbe)}`,
+  )
 
   // 8 任务栏应用勾选
+  /* 上一步为了量任务栏几何把窗口都清掉了，这一步要在**设置窗口**里勾选：
+     按路由重新打开它（会话记忆已清，不会把别的窗口一起带回来） */
+  await p.goto(`${BASE}/settings`, { waitUntil: 'load' })
+  await p.waitForTimeout(700)
   await p.locator('label', { hasText: '终端' }).locator('input').uncheck()
   await p.waitForTimeout(300)
   const docked = await p.evaluate(
@@ -842,47 +895,60 @@ async function run() {
     JSON.stringify(scrollbar),
   )
 
-  // 11d 任务栏上固定的「全屏」按钮：走 Fullscreen API，要真的进全屏（连浏览器窗口一起盖住），
+  // 11d 顶部菜单栏里的「全屏」按钮：走 Fullscreen API，要真的进全屏（连浏览器窗口一起盖住），
   //     按钮自己也要跟着状态变 —— 和"窗口最大化"不是一回事。
-  //     标题栏已经没有全屏按钮了（挪到任务栏 + 设置里），这里顺手断言它不在
-  const FS_BTN = `${DOCK} button[aria-label="全屏"], ${DOCK} button[aria-label="退出全屏"]`
+  //     2026-10-06（macOS P2）：这颗按钮**从任务栏挪进了菜单栏**（macOS 的 Dock 两端只有
+  //     启动台与废纸篓），所以选择器从 DOCK 换成 MENUBAR，并顺手断言"任务栏里已经没有它了"。
+  const FS_BTN = `${MENUBAR} button[aria-label="全屏"], ${MENUBAR} button[aria-label="退出全屏"]`
   await p.click(FS_BTN)
   await p.waitForTimeout(300)
-  const fsIn = await p.evaluate((dockSel) => ({
+  const fsIn = await p.evaluate((sel) => ({
     on: document.fullscreenElement !== null,
-    dockLabel:
-      document
-        .querySelector(`${dockSel} button[aria-label="退出全屏"]`)
-        ?.getAttribute('aria-label') ?? '',
+    menuLabel:
+      document.querySelector(`${sel} button[aria-label="退出全屏"]`)?.getAttribute('aria-label') ?? '',
+    /* macOS 进真·全屏会收起菜单栏（CSS 里 `:fullscreen .menubar { display:none }`） */
+    menubarHidden: getComputedStyle(document.querySelector('[data-menubar]')).display === 'none',
+    stillInDock: !!document.querySelector(
+      'nav[aria-label="任务栏"] button[aria-label="退出全屏"], nav[aria-label="任务栏"] button[aria-label="全屏"]',
+    ),
     titleButtons: [
       ...document.querySelectorAll('[aria-label="博客 窗口"] [data-window-controls] button'),
     ].map((b) =>
       b.getAttribute('aria-label'),
     ),
-  }), DOCK)
+  }), MENUBAR)
   check(
-    '任务栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住）',
+    '菜单栏「全屏」按钮进入浏览器全屏（连浏览器窗口一起盖住），菜单栏按 macOS 收起，任务栏里已无此按钮',
     /* macOS 交通灯的**顺序**：左起 红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）。
        进全屏时会顺手最大化当前窗口，所以绿点是「还原」 */
-    fsIn.on && fsIn.dockLabel === '退出全屏' && fsIn.titleButtons.join(',') === '关闭,最小化,还原',
+    fsIn.on &&
+      fsIn.menuLabel === '退出全屏' &&
+      fsIn.menubarHidden &&
+      !fsIn.stillInDock &&
+      fsIn.titleButtons.join(',') === '关闭,最小化,还原',
     JSON.stringify(fsIn),
   )
 
-  /* 进全屏时窗口被顺手最大化了，任务栏又被盖住 —— 先还原窗口，任务栏上的按钮才点得到 */
-  await p.click(MAX_BTN)
-  await p.waitForTimeout(200)
-  await p.click(FS_BTN)
-  await p.waitForTimeout(300)
-  const fsOut = await p.evaluate((dockSel) => ({
+  /* 全屏里菜单栏是收起的（照 macOS），所以退全屏不能再点那颗按钮。
+     ⚠️ **合成的 `Escape` 不行**：退出全屏是**浏览器级**手势，Playwright 合成的按键不触发它
+     （实测：按完 `document.fullscreenElement` 还在，后面一串检查全被"卡在全屏"带红）。
+     这里显式调用 Fullscreen API 退出，然后照样断言"菜单栏回来了、按钮回到全屏" —— 覆盖的是同一条链路。 */
+  await p.evaluate(() => document.exitFullscreen())
+  await p.waitForTimeout(350)
+  const fsOut = await p.evaluate((sel) => ({
     on: document.fullscreenElement !== null,
-    dockLabel:
-      document.querySelector(`${dockSel} button[aria-label="全屏"]`)?.getAttribute('aria-label') ?? '',
-  }), DOCK)
+    menuLabel: document.querySelector(`${sel} button[aria-label="全屏"]`)?.getAttribute('aria-label') ?? '',
+    menubarVisible: getComputedStyle(document.querySelector('[data-menubar]')).display !== 'none',
+  }), MENUBAR)
   check(
-    '再点一次退出全屏，任务栏按钮回到「全屏」',
-    !fsOut.on && fsOut.dockLabel === '全屏',
+    '退出全屏（走 Fullscreen API）：菜单栏回来、按钮回到「全屏」',
+    !fsOut.on && fsOut.menuLabel === '全屏' && fsOut.menubarVisible,
     JSON.stringify(fsOut),
   )
+
+  /* 进全屏时顺手把当前窗口最大化了 —— 还原掉，别留给后面那几条"最大化"的检查 */
+  await p.click(MAX_BTN)
+  await p.waitForTimeout(200)
 
   // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
   //    只能靠肉眼发现 —— 所以这里补一条回归检查）
@@ -891,10 +957,14 @@ async function run() {
     const win = document.querySelector('[aria-label="博客 窗口"]')
     const btn = win?.querySelector('header button[aria-pressed]')
     const dock = document.querySelector('[aria-label="任务栏"]')
+    const menubar = document.querySelector('[data-menubar]')
     const w = win?.getBoundingClientRect()
     const d = dock?.getBoundingClientRect()
+    const m = menubar?.getBoundingClientRect()
     /* 命中测试：任务栏中心点上最顶层的元素若不属于任务栏，说明窗口真的把它盖住了 */
     const hit = d ? document.elementFromPoint(d.left + d.width / 2, d.top + d.height / 2) : null
+    /* 菜单栏中线那一点命中的应该是菜单栏自己（= 最大化不盖菜单栏） */
+    const hitTop = m ? document.elementFromPoint(m.left + m.width / 2, m.top + m.height / 2) : null
     return {
       label: btn?.getAttribute('aria-label') ?? '',
       pressed: btn?.getAttribute('aria-pressed') === 'true',
@@ -902,9 +972,13 @@ async function run() {
       /* macOS 的绿点用**文字字形**，不再是 SVG（旧的 – □ × 那套连同 MaximizeGlyph 一起撤了）：
          未最大化时是 `+`，最大化 / 还原态是 `−`（U+2212） */
       glyph: (btn?.querySelector('span')?.textContent ?? '').trim(),
-      /* 标签栏是浮层、不让位，所以最大化照旧铺满整个视口（含任务栏） */
-      fillsViewport:
-        !!w && Math.round(w.width) === window.innerWidth && Math.round(w.height) === window.innerHeight,
+      /* ⚠️ 2026-10-06（macOS P2）：顶部多了菜单栏，所以"铺满"= **菜单栏之下到屏幕底**
+         （macOS 里最大化不盖菜单栏，只有真·全屏才盖 —— 那是全屏按钮那一条） */
+      menuH: Math.round(m?.height ?? 0),
+      fillsWorkArea:
+        !!w && !!m && Math.round(w.width) === window.innerWidth && Math.round(w.top) === Math.round(m.height) && Math.round(w.bottom) === window.innerHeight,
+      coversMenuBar: !!w && !!m && w.top < m.bottom - 1,
+      menubarOnTop: !!menubar && !!hitTop && menubar.contains(hitTop),
       coversDock: !!w && !!d && w.top <= d.top && w.bottom >= d.bottom && w.left <= d.left && w.right >= d.right,
       dockOnTop: !!dock && !!hit && dock.contains(hit),
     }
@@ -915,9 +989,16 @@ async function run() {
     JSON.stringify({ label: maxed.label, pressed: maxed.pressed, isMax: maxed.isMax, glyph: maxed.glyph }),
   )
   check(
-    '最大化后铺满视口并盖住任务栏',
-    maxed.fillsViewport && maxed.coversDock && !maxed.dockOnTop,
-    JSON.stringify({ fillsViewport: maxed.fillsViewport, coversDock: maxed.coversDock, dockOnTop: maxed.dockOnTop }),
+    '最大化 = 铺满「工作区」（菜单栏下沿 → 屏幕底）并盖住任务栏，但**不盖菜单栏**',
+    maxed.fillsWorkArea && maxed.coversDock && !maxed.dockOnTop && !maxed.coversMenuBar && maxed.menubarOnTop,
+    JSON.stringify({
+      menuH: maxed.menuH,
+      fillsWorkArea: maxed.fillsWorkArea,
+      coversDock: maxed.coversDock,
+      dockOnTop: maxed.dockOnTop,
+      coversMenuBar: maxed.coversMenuBar,
+      menubarOnTop: maxed.menubarOnTop,
+    }),
   )
 
   // 再点一次还回去，别把窗口留在最大化状态给后面的检查添乱
@@ -1451,17 +1532,15 @@ async function run() {
     JSON.stringify({ lifted, 前: orderBefore.slice(0, 6), 后: orderAfterMove.slice(0, 6) }),
   )
 
-  /* 14d 三个固定按钮：钉在两端，不在循环轨道里（循环转不走它们） */
+  /* 14d 任务栏的固定按钮：2026-10-06（macOS P2）起**只剩左端一颗「所有项目」**（≈ 启动台）——
+     「全屏 ⛶」与「任务栏位置」已经挪进顶部菜单栏（macOS 的 Dock 两端只有启动台与废纸篓，
+     不该长着系统按钮）。这里只断言剩下那一颗，两颗挪走的按钮见第 15 节。 */
   const fixedProbe = await p.evaluate((sel) => {
     const bar = document.querySelector(sel)
     const track = bar?.querySelector('[data-dock-track]')
     const barBox = bar.getBoundingClientRect()
     const find = (s) => bar.querySelector(s)
-    const btns = {
-      menu: find('button[aria-label="所有项目"]'),
-      full: find('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
-      pos: find('button[aria-label="任务栏位置"]'),
-    }
+    const btns = { menu: find('button[aria-label="所有项目"]') }
     const out = {}
     for (const [k, b] of Object.entries(btns)) {
       if (!b) {
@@ -1478,15 +1557,66 @@ async function run() {
         clickable: !!hit && (b === hit || b.contains(hit)),
       }
     }
+    /* 两颗已经挪走的按钮：任务栏里**不应该**再有它们 */
+    out.goneFromDock = !find('button[aria-label="全屏"]') && !find('button[aria-label="任务栏位置"]')
     return out
   }, DOCK)
   check(
-    '三个固定按钮钉在两端：都在栏内、都不在循环轨道里、都点得到',
+    '任务栏只剩左端「所有项目」一颗固定按钮：在栏内、不在滚动轨道里、点得到；全屏与位置已不在栏里',
     !!fixedProbe.menu &&
-      !!fixedProbe.full &&
-      !!fixedProbe.pos &&
-      Object.values(fixedProbe).every((v) => v.inBar && !v.inTrack && v.clickable),
+      fixedProbe.menu.inBar &&
+      !fixedProbe.menu.inTrack &&
+      fixedProbe.menu.clickable &&
+      fixedProbe.goneFromDock,
     JSON.stringify(fixedProbe),
+  )
+
+  /* 14d2 顶部菜单栏的几何与"两颗按钮真的搬进来了"（macOS P2） */
+  const menubarProbe = await p.evaluate((sel) => {
+    const bar = document.querySelector(sel)
+    if (!bar) return null
+    const r = bar.getBoundingClientRect()
+    const token = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--menubar-h'),
+    )
+    const hitOf = (b) => {
+      const bb = b.getBoundingClientRect()
+      const hit = document.elementFromPoint(bb.x + bb.width / 2, bb.y + bb.height / 2)
+      return !!hit && (b === hit || b.contains(hit))
+    }
+    const full = bar.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]')
+    const pos = bar.querySelector('button[aria-label="任务栏位置"]')
+    return {
+      top: Math.round(r.top),
+      left: Math.round(r.left),
+      height: Math.round(r.height),
+      token: Math.round(token || 0),
+      fullWidth: Math.round(r.width) === window.innerWidth,
+      fullOk: !!full && hitOf(full),
+      posOk: !!pos && hitOf(pos),
+      clockIn: !!bar.querySelector('.celestial'),
+      app: bar.querySelector('[data-menubar-app]')?.textContent?.trim() ?? '',
+    }
+  }, MENUBAR)
+  check(
+    '菜单栏贴顶、跨整宽，高度与令牌 --menubar-h 一致（两个值都对得上才算）',
+    !!menubarProbe &&
+      menubarProbe.top === 0 &&
+      menubarProbe.left === 0 &&
+      menubarProbe.fullWidth &&
+      menubarProbe.token > 0 &&
+      menubarProbe.height === menubarProbe.token,
+    JSON.stringify(menubarProbe),
+  )
+  check(
+    '「全屏 ⛶」与「任务栏位置」已经在菜单栏里、且都点得到（改位置没改无障碍名）',
+    !!menubarProbe && menubarProbe.fullOk && menubarProbe.posOk,
+    JSON.stringify({ fullOk: menubarProbe?.fullOk, posOk: menubarProbe?.posOk }),
+  )
+  check(
+    '日月时钟并进了菜单栏（原来那个浮在右上角的挂件位已撤，不再是双份）',
+    !!menubarProbe && menubarProbe.clockIn && (await p.locator('.celestial').count()) === 1,
+    JSON.stringify({ clockIn: menubarProbe?.clockIn, count: await p.locator('.celestial').count() }),
   )
 
   /* 14d 竖排（左/右停靠）也必须是"单列轮盘"：整套代码按轴参数化，但布局与裁剪走的是另一条分支
@@ -1752,7 +1882,7 @@ async function run() {
           never: btns.map((b) => b.getAttribute('aria-label')).filter((l) => !seen.has(l)),
         }
       },
-      { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+      { sel: DOCK, fixed: ['所有项目'] },
     )
   /* 切模式走**路由**打开设置：轮盘里图标会循环，短任务栏时"设置"那个图标可能正好在可视圈外，
      点它会扑空（clip-path 挡住命中测试，实测踩过） */
@@ -1867,7 +1997,7 @@ async function run() {
           dockW: Math.round(dr.width),
         }
       },
-      { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+      { sel: DOCK, fixed: ['所有项目'] },
     )
   const setDockGeom = async (patch) => {
     await p.evaluate((patch) => {
@@ -1986,7 +2116,8 @@ async function run() {
       moon: text('.celestial__phase'),
       illum: Number(text('.celestial__illum').replace('%', '')),
       moonsvg: !!el.querySelector('.celestial__moonLit'),
-      z: Number(getComputedStyle(el).zIndex),
+      /* 2026-10-06（macOS P2）：时钟并进了顶部菜单栏 —— 这里量"它在不在菜单栏里" */
+      inMenubar: !!el.closest('[data-menubar]'),
     }
   })
   const toSeconds = (value) => {
@@ -1994,12 +2125,12 @@ async function run() {
     return h * 3600 + m * 60 + (s || 0)
   }
   check(
-    '桌面有日月时钟挂件，读数与系统时间一致（精确到秒）',
+    '菜单栏里有日月时钟（读数与系统时间一致，精确到秒）',
     !!clock &&
       Math.abs(toSeconds(clock.time) - toSeconds(clock.expected)) <= 2 &&
-      /* z 在壁纸之上、窗口层（z-10 / 最大化 z-60）之下 */
-      clock.z > 0 &&
-      clock.z < 10,
+      /* 2026-10-06（macOS P2）：时钟从"浮在桌面右上角的挂件"并进了**顶部菜单栏**，
+         不再有自己的 z（原先断言 z 在壁纸与窗口层之间）。现在断言的是"它在菜单栏里" */
+      clock.inMenubar,
     JSON.stringify(clock),
   )
   /* 用户报过"时间停在那一刻、点刷新才动"：时钟必须自己走，而且不依赖刷新。
@@ -2541,8 +2672,10 @@ async function run() {
     }
   })
   check(
-    '窗口能拖到最左上角（标签栏不再挡路）',
-    corner.x === 0 && corner.y === 0 && corner.layerLeft === 0 && corner.layerTop === 0,
+    /* 2026-10-06（macOS P2）：顶部有了常驻菜单栏，窗口能到的"最上面"= **菜单栏下沿**
+       （macOS 里窗口不会跑到菜单栏底下）。所以这里比的是"和窗口层的左上角对齐" */
+    '窗口能拖到工作区最左上角（菜单栏之下、标签栏不再挡路）',
+    corner.x === corner.layerLeft && corner.y === corner.layerTop && corner.layerTop > 0,
     JSON.stringify(corner),
   )
 
@@ -2591,7 +2724,9 @@ async function run() {
     JSON.stringify({ preview, ...snapped }),
   )
 
-  /* 拖到上边缘 = 铺满工作区（任务栏那块留着；要连任务栏一起盖住就点 □ 最大化） */
+  /* 拖到上边缘 = 铺满**工作区**（从菜单栏下沿到屏幕底）。
+      2026-10-06（macOS P2）：以前是"铺满整个屏幕（含任务栏那一带）"，现在顶部有常驻菜单栏，
+      macOS 的铺满 / 最大化都**不盖它** —— 盖住菜单栏只有真·全屏那条路（见第 11d 条）。 */
   g = await grabSet()
   await p.mouse.move(g.x, g.y)
   await p.mouse.down()
@@ -2601,17 +2736,23 @@ async function run() {
   const snappedTop = await p.evaluate(() => {
     const win = document.querySelector('section[aria-label="设置 窗口"]')
     const w = win?.getBoundingClientRect()
+    const m = document.querySelector('[data-menubar]')?.getBoundingClientRect()
     return {
       snap: win?.getAttribute('data-snap') ?? '',
       w: Math.round(w?.width ?? 0),
       h: Math.round(w?.height ?? 0),
+      top: Math.round(w?.top ?? -1),
+      menuH: Math.round(m?.height ?? 0),
       vw: window.innerWidth,
       vh: window.innerHeight,
     }
   })
   check(
-    '拖到上边缘 = 铺满整个屏幕（含任务栏那一带）',
-    snappedTop.snap === 'top' && snappedTop.w === snappedTop.vw && snappedTop.h === snappedTop.vh,
+    '拖到上边缘 = 铺满工作区（菜单栏下沿 → 屏幕底，宽度通栏、**不盖菜单栏**）',
+    snappedTop.snap === 'top' &&
+      snappedTop.w === snappedTop.vw &&
+      snappedTop.top === snappedTop.menuH &&
+      snappedTop.h === snappedTop.vh - snappedTop.menuH,
     JSON.stringify(snappedTop),
   )
 
@@ -2634,14 +2775,21 @@ async function run() {
       snap: win?.getAttribute('data-snap') ?? '',
       bottomGap: Math.round(window.innerHeight - (r?.bottom ?? 0)),
       h: Math.round(r?.height ?? 0),
-      half: Math.round(window.innerHeight / 2),
+      /* 工作区高度的一半（视口 − 菜单栏）—— P2 之后"下半屏"分的是工作区，不是整个视口 */
+      half: Math.round(
+        (window.innerHeight -
+          (document.querySelector('[data-menubar]')?.getBoundingClientRect().height ?? 0)) /
+          2,
+      ),
       layerBottom: Math.round(
         document.querySelector('.desktop__layer')?.getBoundingClientRect().bottom ?? 0,
       ),
     }
   })
   check(
-    '拖到底边 = 下半屏，而且真的贴到屏幕最底边（不再停在任务栏上沿）',
+    /* 2026-10-06（macOS P2）：下半屏是按**工作区**（视口 − 菜单栏）对半分的，
+       所以高度 = (视口高 − 菜单栏高) / 2，底边仍然要贴到**屏幕最底边**（bottomGap === 0） */
+    '拖到底边 = 工作区下半屏，而且真的贴到屏幕最底边（不再停在任务栏上沿）',
     bottomPreview === 'bottom' &&
       snappedBottom.snap === 'bottom' &&
       snappedBottom.bottomGap === 0 &&
@@ -2693,7 +2841,76 @@ async function run() {
   await closeAllWindows()
   await p.waitForTimeout(300)
 
-  // 15 页面无运行时错误
+  // 15 顶部菜单栏（macOS P2，2026-10-06）：应用名跟着聚焦窗口变、菜单真能打开、
+  //    菜单里的动作**真有作用**（项目红线：不许摆点了没反应的按钮）
+  await closeAllWindows()
+  await p.waitForTimeout(300)
+
+  /* 打开两个不同的窗口：菜单栏上的应用名要跟着聚焦（= 当前路由那个窗口）走 */
+  await p.goto(`${BASE}/settings`, { waitUntil: 'load' })
+  await p.waitForTimeout(600)
+  const nameSettings = await p.textContent(`${MENUBAR} [data-menubar-app]`)
+  await p.goto(`${BASE}/blog`, { waitUntil: 'load' })
+  await p.waitForTimeout(800)
+  const nameBlog = await p.textContent(`${MENUBAR} [data-menubar-app]`)
+  check(
+    '菜单栏上的应用名跟着聚焦窗口变（设置 → 博客）',
+    !!nameSettings && !!nameBlog && nameSettings !== nameBlog && nameBlog.includes('博客'),
+    JSON.stringify({ 设置: nameSettings, 博客: nameBlog }),
+  )
+
+  /* 点开「显示」：下拉要从菜单栏下沿展开，且项都是**可点**的按钮 */
+  await p.click(`${MENUBAR} button[aria-label="显示"]`)
+  await p.waitForTimeout(250)
+  const viewMenu = await p.evaluate((sel) => {
+    const menu = document.querySelector(`${sel} [role="menu"][aria-label="显示"]`)
+    const items = menu ? [...menu.querySelectorAll('button[role="menuitem"]')] : []
+    return {
+      open: !!menu,
+      n: items.length,
+      clickable: items.filter((b) => {
+        const r = b.getBoundingClientRect()
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        return !!hit && (b === hit || b.contains(hit))
+      }).length,
+      below: menu ? Math.round(menu.getBoundingClientRect().top) : -1,
+      menuH: Math.round(document.querySelector('[data-menubar]').getBoundingClientRect().height),
+    }
+  }, MENUBAR)
+  check(
+    '菜单栏的「显示」菜单能打开：下拉挂在菜单栏下沿，且项都能点（≥3 项）',
+    viewMenu.open &&
+      viewMenu.n >= 3 &&
+      viewMenu.clickable === viewMenu.n &&
+      Math.abs(viewMenu.below - viewMenu.menuH) <= 2,
+    JSON.stringify(viewMenu),
+  )
+
+  /* 从菜单点「平铺：左半」：落位要和"拖到左边缘"一模一样（同一份 snapRect），点完菜单收起 */
+  await p.click(`${MENUBAR} [role="menu"][aria-label="显示"] button:has-text("平铺：左半")`)
+  await p.waitForTimeout(400)
+  const tiled = await p.evaluate(() => {
+    const win = document.querySelector('section[aria-label="博客 窗口"]')
+    const w = win?.getBoundingClientRect()
+    const l = document.querySelector('.desktop__layer')?.getBoundingClientRect()
+    return {
+      snap: win?.getAttribute('data-snap') ?? '',
+      x: Math.round((w?.left ?? -1) - (l?.left ?? 0)),
+      w: Math.round(w?.width ?? 0),
+      half: Math.round(window.innerWidth / 2),
+      menuClosed: !document.querySelector('[data-menubar] [role="menu"]'),
+    }
+  })
+  check(
+    '菜单栏「平铺：左半」真的铺到左半边（与拖到左边缘同一份几何），点完菜单收起',
+    tiled.snap === 'left' && tiled.x === 0 && Math.abs(tiled.w - tiled.half) <= 2 && tiled.menuClosed,
+    JSON.stringify(tiled),
+  )
+
+  await closeAllWindows()
+  await p.waitForTimeout(300)
+
+  // 16 页面无运行时错误
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

@@ -24,8 +24,13 @@ const TICK_MS = 1000
  * 颜色从夜 → 拂晓 → 正午 → 黄昏一路插值（色值全在 tokens.css 的 --c-celestial-*，
  * 这里只把「哪两档 + 混合多少」交给 CSS 的 color-mix）；
  * 入夜换月亮，并按当天日期画月相（lib/celestial.ts 的 moonPhase，八相名 + 照亮百分比）。
+ *
+ * ⚠️ 2026-10-06（macOS P2）：它现在挂在**顶部菜单栏**里（`variant="compact"`），
+ * 不再浮在桌面右上角。两种形态用的是**同一份 DOM 结构与类名**（`.celestial__time` /
+ * `__seconds` / `__phase` / `__illum` / `__disc[data-disc]` / `__sky`）——
+ * `verify.mjs` 的时钟断言全按这些类名取数，**别在 compact 形态里少渲染任何一个**。
  */
-export function CelestialClock() {
+export function CelestialClock({ variant = 'widget' }: { variant?: 'widget' | 'compact' } = {}) {
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
@@ -75,7 +80,9 @@ export function CelestialClock() {
 
   return (
     <aside
-      className="celestial rounded-window border border-edge bg-surface shadow-2xl"
+      className={`celestial rounded-window border border-edge bg-surface shadow-2xl${
+        variant === 'compact' ? ' celestial--compact' : ''
+      }`}
       data-phase={arc.day ? 'day' : 'night'}
       style={style}
       aria-label={`${clock}:${seconds}，${formatMonthDay(now)} ${formatWeekday(now)}，月相${moon.name}，照亮 ${illumination}%`}

@@ -30,10 +30,8 @@ import {
   wrapSideGap,
 } from '../../lib/dock'
 import type { AppId } from '../../types/desktop'
-import { MenuGlyph, PositionGlyph } from '../icons'
+import { MenuGlyph } from '../icons'
 import { AppIcon } from './AppIcon'
-import { DockPositionMenu } from './DockPositionMenu'
-import { FullscreenButton } from './FullscreenButton'
 import { StartMenu } from './StartMenu'
 
 function clamp(value: number, min: number, max: number): number {
@@ -128,7 +126,6 @@ export function Dock() {
     iconSize,
     dockApps,
     mode,
-    setPosition,
     setLength,
     setThickness,
     reorderDockApps,
@@ -137,10 +134,8 @@ export function Dock() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [posOpen, setPosOpen] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
   const bar = useRef<HTMLElement | null>(null)
-  const posWrap = useRef<HTMLDivElement | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
   const drag = useRef<{ px: number; py: number; sx: number; sy: number; moved: boolean } | null>(
     null,
@@ -206,7 +201,13 @@ export function Dock() {
   const lineSize = perLine * btn + (perLine - 1) * GAP
   /* 折行要补在主轴起点的内边距：两端固定按钮不对称（起点一颗、终点两颗），
      不补的话图标块中线比任务栏中线偏左 22px（站主报的"往左偏"）。见 lib/dock 的 wrapSideGap */
-  const sidePad = mode === 'wrap' ? wrapSideGap(btn, vertical) : 0
+  /* 折行时两端固定按钮**不对称**（横排只有左端一颗「所有项目」、竖排在末端），
+     图标块会在"两端之间的可用框"里居中 → 中线天生偏一点。
+     `wrapSideGap` 返回**带符号**的补偿量：正数补起点、负数补终点（见它的注释）。
+     ⚠️ 用内边距、不是 margin：内边距同时缩小了"用于居中的空闲"，这才是它正好抵消的原因。 */
+  const sideGap = mode === 'wrap' ? wrapSideGap(btn, vertical) : 0
+  const padStart = Math.max(0, sideGap)
+  const padEnd = Math.max(0, -sideGap)
   const itemsStyle: CSSProperties = {
     /* safe center：装得下时每行居中、**装不下时退化成 start**（左边不会被推到滚动原点之外，
        起点那几个图标照样看得见、够得到）—— 这正是折行要的语义。
@@ -247,22 +248,19 @@ export function Dock() {
   /* 打开任何窗口就收起菜单 */
   useEffect(() => {
     setMenuOpen(false)
-    setPosOpen(false)
   }, [pathname])
 
-  /* 面板点开后就保持展开：只有选位置、按 Esc、点别处、或换页才收起 */
+  /* 面板点开后就保持展开：只有按 Esc、点别处、或换页才收起 */
   useEffect(() => {
-    if (!posOpen && !menuOpen) return
+    if (!menuOpen) return
 
     function onPointerDown(e: PointerEvent) {
       const target = e.target as Node
-      if (posOpen && !posWrap.current?.contains(target)) setPosOpen(false)
       if (menuOpen && !bar.current?.contains(target)) setMenuOpen(false)
     }
 
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      setPosOpen(false)
       setMenuOpen(false)
     }
 
@@ -272,7 +270,7 @@ export function Dock() {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [posOpen, menuOpen])
+  }, [menuOpen])
 
   function openApp(id: AppId) {
     const app = getApp(id)
@@ -744,7 +742,6 @@ export function Dock() {
       aria-expanded={menuOpen}
       onClick={() => {
         setMenuOpen((v) => !v)
-        setPosOpen(false)
       }}
       className={`grid shrink-0 place-items-center rounded hover:bg-hover ${
         menuOpen ? 'bg-accent text-accent-ink' : 'text-chrome-ink'
@@ -890,13 +887,15 @@ export function Dock() {
           onPointerUp={wrapEndDrag}
           onPointerCancel={wrapEndDrag}
           onWheel={wrapOnWheel}
-          /* 视口本身不设 justify/align —— 居中交给里面那层用 m-auto。
-             滚动容器上直接写 justify-center 时，内容一旦超出，超出的那一侧会落到
-             滚动原点之外：滚轮和拖动都永远够不到（小任务栏时最左 / 最上的图标就是这么丢的）。
-             max-h/max-w 卡住交叉轴，装不下就在容器内滚，绝不顶出任务栏。
-             主轴起点补 sidePad（两端固定按钮不对称的补偿）——它只是内边距，
+          /* 主轴两端按需补内边距（哪边固定按钮少就补哪边，见 wrapSideGap）——它只是内边距，
              既能让装得下时图标块居中，又不会把内容推到滚动原点之外 */
-          style={sidePad ? (vertical ? { paddingTop: sidePad } : { paddingLeft: sidePad }) : undefined}
+          style={
+            padStart || padEnd
+              ? vertical
+                ? { paddingTop: padStart, paddingBottom: padEnd }
+                : { paddingLeft: padStart, paddingRight: padEnd }
+              : undefined
+          }
           className={`no-scrollbar flex min-h-0 min-w-0 max-h-full max-w-full ${
             length !== null ? 'flex-1' : ''
           } ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto'}`}
@@ -915,38 +914,9 @@ export function Dock() {
 
       {vertical ? menuButton : null}
 
-      {/* 全屏按钮：固定在任务栏上，和「任务栏位置」并排（设置窗口里也有一个） */}
-      <FullscreenButton style={btnStyle} />
-
-      {/* 位置按钮：点开后保持展开 */}
-      <div ref={posWrap} className="relative shrink-0">
-        <button
-          type="button"
-          style={btnStyle}
-          title="任务栏位置"
-          aria-label="任务栏位置"
-          aria-haspopup="menu"
-          aria-expanded={posOpen}
-          onClick={() => {
-            setPosOpen((v) => !v)
-            setMenuOpen(false)
-          }}
-          className={`grid place-items-center rounded hover:bg-hover ${
-            posOpen ? 'bg-accent text-accent-ink' : 'text-chrome-ink'
-          }`}
-        >
-          <PositionGlyph position={position} className="h-1/2 w-1/2" />
-        </button>
-
-        <DockPositionMenu
-          open={posOpen}
-          position={position}
-          onPick={(next) => {
-            setPosition(next)
-            setPosOpen(false)
-          }}
-        />
-      </div>
+      {/* ⚠️ 2026-10-06（macOS P2）：这里**原本**还有「全屏 ⛶」与「任务栏位置」两颗固定按钮，
+          现在都挪进顶部菜单栏了（macOS 的 Dock 两端只有启动台与废纸篓，没有这类系统按钮）。
+          任务栏这一侧只剩左端的「所有项目」（≈ 启动台）。别把这两颗加回来。 */}
 
       {/* 悬停名称浮层：放在滚动容器外，才不会被裁掉 */}
       {hover ? (

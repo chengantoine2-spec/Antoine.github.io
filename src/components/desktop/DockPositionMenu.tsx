@@ -20,10 +20,16 @@ interface DockPositionMenuProps {
   open: boolean
   position: DockPosition
   onPick: (position: DockPosition) => void
+  /**
+   * 覆盖默认的展开方向（默认按任务栏停在哪边往哪儿弹）。
+   * 2026-10-06（macOS P2）：这个菜单现在挂在**顶部菜单栏**里，需要从栏的下沿往下展开，
+   * 所以那边传 `'top-full right-0 mt-1'`。
+   */
+  placementClass?: string
 }
 
 /** 位置按钮点开后展开的四个位置选项（保持展开，直到选位置 / 点别处 / Esc） */
-export function DockPositionMenu({ open, position, onPick }: DockPositionMenuProps) {
+export function DockPositionMenu({ open, position, onPick, placementClass }: DockPositionMenuProps) {
   if (!open) return null
 
   return (
@@ -31,7 +37,7 @@ export function DockPositionMenu({ open, position, onPick }: DockPositionMenuPro
       role="menu"
       aria-label="任务栏位置"
       className={`absolute z-50 flex gap-1 rounded-dock border border-edge bg-surface p-1.5 shadow-2xl ${
-        PLACEMENT[position]
+        placementClass ?? PLACEMENT[position]
       } ${isVertical(position) ? 'flex-col' : ''}`}
     >
       {DOCK_ORDER.map((p) => (

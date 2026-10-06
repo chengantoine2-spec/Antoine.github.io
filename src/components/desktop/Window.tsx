@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getApp } from '../../lib/apps'
 import { SNAP_LABEL, snapRect, snapZoneAt, type Rect } from '../../lib/snap'
+import { workTop } from '../../lib/menubar'
 import { useWindows } from '../../hooks/useWindows'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
 import type { AppId, SnapZone, WindowState, WindowTab } from '../../types/desktop'
@@ -149,12 +150,14 @@ export function Window({
        预览与落位用同一个 snapRect，所以"看到哪就贴到哪"。
        ⚠️ 基准是**整个视口**，不是 `.desktop__layer` —— 层已经被任务栏让过位，
        拿它算的话"拖到底边"只能贴到任务栏上沿（用户 2026-10-05 报的就是这个）。
-       窗口的 left/top 是相对层的，所以算完要减掉层的偏移。 */
+       窗口的 left/top 是相对层的，所以算完要减掉层的偏移。
+       ⚠️ 2026-10-06（macOS P2）：第三个参数是**工作区上边界**（= 菜单栏下沿）——
+       上边 / 半屏 / 四分之一都从它下面开始，不会盖住菜单栏。 */
     const layer = layerBox(e.currentTarget)
     if (layer) {
       const vp = { w: window.innerWidth, h: window.innerHeight }
-      const zone = snapZoneAt(e.clientX, e.clientY, vp)
-      const r = zone ? snapRect(zone, vp) : undefined
+      const zone = snapZoneAt(e.clientX, e.clientY, vp, workTop())
+      const r = zone ? snapRect(zone, vp, workTop()) : undefined
       setSnapPreview(
         zone && r
           ? { zone, rect: { x: r.x - layer.left, y: r.y - layer.top, w: r.w, h: r.h } }

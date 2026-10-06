@@ -2,18 +2,20 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getApp, matchWindowRoute, pathOf } from '../../lib/apps'
 import { dockInsets } from '../../lib/dock'
+import { MENUBAR_H, workTop } from '../../lib/menubar'
+import { snapRect } from '../../lib/snap'
 import { loadSession, saveSession } from '../../lib/windowStore'
 import { toSessionFrames } from '../../lib/windowManager'
 import { useAppearance } from '../../hooks/useAppearance'
 import { useDock } from '../../hooks/useDock'
 import { useWindows } from '../../hooks/useWindows'
-import type { AppId } from '../../types/desktop'
+import type { AppId, SnapZone } from '../../types/desktop'
 /* 桌面壁纸走 import：部署到子路径时不会失效，也和其它资源一起被指纹化 */
 import desktopWallpaper from '../../assets/wallpapers/desktop.jpg'
 import { WindowTitleProvider } from '../../hooks/useWindowTitle'
 import { WindowView } from '../program/views'
 import { Dock } from './Dock'
-import { CelestialClock } from './CelestialClock'
+import { MenuBar } from './MenuBar'
 import { Window } from './Window'
 
 /** 窗口层尺寸：让位之后留给窗口的那块地方（任务栏不算） */
@@ -47,9 +49,11 @@ export function DesktopShell() {
   /** 拖动窗口时命中的目标框（给它加 data-merge-target 高亮 + 松手合并） */
   const [mergeHover, setMergeHover] = useState<string | undefined>(undefined)
 
-  const insets = dockInsets(position, effectiveThickness)
+  const insets = dockInsets(position, effectiveThickness, MENUBAR_H)
   /* 四边让位随任务栏位置与实际厚度变化，用行内变量写进窗口层。
-     标签栏画在窗框**里面**，不占窗口层的空间 —— 所以窗口能一路拖到最左 / 最上 */
+     标签栏画在窗框**里面**，不占窗口层的空间 —— 所以窗口能一路拖到最左 / 最上。
+     ⚠️ 顶部还多了**菜单栏**（macOS P2）：`dockInsets` 的第三参把 `--menubar-h` 算进 top，
+     于是最大化 / 铺满都停在菜单栏下沿，不会把它盖住（macOS 的行为）。 */
   const insetVars = {
     '--inset-top': `${insets.top}px`,
     '--inset-right': `${insets.right}px`,
@@ -166,6 +170,28 @@ export function DesktopShell() {
       (w.maximized || w.x < -1 || w.y < -1 || w.x + w.w > layerW + 1 || w.y + w.h > layerH + 1),
   )
 
+  /**
+   * 菜单栏「显示」里的平铺：把**视口坐标的吸附矩形**换成**窗口层坐标**再 dispatch。
+   * 和拖动吸附（`Window.tsx`）用的是同一份 `snapRect` + 同一个上边界 `workTop()`，
+   * 所以"菜单里点平铺"和"拖到边缘"落位完全一致（看到哪就贴到哪）。
+   */
+  const tile = useCallback(
+    (zone: SnapZone) => {
+      const target = windows.find((w) => !w.minimized && w.tabs[w.active]?.id === routeId)
+      if (!target) return
+      const layer = layerRef.current?.getBoundingClientRect()
+      const vp = { w: window.innerWidth, h: window.innerHeight }
+      const r = snapRect(zone, vp, workTop())
+      dispatch({
+        type: 'snap',
+        key: target.key,
+        zone,
+        rect: layer ? { x: r.x - layer.left, y: r.y - layer.top, w: r.w, h: r.h } : r,
+      })
+    },
+    [windows, routeId, dispatch],
+  )
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-chrome" style={insetVars}>
       {/* 背景层：渐变 / 纯 CSS 纹理；选了图片时才多一层图片，再叠可选暗化 */}
@@ -190,9 +216,9 @@ export function DesktopShell() {
         />
       ) : null}
 
-      {/* 桌面挂件：日月时钟（随时刻变色，入夜换月相）。放在窗口层之前，
-          所以窗口始终压在它上面；最大化时它会整个被盖住，和真桌面挂件一样 */}
-      <CelestialClock />
+      {/* 顶部菜单栏（macOS P2）：层次靠它自己的 z-70 —— 它压着窗口层与任务栏，
+          而窗口层的 `--inset-top` 已经把这条让出来了，所以正常不会有窗口盖到它。 */}
+      <MenuBar onTile={tile} />
 
       {/* 窗口层平时在任务栏下面（让开始菜单之类的弹出层能压住它）；
           有窗口伸到任务栏那一条上时才提级，见上面 overlapsDock */}
