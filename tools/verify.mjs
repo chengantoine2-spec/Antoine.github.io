@@ -503,7 +503,34 @@ async function run() {
     (tokenText.match(/Token 无效[^（]*（401）|Token 权限不足[^（]*（403）/) ?? ['未出现'])[0],
   )
 
+  /* ⚠️ 2026-10-06 最高优先修复（站主点名）：博客取数偶发失败时页面渲染 0 篇 →
+     后面所有 page.click 会超时**抛错**、整轮脚本当场中止，博客段之后的检查
+     （全屏 / 菜单栏 / 任务栏 / 时钟 / DSH…）一条都不跑 —— 而"没报崩"极容易被当成全绿（假绿）。
+     所以进这一节前先等文章数 > 0（1s 一探、最多 25s）；拿不到就把"数据就绪"断成红，
+     下面的检查照常往下跑（11b2/11c 那几处还会各自兜底，不许再抛出去）。 */
+  async function waitForPosts(timeoutMs = 25000) {
+    const started = Date.now()
+    let count = 0
+    while (Date.now() - started < timeoutMs) {
+      count = await p.evaluate(() => document.querySelectorAll('.blog__feed li').length)
+      if (count > 0) return count
+      await p.waitForTimeout(1000)
+    }
+    return count
+  }
+  const blogPostCount = await waitForPosts()
+  check(
+    '博客数据已就绪：文章数 > 0（拿不到时只把这条断成红，后面的检查仍会跑完）',
+    blogPostCount > 0,
+    `${blogPostCount} 篇`,
+  )
+
   // 11 博客窗口（数据来自 GitHub Issues；限流时显示缓存或提示，都算通过）
+  /* ⚠️ 整段罩一层 try/catch（2026-10-06 最高优先修复）：本节有十几处 p.evaluate / p.click
+     依赖"页面上真有文章卡片"（`.blog__feed li button`、`.article__grid`、`.width-handle`…），
+     取数失败时它们会抛错并**把整轮脚本带走**。已在两处按"先数后点"兜底，这里再加一层总兜底：
+     **本节无论怎么炸都只标红一条，后面几百项照跑**（这就是站主点名的"不许假绿"）。 */
+  try {
   await p.click(`${DOCK} button[aria-label="博客"]`)
   await p.waitForTimeout(2500)
   const blog = await p.evaluate(() => {
@@ -689,8 +716,21 @@ async function run() {
   )
 
   // 11c 文章详情页：最大化后左右两栏要出来，正文列放大但仍被限制（不跟着窗口无限拉长）
-  await p.click('.blog__feed li button')
-  await p.waitForTimeout(1500)
+  /* ⚠️ 这里是整轮脚本**最容易崩**的一处（2026-10-06 站主点名修的验收阻塞）：
+     取数偶发失败会渲染 0 篇文章 → 卡片点不到 → page.click 30s 超时并**抛错**，
+     于是脚本当场中止、后面几百项检查一条都不跑，而输出里看起来只是"少了几条"。
+     所以先数卡片：没有就标红，**让本段继续跑完**（后面的检查才是重点）。 */
+  const articleCards = await p.locator('.blog__feed li button').count()
+  if (articleCards === 0) {
+    check(
+      '文章详情页：博客列表里至少有 1 张卡片可点（0 张时本段会被跳过，但后面的检查必须照跑）',
+      false,
+      '0 张卡片（多半是取数失败）',
+    )
+  } else {
+    await p.click('.blog__feed li button')
+    await p.waitForTimeout(1500)
+  }
   await p.click(MAX_BTN)
   await p.waitForTimeout(250)
   const article = await p.evaluate(() => {
@@ -1040,6 +1080,15 @@ async function run() {
   /* 进全屏时顺手把当前窗口最大化了 —— 还原掉，别留给后面那几条"最大化"的检查 */
   await p.click(MAX_BTN)
   await p.waitForTimeout(200)
+
+  } catch (error) {
+    /* 本节炸了也不要紧：标红一条、继续跑后面的检查 —— 不许让"少跑了几百项"看着像通过。 */
+    check(
+      '博客小节未把整轮脚本带走（本节异常已就地捕获，后面的检查继续跑）',
+      false,
+      String(error && error.message ? error.message : error).slice(0, 140),
+    )
+  }
 
   // 12 最大化按钮必须跟着状态变（曾经写死成「最大化」，最大化之后完全看不出来，
   //    只能靠肉眼发现 —— 所以这里补一条回归检查）
@@ -3247,6 +3296,13 @@ async function run() {
 }
 
 run().catch((error) => {
-  console.error('[verify] 运行失败：' + error.message)
+  /* ⚠️ 2026-10-06 站主点名的"假绿"风险：以前这里只打一行"运行失败"，
+     人扫一眼输出很容易以为"其余都过了"—— 其实**后面的检查一条都没跑**。
+     所以这里把话说死：这是一轮**残缺**的运行，绝不能当成通过。 */
+  console.error('')
+  console.error('✗✗✗ [verify] 本轮**中途崩了**：从这里往后的检查一条都没执行 —— 绝不要当成通过！')
+  console.error('✗✗✗ 中止原因：' + error.message)
+  console.error('✗✗✗ 最常见原因：博客取数偶发失败 → 卡片点不到（博客小节已有"等文章数 > 0"的兜底；')
+  console.error('      若仍崩在这里，说明还有别的必抛点，请把它也改成"标红 + 继续"。')
   process.exit(1)
 })
