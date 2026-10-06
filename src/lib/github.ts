@@ -169,6 +169,37 @@ async function fetchRead(url: string): Promise<Response> {
   return response
 }
 
+/* 2026-10-06（站主点名的根因修复）：`loadPosts` 原来**失败即空列表、没有重试** ——
+   网络抖一下 / 撞上限流，用户就白屏看到"0 篇"，验证脚本也跟着红一片。
+   这里加**重试 + 退避**：网络错误、超时、5xx、403/429 都算可重试。
+   ⚠️ 只包"取数"这一层：缓存与"拿不到时回退到什么"的既有行为一个字没改。 */
+const RETRY_DELAYS_MS = [800, 2500]
+
+function isRetryable(response: Response | null, error: unknown): boolean {
+  if (error) return true // 网络错误 / 超时 / 被中断
+  if (!response) return true
+  return response.status === 403 || response.status === 429 || response.status >= 500
+}
+
+async function fetchReadWithRetry(url: string): Promise<Response> {
+  let lastError: unknown = null
+  let lastResponse: Response | null = null
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = await fetchRead(url)
+      if (!isRetryable(response, null)) return response
+      lastResponse = response
+    } catch (error) {
+      lastError = error
+    }
+    if (attempt < RETRY_DELAYS_MS.length) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+    }
+  }
+  if (lastResponse) return lastResponse
+  throw lastError ?? new Error('拿不到 GitHub 数据')
+}
+
 export async function loadPosts(options: { force?: boolean } = {}): Promise<BlogFeed> {
   const cached = readCache()
 
@@ -181,7 +212,7 @@ export async function loadPosts(options: { force?: boolean } = {}): Promise<Blog
   }
 
   try {
-    const response = await fetchRead(`${API}?state=all&per_page=50&sort=created&direction=desc`)
+    const response = await fetchReadWithRetry(`${API}?state=all&per_page=50&sort=created&direction=desc`)
 
     if (!response.ok) {
       const limited = response.status === 403 || response.status === 429
