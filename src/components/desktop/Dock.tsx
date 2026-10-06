@@ -14,6 +14,7 @@ import {
   MAGNIFY_EXP,
   MAGNIFY_MIN,
   MAGNIFY_PEAK,
+  MAGNIFY_RADIUS_SLOTS,
   MOVE_THRESHOLD,
   SPRING_DAMPING,
   SPRING_STIFFNESS,
@@ -166,6 +167,17 @@ export function Dock() {
     captured: boolean
   } | null>(null)
   const lift = useRef<{ el: HTMLElement; id: AppId } | null>(null)
+  /* ── 放大是**指针驱动**的（macOS 的真实行为：谁离指针近谁最大）────────────────
+     `pos`：指针在图标区**主轴上的视口坐标**（null = 指针不在图标区上）；
+     `fade` / `target`：整体强度 0~1 的平滑量 —— 指针进来推到 1、离开推回 0，
+     于是"指针不在 Dock 上时图标全部回到 1×"，而且是**渐变**过去不是突跳。
+     ⚠️ 只走 ref，不进 React 状态（每帧 setState 会把图标区整棵子树重渲，手感会飘）。 */
+  const pointer = useRef<{ pos: number | null; fade: number; target: number; last: number }>({
+    pos: null,
+    fade: 0,
+    target: 0,
+    last: 0,
+  })
   /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
   const [preview, setPreview] = useState<AppId[] | null>(null)
   /* 拖拽幽灵（站主报的 bug：拖出去的图标被图标区裁掉、看不见了）。它是**浮层**，
@@ -376,48 +388,42 @@ export function Dock() {
   const alongOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientY : e.clientX)
   const crossOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientX : e.clientY)
 
-  /** 按当前 offset 把 track 与每个图标的 scale 画出来。
-   *  画的是 `dampedOffset()`：界内原样、越界按苹果的橡皮筋公式衰减（拉 100px 实移不到 100px）。 */
+  /** 按当前 offset 与**指针位置**把 track 与每个图标的 scale 画出来。
+   *  画的是 `dampedOffset()`：界内原样、越界按苹果的橡皮筋公式衰减（拉 100px 实移不到 100px）。
+   *
+   *  放大 = **指针驱动**（macOS）：`u = clamp(|图标中心 − 指针| / (RADIUS_SLOTS × step), 0, 1)`、
+   *  `scale = 1 + (PEAK − 1) · (1 − u^EXP) · fade`。
+   *  - 指针正对的那个图标 ≈ 2×（`u = 0`）；
+   *  - 两侧按指数递减，3 格之外回 1.0×；
+   *  - `fade` 是整体强度：指针不在图标区上时为 0 → **所有图标都是 1×**（macOS 的 Dock 就是这样，
+   *    没有指针扫过时图标不放大）。它由 `tick()` 平滑推进，进/出都是渐变、不突跳。
+   *
+   *  ⚠️ 2026-10-06 之前是"按图标区**几何中心**"的固定鱼眼（指针在哪儿都放大中间那几个），
+   *  那不是 macOS 的行为 —— 已按「一切以 macOS 为准」改成指针驱动，别改回去。 */
   function paint() {
     const view = viewEl.current
     const track = trackEl.current
     if (!view || !track) return
     const off = dampedOffset(offset.current, maxOffset, viewLen)
     track.style.transform = vertical ? `translate3d(0, ${-off}px, 0)` : `translate3d(${-off}px, 0, 0)`
-    const vLen = vertical ? view.clientHeight : view.clientWidth
-    if (!vLen) return
-    const half = vLen / 2
     const items = [...track.querySelectorAll<HTMLElement>('[data-dock-item]')]
     if (!items.length) return
-    /* 放大曲线：`u = clamp((d - dMin) / (dMax - dMin), 0, 1)`、`scale = PEAK - (PEAK-MIN)·u^1.5`。
-       - **dMin**：把"最靠中心那个图标"当峰 → 中心恒 2.0×（格子是离散的，拿几何中心当峰时
-         任务栏一短，实测峰值只有 1.76×，达不到"看着就是 2×"）；
-       - **dMax**：**可见的那一段**里最外那个图标的距离 → 最外侧恒 `MAGNIFY_MIN`。
-         ⚠️ `MAGNIFY_MIN` 现在是 **1.0**（macOS 不缩边缘图标；0.8 那套已按总原则撤掉）。
-       - 只渲染**一份**列表了，所以不再有"别把副本算进 dMax"那个特殊处理。 */
-    const dist = new Map<HTMLElement, number>()
-    let dMin = Infinity
-    let dMax = 0
-    items.forEach((el) => {
-      const c = (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
-      const d = Math.abs(c - half)
-      dist.set(el, d)
-      const pad = el.offsetWidth / 2
-      if (c >= -pad && c <= vLen + pad) {
-        if (d < dMin) dMin = d
-        if (d > dMax) dMax = d
-      }
-    })
-    if (!Number.isFinite(dMin)) dMin = 0
-    const span = Math.max(1, dMax - dMin)
+    const { pos, fade } = pointer.current
+    const radius = Math.max(1, MAGNIFY_RADIUS_SLOTS * step)
     items.forEach((el) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
       if (lift.current && lift.current.el === el) return
-      const u = clamp(((dist.get(el) ?? 0) - dMin) / span, 0, 1)
-      const s = MAGNIFY_PEAK - (MAGNIFY_PEAK - MAGNIFY_MIN) * Math.pow(u, MAGNIFY_EXP)
+      let s = 1
+      if (pos !== null && fade > 0.002) {
+        /* 图标中心在**视口坐标**里的位置：布局位置减掉当前偏移 */
+        const c = (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
+        const u = clamp(Math.abs(c - pos) / radius, 0, 1)
+        s = 1 + (MAGNIFY_PEAK - MAGNIFY_MIN) * (1 - Math.pow(u, MAGNIFY_EXP)) * fade
+      }
       if (Math.abs(s - 1) > 0.001) {
         el.style.transform = `scale(${s.toFixed(3)})`
-        el.style.zIndex = String(1 + Math.round((1 - u) * 10))
+        /* 越大的越靠前，免得被邻居压住（指针正对的那个 z 最高） */
+        el.style.zIndex = String(1 + Math.round((s - 1) * 20))
       } else {
         el.style.transform = ''
         el.style.zIndex = ''
@@ -425,14 +431,34 @@ export function Dock() {
     })
   }
 
-  /** 拖动中每帧只排一次 rAF */
+  /* 放大强度的平滑推进 + 重画。⚠️ **只用 `raf.current` 这一个 rAF 槽**（拖动与强度共用），
+     不开第二条循环：谁先要一帧谁排，进来时若已有帧在排队就直接返回。
+     `dt` 用真实时间，时间常数 ~90ms —— 指针扫过时图标"跟着鼓起来"，离开时平滑回落。 */
+  function tick() {
+    const pt = pointer.current
+    const now = performance.now()
+    const dt = pt.last ? Math.min(0.05, Math.max(0.001, (now - pt.last) / 1000)) : 0.016
+    pt.last = now
+    pt.fade += (pt.target - pt.fade) * Math.min(1, dt / 0.09)
+    const settled = Math.abs(pt.target - pt.fade) < 0.004
+    if (settled) pt.fade = pt.target
+    paint()
+    if (settled) {
+      raf.current = 0
+    } else {
+      raf.current = requestAnimationFrame(tick)
+    }
+  }
+  function scheduleTick() {
+    if (raf.current) return
+    pointer.current.last = 0
+    raf.current = requestAnimationFrame(tick)
+  }
+
+  /** 拖动中每帧只排一次 rAF（和放大强度**共用同一个槽**，不开第二条循环） */
   function schedulePaint(next: number) {
     offset.current = clampRaw(next)
-    if (raf.current) return
-    raf.current = requestAnimationFrame(() => {
-      raf.current = 0
-      paint()
-    })
+    scheduleTick()
   }
 
   /* 松手 / 滚轮之后**回弹到界内**（macOS 滚动视图的行为）：
@@ -519,9 +545,27 @@ export function Dock() {
     lift.current = null
   }
 
+  /** 指针离开图标区：**只把放大强度的目标置 0**（图标平滑回 1×）。
+   *  ⚠️ 这里绝不碰 `offset` / `lift` / 手势状态机 —— 拖动中指针跑远时也会触发 leave，
+   *  误动那些就会把"竖拖换位"与幽灵弄坏（上一版就是先红在这两条上）。 */
+  function wheelLeave() {
+    if (gesture.current) return
+    pointer.current.pos = null
+    pointer.current.target = 0
+    scheduleTick()
+  }
+
   function wheelMove(e: React.PointerEvent<HTMLDivElement>) {
-    const g = gesture.current
     const view = viewEl.current
+    /* ① 指针位置 → 放大中心（**必须在"有没有手势"的判断之前**：鼠标只悬停、没按键也要放大）。
+       `pos` 用主轴上的**视口坐标**，和 paint() 里算图标中心时同一套坐标系。 */
+    if (view) {
+      const rect = view.getBoundingClientRect()
+      pointer.current.pos = alongOf(e) - (vertical ? rect.top : rect.left)
+      pointer.current.target = 1
+      scheduleTick()
+    }
+    const g = gesture.current
     if (!g || !view) return
     g.clientX = e.clientX
     g.clientY = e.clientY
@@ -591,9 +635,20 @@ export function Dock() {
     }
   }
 
-  function wheelUp() {
+  function wheelUp(e?: React.PointerEvent<HTMLDivElement>) {
     const g = gesture.current
     gesture.current = null
+    /* 浏览/换位时常常已经拖到图标区外面（指针被捕获了，收不到 pointerleave）：
+       松手这一刻按真实坐标复位放大强度，否则图标会停在"放大着"的状态。 */
+    const upView = viewEl.current
+    if (upView && e) {
+      const r = upView.getBoundingClientRect()
+      const inside =
+        e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2
+      pointer.current.pos = inside ? alongOf(e) - (vertical ? r.top : r.left) : null
+      pointer.current.target = inside ? 1 : 0
+      scheduleTick()
+    }
     if (lift.current) {
       lift.current.el.classList.remove('dock__item--lift')
       lift.current.el.style.transform = ''
@@ -868,6 +923,7 @@ export function Dock() {
           data-dock-pos={position}
           onPointerDown={wheelDown}
           onPointerMove={wheelMove}
+          onPointerLeave={wheelLeave}
           onPointerUp={wheelUp}
           onPointerCancel={wheelUp}
           onWheel={wheelOnWheel}

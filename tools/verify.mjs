@@ -1242,15 +1242,18 @@ async function run() {
        · 放大峰仍 2×，但**边缘回到 1.0×**（macOS 不缩边缘图标，原来 0.8 那套撤了）。
      三个固定按钮（开始 / 全屏 / 位置）钉在两端，不参与滚动与放大。
      旧的折行行为保留成设置里的可选项（wrap），那套断言在 14e 那一段。 */
-  const wheelProbe = () =>
-    p.evaluate((sel) => {
+  /* ⚠️ 放大现在是**指针驱动**的（2026-10-06「一切以 macOS 为准」）：谁离指针近谁最大、
+     指针不在 Dock 上时全部回 1×。所以 `mid` = **指针在主轴上位置**（没传就退回几何中点，
+     那种情况只用于"指针移开后"的检查里排序，不参与判峰）。 */
+  const wheelProbe = (pointerX = null) =>
+    p.evaluate(({ sel, pointerX }) => {
       const bar = document.querySelector(sel)
       const view = bar?.querySelector('[data-dock-view]')
       const track = bar?.querySelector('[data-dock-track]')
       const items = [...(track?.querySelectorAll('[data-dock-item]') ?? [])]
       const primary = items.filter((b) => b.getAttribute('data-dock-copy') === '1')
       const vr = view?.getBoundingClientRect()
-      const mid = vr ? vr.x + vr.width / 2 : 0
+      const mid = pointerX ?? (vr ? vr.x + vr.width / 2 : 0)
       const byDistance = primary
         .map((b) => {
           const r = b.getBoundingClientRect()
@@ -1332,8 +1335,26 @@ async function run() {
         })(),
         rubberDim: vr ? Math.round(vr.width * 0.25) : 0,
       }
-    }, DOCK)
-  const wheel0 = await wheelProbe()
+    }, { sel: DOCK, pointerX })
+  /* 把指针移到某个具体图标的**正中**（挑离可视区中点最近的那个，不会在边缘被裁），
+     等放大强度平滑到位，再量曲线 —— 这就是"指针驱动"的测法：
+     **指针正对的那个图标必须最大且 ≈2×**，而不是"几何中点那个最大"。 */
+  const hoverTarget = await p.evaluate((sel) => {
+    const view = document.querySelector(`${sel} [data-dock-view]`)
+    if (!view) return null
+    const vr = view.getBoundingClientRect()
+    const mid = vr.x + vr.width / 2
+    const cand = [...view.querySelectorAll('[data-dock-item][data-dock-copy="1"]')]
+      .map((b) => {
+        const r = b.getBoundingClientRect()
+        return { id: b.dataset.dockItem, x: r.x + r.width / 2, y: r.y + r.height / 2, d: Math.abs(r.x + r.width / 2 - mid) }
+      })
+      .sort((a, b) => a.d - b.d)
+    return cand[0] ?? null
+  }, DOCK)
+  await p.mouse.move(hoverTarget.x, hoverTarget.y)
+  await p.waitForTimeout(340)
+  const wheel0 = await wheelProbe(hoverTarget.x)
   check(
     '任务栏图标区：永远单行（所有图标同一个布局 top），图标区是**可滚动视口**（macOS 的回弹就建在它上面）',
     wheel0.rows === 1 && wheel0.hasView && wheel0.hasTrack && wheel0.apps > 1,
@@ -1402,19 +1423,19 @@ async function run() {
     JSON.stringify({ 期望: 0.72, 实测样本: glyphProbe.sample }),
   )
 
-  /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`，PEAK = 2、**MIN = 1.0**、指数 1.5。
-     2026-10-06「一切以 macOS 为准」：macOS 的 Dock **不把边缘图标缩小**，
-     所以站主 2026-10-05 那条"越远越小、最外侧 0.8×"已经撤掉，最外侧必须回到 1.0×。 */
+  /* 放大 = **指针驱动**（2026-10-06「一切以 macOS 为准」）：上面已经把指针移到某个图标正中，
+     所以 `centerScale` 现在是"**指针正对的那个图标**"的 scale，`monoOk` 是"按离指针的距离单调递减"。
+     PEAK = 2、MIN = 1.0（macOS 不缩边缘图标）、影响半径 `MAGNIFY_RADIUS_SLOTS = 3` 格。 */
   check(
-    '中央放大：中心 ≥1.9×、按实测距离单调递减、**最外侧回到 1.0×**（macOS 不缩边缘图标；0.8 那套已撤）',
+    '指针驱动放大：**指针正对的那个图标最大且 ≥1.9×**、离指针越远越小、最外侧回到 1.0×（macOS 不缩边缘图标）',
     wheel0.centerScale >= 1.9 &&
       wheel0.monoOk &&
       wheel0.edgeScale >= 0.98 &&
       wheel0.edgeScale <= 1.02,
     JSON.stringify({
-      center: wheel0.centerScale,
-      曲线: wheel0.curve,
-      outer: wheel0.edgeScale,
+      指针正对的图标: wheel0.centerScale,
+      曲线按离指针的距离: wheel0.curve,
+      最外侧: wheel0.edgeScale,
       单调递减: wheel0.monoOk,
     }),
   )
@@ -1438,6 +1459,17 @@ async function run() {
     '图标区只裁主轴（clip-path ≠ none）：可视区左右两侧外面的点命不中任何图标（滚出可视区的图标点不到）',
     wheel0.clipPath !== 'none' && wheel0.mainAxisClipped,
     JSON.stringify({ clipPath: wheel0.clipPath, 主轴外侧命不中图标: wheel0.mainAxisClipped }),
+  )
+
+  /* 14a3 **指针不在 Dock 上 = 不放大**（macOS 的行为：没有指针扫过时 Dock 是平的，
+     没有"常驻的固定鱼眼"）。把指针移到屏幕中间再量：所有 scale 应该回到 1.0×。 */
+  await p.mouse.move(640, 320)
+  await p.waitForTimeout(360)
+  const wheelAway = await wheelProbe()
+  check(
+    '指针**不在 Dock 上**时不放大：所有图标回 1.0×（没有常驻的固定鱼眼 —— macOS 只在指针扫过时放大）',
+    wheelAway.curve.length > 0 && wheelAway.curve.every((s) => s <= 1.02),
+    JSON.stringify({ 指针移开后: wheelAway.curve }),
   )
 
   /* 14b 拖拽浏览 + **回弹**（2026-10-06「跟随 macOS 改成回弹」）：
@@ -1753,13 +1785,30 @@ async function run() {
   })
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(900)
-  const verticalWheel = await p.evaluate((sel) => {
+  /* 放大是**指针驱动**的（见上面 14a2）：左停靠也要先把指针移到某个图标上再量 ——
+     竖排时"指针位置"是 **y**。挑离可视区垂直中点最近的那个（不会在边缘被裁）。 */
+  const leftTarget = await p.evaluate((sel) => {
+    const view = document.querySelector(`${sel} [data-dock-view]`)
+    if (!view) return null
+    const vr = view.getBoundingClientRect()
+    const mid = vr.y + vr.height / 2
+    const cand = [...view.querySelectorAll('[data-dock-item][data-dock-copy="1"]')]
+      .map((b) => {
+        const r = b.getBoundingClientRect()
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, d: Math.abs(r.y + r.height / 2 - mid) }
+      })
+      .sort((a, b) => a.d - b.d)
+    return cand[0] ?? null
+  }, DOCK)
+  await p.mouse.move(leftTarget.x, leftTarget.y)
+  await p.waitForTimeout(340)
+  const verticalWheel = await p.evaluate(({ sel, pointerY }) => {
     const bar = document.querySelector(sel)
     const view = bar?.querySelector('[data-dock-view]')
     const track = bar?.querySelector('[data-dock-track]')
     const items = [...(track?.querySelectorAll('[data-dock-item][data-dock-copy="1"]') ?? [])]
     const vr = view?.getBoundingClientRect()
-    const mid = vr ? vr.y + vr.height / 2 : 0
+    const mid = pointerY ?? (vr ? vr.y + vr.height / 2 : 0)
     const scales = items
       .map((b) => {
         const r = b.getBoundingClientRect()
@@ -1778,9 +1827,9 @@ async function run() {
       center: Number((scales[0]?.s ?? 0).toFixed(2)),
       edge: Number((scales[scales.length - 1]?.s ?? 0).toFixed(2)),
     }
-  }, DOCK)
+  }, { sel: DOCK, pointerY: leftTarget.y })
   check(
-    '左停靠 = 单列图标区：图标同一列、有垂直的滚动轨道、中央一样放大、**只渲染一份**（回弹，不是循环）',
+    '左停靠 = 单列图标区：图标同一列、有垂直的滚动轨道、**指针正对的那个一样放大**、**只渲染一份**（回弹，不是循环）',
     verticalWheel.verticalBar &&
       verticalWheel.cols === 1 &&
       verticalWheel.hasView &&

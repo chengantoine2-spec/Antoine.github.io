@@ -37,6 +37,14 @@ export const MAGNIFY_MIN = 1
 /** 衰减曲线的指数（1.5：中心附近变化慢、外侧收得快） */
 export const MAGNIFY_EXP = 1.5
 /**
+ * 放大影响范围：离**指针**这么多个图标位之外就完全回到 1×（macOS 的放大只带动指针两侧几格）。
+ * 定标：`u = clamp(|图标中心 − 指针位置| / (MAGNIFY_RADIUS_SLOTS × step), 0, 1)` →
+ * **指针正对的那个图标 ≈ PEAK（2×）**、两侧按 `u^EXP` 递减、3 格之外回到 `MAGNIFY_MIN`（1.0×）。
+ * ⚠️ 2026-10-06：放大从"按图标区**几何中心**"改成"**按指针位置**"（macOS 的真实行为）。
+ * 别改回中心定标 —— 那样指针挪到哪儿放大峰都钉在中间，macOS 上不存在这种固定鱼眼。
+ */
+export const MAGNIFY_RADIUS_SLOTS = 3
+/**
  * Dock 按钮里图标占按钮边长的比例。
  *
  * 来历：`design/ICON-MACOS-BRIEF.md` 读代码量出来的**与 macOS 差距最大的单点** ——
