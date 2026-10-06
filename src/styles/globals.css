@@ -1169,6 +1169,11 @@
    ⚠️ 自定义 CSS 一律写在 `@layer` 之外（见「坑 1」：Tailwind 会把扫不到的规则整条裁掉）。 */
 .dock__view {
   position: relative;
+  /* ⚠️ 2026-10-06 站主：「回弹设置里面，让图标**居中**摆放」——
+     视口改成 flex 容器，让轨道用**内层 `margin: auto`** 居中。
+     ⚠️ **绝不能在滚动/裁剪容器上写 `justify-content: center`**（坑 5）：内容超出时超出的那一侧
+     会落到滚动原点之外、滚轮与拖动都够不到。`margin: auto` 在装得下时居中、真超出时自动解析成 0。 */
+  display: flex;
   /* ⚠️ **不能退回 `overflow: hidden`**（那会把 2× 的中心图标裁掉）——
      裁剪只保留**主轴**：靠下面的 `clip-path` 裁掉循环用的第二份副本，
      交叉轴给足负值 = 不裁 = 放大的图标从任务栏边**凸出去**（站主要的那种夸张感）。
@@ -1211,6 +1216,28 @@
   flex-wrap: nowrap;
   align-items: center;
   will-change: transform;
+  /* 装得下时**居中**（站主 2026-10-06），真超出时 `auto` 自动解析成 0、内容从原点开始（坑 5）。
+     父级 `.dock__view` 是 flex 容器，所以这一条对主轴与交叉轴都有效。 */
+  margin: auto;
+}
+/* 名称气泡（站主 2026-10-06 给了 **macOS 实拍图**，按图对齐）：
+   **浅灰半透明 + backdrop-filter 吃背景色 + 深色粗体字 + 圆角 10 + 无描边 + 轻投影**。
+   ⚠️ 那点"材质"感全在 `--c-tip-blur`（`blur(20px) saturate(180%)`，与 Dock 底板同一套手法）：
+   实拍图上气泡偏粉，是**透出了后面的红壁纸** —— 少了 backdrop-filter 就变成一块死灰。
+   ⚠️ macOS 的气泡**固定尺寸、不随图标缩放**：这里绝不许用 `transform: scale()` 跟着放大。
+   ⚠️ 颜色 / 模糊 / 投影全走令牌（`--c-tip-*`，两套主题各一份），组件里不写死。 */
+.dock__tip {
+  border-radius: 10px;
+  border: 0;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  background: var(--c-tip-bg);
+  color: var(--c-tip-ink);
+  box-shadow: var(--c-tip-shadow);
+  backdrop-filter: var(--c-tip-blur);
+  -webkit-backdrop-filter: var(--c-tip-blur);
 }
 .dock__track--v {
   flex-direction: column;

@@ -12,7 +12,6 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
-  MAGNIFY_NEIGHBOR,
   MAGNIFY_PEAK,
   MAGNIFY_RADIUS_SLOTS,
   MOVE_THRESHOLD,
@@ -183,11 +182,25 @@ export function Dock() {
      `fade` / `target`：整体强度 0~1 的平滑量 —— 指针进来推到 1、离开推回 0，
      于是"指针不在 Dock 上时图标全部回到 1×"，而且是**渐变**过去不是突跳。
      ⚠️ 只走 ref，不进 React 状态（每帧 setState 会把图标区整棵子树重渲，手感会飘）。 */
-  const pointer = useRef<{ pos: number | null; fade: number; target: number; last: number }>({
+  const pointer = useRef<{
+    pos: number | null
+    fade: number
+    target: number
+    last: number
+    /* ⚠️ 2026-10-06：`hot` 从"整数槽位"改成**连续浮点**（单位 = 槽位，可带小数）。
+       站主：「从一个图标左右移动到另一个图标的时候没有动画，或者太快了我看不清」——
+       整数槽位会让指针一跨过中点就整档**跳**过去；浮点 + 平滑推进之后，
+       两档之间会同时喂给相邻两个图标，看起来就是放大**滑过去**的。
+       `hotTarget` = 指针当前对应的槽位（连续），`hot` = 每帧向它推进的显示值。 */
+    hot: number
+    hotTarget: number
+  }>({
     pos: null,
     fade: 0,
     target: 0,
     last: 0,
+    hot: 0,
+    hotTarget: 0,
   })
   /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
   const [preview, setPreview] = useState<AppId[] | null>(null)
@@ -314,28 +327,35 @@ export function Dock() {
   function hoverStyle(state: HoverState): CSSProperties {
     const cx = state.rect.left - state.bar.left + state.rect.width / 2
     const cy = state.rect.top - state.bar.top + state.rect.height / 2
+    /* ⚠️ 2026-10-06 站主：「图标的名字气泡放在**放大之后的图标上面**，现在是在放大图标的内部」——
+       放大是 `transform: scale()`，**不动布局**，所以按钮的布局盒还是原尺寸；
+       气泡原来贴的是**布局盒**的边，于是被 2× 的图标顶穿。
+       这里按"放大后的可见包围盒"算：贴栏侧 `transform-origin` → 增量 `(PEAK − 1) × 盒子边长`
+       **整个长到栏外**，所以往外挪这么多再加上 8px 间距就永远在图标上方。 */
+    const grownY = (MAGNIFY_PEAK - 1) * state.rect.height
+    const grownX = (MAGNIFY_PEAK - 1) * state.rect.width
     switch (position) {
       case 'bottom':
         return {
           left: cx,
-          top: state.rect.top - state.bar.top - 8,
+          top: state.rect.top - state.bar.top - grownY - 8,
           transform: 'translate(-50%, -100%)',
         }
       case 'top':
         return {
           left: cx,
-          top: state.rect.bottom - state.bar.top + 8,
+          top: state.rect.bottom - state.bar.top + grownY + 8,
           transform: 'translateX(-50%)',
         }
       case 'left':
         return {
-          left: state.rect.right - state.bar.left + 8,
+          left: state.rect.right - state.bar.left + grownX + 8,
           top: cy,
           transform: 'translateY(-50%)',
         }
       default:
         return {
-          left: state.rect.left - state.bar.left - 8,
+          left: state.rect.left - state.bar.left - grownX - 8,
           top: cy,
           transform: 'translate(-100%, -50%)',
         }
@@ -422,46 +442,44 @@ export function Dock() {
     track.style.transform = vertical ? `translate3d(0, ${-off}px, 0)` : `translate3d(${-off}px, 0, 0)`
     const items = [...track.querySelectorAll<HTMLElement>('[data-dock-item]')]
     if (!items.length) return
-    const { pos, fade } = pointer.current
+    const { pos, fade, hot } = pointer.current
     const active = pos !== null && fade > 0.002
-    /* 图标中心在**视口主轴**上的位置：布局位置减掉当前偏移 */
-    const centerOf = (el: HTMLElement) =>
-      (vertical ? el.offsetTop : el.offsetLeft) + el.offsetWidth / 2 - off
-    /* ① 先找**指针正对的那个**（最近的槽位）—— 三档里唯一会放大到 2× 的 */
-    let hotIdx = -1
-    if (active) {
-      let best = Infinity
-      items.forEach((el, i) => {
-        if (lift.current && lift.current.el === el) return
-        const d = Math.abs(centerOf(el) - pos)
-        if (d < best) {
-          best = d
-          hotIdx = i
-        }
-      })
-    }
-    /* ② 让位幅度：hot 居中放大，每侧涨出 `(PEAK − 1) · 图标边长 / 2`；
-       紧邻那个**让满**这半个增量，更外侧按槽位折半递减（越远越少）。 */
     const magBtn = Math.max(1, step - GAP)
-    const growth = (MAGNIFY_PEAK - 1) * magBtn * 0.5
+    /* ① macOS 的**波浪**（站主 2026-10-06 最终口径：「想要 macOS 那种指针扫过时的"波浪"，
+       越想 macOS 越好，最好一模一样」；中间那条三档模型已被否）：
+       `wave(d) = (1 − min(d/RADIUS, 1))^1.5` —— d = 离指针的**格数**（`hot` 是连续浮点，
+       所以波峰会跟着指针平滑移动）。
+       ⚠️ **实测教训**：半径 5 + 余弦曲线时紧邻那个也到 **1.89×** —— "中部最鼓"变成"一大片都鼓"，
+       而且邻居让不开、渲染盒相交（被"不相交"断言当场抓住）。换成幂 1.5 后曲线是
+       `2.00 / 1.65 / 1.35 / 1.13 / 1.00`（R=4）：峰附近变化快、远处趋平，
+       正是站主说的"中部最鼓、两端迅速收平"。 */
+    const wave = (d: number) => {
+      const t = Math.min(1, Math.abs(d) / MAGNIFY_RADIUS_SLOTS)
+      return Math.pow(1 - t, 1.5)
+    }
+    const scales = items.map((_, i) => 1 + (MAGNIFY_PEAK - 1) * wave(i - hot) * (active ? fade : 0))
+    /* ② **整排铺开**（波浪的关键，也是 macOS 的做法）：图标被放大 `(s−1)·边长`，每侧涨出一半；
+       相邻两个的**两个半边之和**就是它们之间必须让开的量。所以位移按**逐个缝隙累加**：
+       `gapShift(j) = ((s_j − 1) + (s_{j+1} − 1)) · 边长 / 2`。
+       这条式子的好处：`step ≥ 边长` 时**数学上必然不相交**，剩下的正好是 `GAP` 那点缝 ——
+       不用拍脑袋乘系数（上一版用固定倍数，余弦曲线下被断言抓出重叠）。 */
+    const gapShift = (j: number) => ((scales[j] - 1) + (scales[j + 1] - 1)) * magBtn * 0.5
+    const hotInt = Math.round(hot)
+    const shifts = items.map((_, i) => {
+      if (!active || i === hotInt) return 0
+      let acc = 0
+      if (i > hotInt) {
+        for (let j = hotInt; j < i && j < scales.length - 1; j += 1) acc += gapShift(j)
+        return acc
+      }
+      for (let j = i; j < hotInt; j += 1) acc += gapShift(j)
+      return -acc
+    })
     items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
       if (lift.current && lift.current.el === el) return
-      let s = 1
-      let shift = 0
-      let z = ''
-      if (active && hotIdx >= 0) {
-        const d = Math.abs(i - hotIdx)
-        if (d === 0) {
-          s = 1 + (MAGNIFY_PEAK - 1) * fade
-          z = '3'
-        } else {
-          if (d === 1) s = 1 + (MAGNIFY_NEIGHBOR - 1) * fade
-          const fall = d === 1 ? 1 : (Math.max(0, 1 - (d - 1) / MAGNIFY_RADIUS_SLOTS) * 0.5)
-          shift = growth * fall * fade * (i < hotIdx ? -1 : 1)
-          if (Math.abs(shift) > 0.05) z = '2'
-        }
-      }
+      const s = scales[i] ?? 1
+      const shift = shifts[i] ?? 0
       const parts: string[] = []
       if (Math.abs(shift) > 0.05) {
         parts.push(vertical ? `translateY(${shift.toFixed(2)}px)` : `translateX(${shift.toFixed(2)}px)`)
@@ -469,7 +487,8 @@ export function Dock() {
       if (Math.abs(s - 1) > 0.001) parts.push(`scale(${s.toFixed(3)})`)
       if (parts.length) {
         el.style.transform = parts.join(' ')
-        el.style.zIndex = z
+        /* 越大的越靠前（峰最高），让位的邻居次之 —— 免得被压住 */
+        el.style.zIndex = s > 1.5 ? '3' : Math.abs(shift) > 0.05 ? '2' : ''
       } else {
         el.style.transform = ''
         el.style.zIndex = ''
@@ -477,19 +496,25 @@ export function Dock() {
     })
   }
 
-  /* 放大强度的平滑推进 + 重画。⚠️ **只用 `raf.current` 这一个 rAF 槽**（拖动与强度共用），
-     不开第二条循环：谁先要一帧谁排，进来时若已有帧在排队就直接返回。
-     `dt` 用真实时间，时间常数 ~90ms —— 指针扫过时图标"跟着鼓起来"，离开时平滑回落。 */
+  /* 放大强度 + **hot 位置**的平滑推进 + 重画。⚠️ **只用 `raf.current` 这一个 rAF 槽**
+     （拖动、强度、hot 三者共用），不开第二条循环：谁先要一帧谁排，进来时若已有帧在排队就直接返回。
+     `dt` 用真实时间：
+       · `fade` 时间常数 ~90ms —— 指针扫过时图标"跟着鼓起来"，离开时平滑回落；
+       · `hot` 时间常数 ~70ms（≈ 3τ 收敛在 200ms 上下）—— 站主 2026-10-06 要的"从 A 移到 B
+         要看得见过渡"：两个图标之间的**滑动**就发生在这里。两者**同一帧推进**，所以放大与让位同步。 */
   function tick() {
     const pt = pointer.current
     const now = performance.now()
     const dt = pt.last ? Math.min(0.05, Math.max(0.001, (now - pt.last) / 1000)) : 0.016
     pt.last = now
     pt.fade += (pt.target - pt.fade) * Math.min(1, dt / 0.09)
-    const settled = Math.abs(pt.target - pt.fade) < 0.004
-    if (settled) pt.fade = pt.target
+    const fadeSettled = Math.abs(pt.target - pt.fade) < 0.004
+    if (fadeSettled) pt.fade = pt.target
+    const hotSettled = Math.abs(pt.hot - pt.hotTarget) < 0.012
+    if (hotSettled) pt.hot = pt.hotTarget
+    else pt.hot += (pt.hotTarget - pt.hot) * Math.min(1, dt / 0.07)
     paint()
-    if (settled) {
+    if (fadeSettled && hotSettled) {
       raf.current = 0
     } else {
       raf.current = requestAnimationFrame(tick)
@@ -559,16 +584,29 @@ export function Dock() {
     const view = viewEl.current
     if (!view || itemCount === 0) return null
     const rect = view.getBoundingClientRect()
-    const p = alongOf(e) - (vertical ? rect.top : rect.left)
-    const raw = Math.round((p + offset.current - btn / 2) / step)
-    const idx = clamp(raw, 0, itemCount - 1)
-    /* 再确认指针真的压在某个图标上（点空白不进入换位） */
+    /* ⚠️ 2026-10-06：轨道现在会**居中**（`.dock__track { margin: auto }`，站主要图标居中），
+       所以不能再拿 `p + offset` 反推槽位（那套默认内容从视口原点开始，居中之后会偏半个余量）。
+       改成直接用**渲染盒**找最近的那个 —— 居中与否都对，也顺带支持放大后的盒子。 */
     const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
-    const hit = items ? [...items].some((el) => {
+    if (!items || items.length === 0) return null
+    const p = alongOf(e) - (vertical ? rect.top : rect.left)
+    let idx = -1
+    let best = Infinity
+    ;[...items].forEach((el, i) => {
+      const r = el.getBoundingClientRect()
+      const c = (vertical ? r.top + r.height / 2 : r.left + r.width / 2) - (vertical ? rect.top : rect.left)
+      const d = Math.abs(c - p)
+      if (d < best) {
+        best = d
+        idx = i
+      }
+    })
+    /* 再确认指针真的压在某个图标上（点空白不进入换位） */
+    const hit = [...items].some((el) => {
       const r = el.getBoundingClientRect()
       return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
-    }) : false
-    return hit ? idx : null
+    })
+    return hit && idx >= 0 ? idx : null
   }
 
   function wheelDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -609,6 +647,12 @@ export function Dock() {
       const rect = view.getBoundingClientRect()
       pointer.current.pos = alongOf(e) - (vertical ? rect.top : rect.left)
       pointer.current.target = 1
+      /* ② **连续**的 hot 槽位（带小数）：指针在两格之间时它是 k+0.5 这种值，
+         于是放大与让位会**在相邻两个图标之间平滑滑动**（站主要的那种"看得见"的过渡）。
+         指针刚进图标区（fade 还≈0）时**直接吸到目标**，免得从最左边滑过来。 */
+      const raw = (pointer.current.pos + offset.current - btn / 2) / step
+      pointer.current.hotTarget = clamp(raw, 0, Math.max(0, itemCount - 1))
+      if (pointer.current.fade < 0.02) pointer.current.hot = pointer.current.hotTarget
       scheduleTick()
     }
     const g = gesture.current
@@ -1045,7 +1089,10 @@ export function Dock() {
         <span
           role="tooltip"
           style={hoverStyle(hover)}
-          className="pointer-events-none absolute z-50 whitespace-nowrap rounded border border-edge bg-surface px-2 py-1 text-[11px] text-ink shadow-lg"
+          /* 站主 2026-10-06：「气泡背景改成**灰色的半透明**状，文字增加对比度，显得更清楚」——
+             颜色全在令牌里（`--c-tip-bg` / `--c-tip-ink`，两套主题各一份），组件里不写死颜色。
+             对比度按 **alpha 与实际底合成后**算（`verify.mjs` 有那条断言，≥4.5:1）。 */
+          className="dock__tip pointer-events-none absolute z-50 whitespace-nowrap px-2 py-1 text-[11px]"
         >
           {hover.name}
         </span>

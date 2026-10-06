@@ -476,12 +476,36 @@ async function run() {
   )
   check('博客创作窗口带图片区（img 分支）', writeText.includes('图片（img 分支）'))
 
-  const dockTarget = await p.evaluate((sel) => {
-    const el = document.querySelector(`${sel} button[aria-label="博客"]`)
-    const rect = el.getBoundingClientRect()
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-  }, DOCK)
-  await p.mouse.move(dockTarget.x, dockTarget.y)
+  /* ⚠️ 2026-10-06「波浪」之后**落点必须用布局坐标**（`offsetLeft`）算，不能用渲染盒 `rect`：
+     波浪会把图标 `translateX` 推开，用渲染盒取中点会取到"被推开之后"的位置，
+     指针落到那儿时波峰已经换人 —— 表现为 tooltip 显示成邻居的名字（实测踩过，显示成了"项目"）。
+     而**波峰那个图标本身位移为 0**，它的最终位置就是布局位置，所以布局坐标才是稳定落点。
+     另外用 `steps` 分步移动（像真人那样滑过去），让波浪一路跟着走。 */
+  const dockTarget = async () =>
+    p.evaluate((sel) => {
+      const view = document.querySelector(`${sel} [data-dock-view]`)
+      const el = document.querySelector(`${sel} button[aria-label="博客"]`)
+      if (!view || !el) return null
+      const vr = view.getBoundingClientRect()
+      const track = el.parentElement
+      return {
+        x: vr.left + el.offsetLeft - (track?.offsetLeft ?? 0) + el.offsetWidth / 2,
+        y: vr.top + el.offsetHeight / 2,
+      }
+    }, DOCK)
+  /* 波浪之后统一用它悬停"博客"：**布局坐标**（波峰图标位移为 0，停在布局位）+ 分步滑过去，
+     否则渲染盒取到的是被推开后的位置，指针会落到隔壁图标上。 */
+  const hoverBlog = async () => {
+    const t = await dockTarget()
+    await p.mouse.move(t.x, t.y, { steps: 8 })
+    await p.waitForTimeout(450)
+  }
+
+  let dt = await dockTarget()
+  await p.mouse.move(dt.x, dt.y, { steps: 8 })
+  await p.waitForTimeout(320)
+  dt = await dockTarget()
+  await p.mouse.move(dt.x, dt.y, { steps: 8 })
   await p.waitForTimeout(500)
   const tooltip = await p.evaluate(
     (sel) => document.querySelector(`${sel} [role="tooltip"]`)?.textContent?.trim() ?? null,
@@ -1643,7 +1667,11 @@ async function run() {
      气泡是任务栏里的浮层、不在按钮里；文字 = **应用名**（菜名仍留在 title 里）。
      取"叶子节点且文字正好等于应用名、又不在任何窗口或按钮里"的元素 —— 这样窗口标签
      （"博客"）与按钮本身都不会误命中，只有气泡会。 */
-  await p.hover(`${DOCK} button[aria-label="博客"]`)
+  /* ⚠️ 2026-10-06 波浪之后：`p.hover()` 只瞬移一次，落点会触发整排铺开、图标从指针底下挪开，
+     所以**悬停两次**（第二次才是稳定态）。这条不改断言语义，只改成"像真人那样停住"。 */
+  await hoverBlog()
+  await p.waitForTimeout(320)
+  await hoverBlog()
   await p.waitForTimeout(350)
   const bubble = await p.evaluate(() => {
     const hit = [...document.querySelectorAll('body *')].filter(
@@ -1656,6 +1684,72 @@ async function run() {
     return { n: hit.length, text: hit[0]?.textContent?.trim() ?? '' }
   })
   check('悬停应用图标浮出**名称气泡**，文字就是应用名（不掺菜名）', bubble.n > 0 && bubble.text === '博客', JSON.stringify(bubble))
+  /* 气泡是不是 **macOS 的材质**（站主 2026-10-06 给了实拍图，按图对齐）：
+     「浅灰半透明 + 深色粗体字」+ **backdrop-filter 吃背景色**（图上偏粉就是因为透出红壁纸）。
+     ⚠️ 对比度必须**把气泡底的 alpha 与它下面的底合成后再算**（只量 `color` 会算错 ——
+     交通灯那条断言就是这么栽过的），而且**两套主题都要测**：直接切 `data-theme` 量计算值，
+     不重载页面（省时，也不破坏后面的状态）。 */
+  const tipProbe = async (theme) =>
+    p.evaluate(
+      ({ sel, theme }) => {
+        if (theme) document.documentElement.dataset.theme = theme
+        const tip = document.querySelector(`${sel} [role="tooltip"]`)
+        if (!tip) return null
+        const cs = getComputedStyle(tip)
+        const nums = (s) => (s.match(/[\d.]+/g) ?? []).map(Number)
+        const srgb = (v) => {
+          const c = v / 255
+          return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        const lum = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b)
+        const bgc = nums(cs.backgroundColor)
+        const inkc = nums(cs.color)
+        const panel = nums(
+          getComputedStyle(document.querySelector(`${sel} .dock__panel`) ?? tip).backgroundColor,
+        )
+        const a = bgc[3] ?? 1
+        const comp = [0, 1, 2].map((i) => a * (bgc[i] ?? 0) + (1 - a) * (panel[i] ?? 220))
+        const L1 = lum(comp)
+        const L2 = lum(inkc)
+        return {
+          theme: document.documentElement.dataset.theme,
+          bg: cs.backgroundColor,
+          ink: cs.color,
+          blur: cs.backdropFilter || cs.webkitBackdropFilter || '',
+          radius: cs.borderRadius,
+          fontSize: cs.fontSize,
+          weight: cs.fontWeight,
+          borderWidth: cs.borderTopWidth,
+          alpha: a,
+          contrast: Number(((Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05)).toFixed(2)),
+        }
+      },
+      { sel: DOCK, theme },
+    )
+  const tipLight = await tipProbe('light')
+  const tipDark = await tipProbe('dark')
+  check(
+    '气泡是 macOS 的材质：**backdrop-filter 含 blur**（吃背景色）+ 底**半透明**（alpha<1）+ 圆角 10 + 无描边',
+    !!tipLight &&
+      /blur\(/.test(tipLight.blur) &&
+      tipLight.alpha < 1 &&
+      parseFloat(tipLight.radius) >= 8 &&
+      parseFloat(tipLight.borderWidth) === 0,
+    JSON.stringify(tipLight),
+  )
+  check(
+    '气泡文字**实际对比度 ≥4.5:1**（alpha 与底合成后算；浅色主题：浅底深字）',
+    !!tipLight && tipLight.contrast >= 4.5,
+    JSON.stringify({ 主题: tipLight?.theme, 底: tipLight?.bg, 字: tipLight?.ink, 对比度: tipLight?.contrast }),
+  )
+  check(
+    '气泡文字**实际对比度 ≥4.5:1**（深色主题：深底浅字 —— 两套都要测，别只测一套）',
+    !!tipDark && tipDark.contrast >= 4.5,
+    JSON.stringify({ 主题: tipDark?.theme, 底: tipDark?.bg, 字: tipDark?.ink, 对比度: tipDark?.contrast }),
+  )
+  await p.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
 
   /* 14a4 点击"弹一下"：要有弹跳类名，但**窗口必须照常打开**（动画与动作并行，不许等动画）。 */
   await p.click(`${DOCK} button[aria-label="博客"]`)
@@ -1675,40 +1769,50 @@ async function run() {
     JSON.stringify({ ...bounce, opened: openedByBounce }),
   )
 
-  /* 放大 = **指针驱动**（2026-10-06「一切以 macOS 为准」）：上面已经把指针移到某个图标正中，
-     所以 `centerScale` 现在是"**指针正对的那个图标**"的 scale，`monoOk` 是"按离指针的距离单调递减"。
-     PEAK = 2、MIN = 1.0（macOS 不缩边缘图标）、影响半径 `MAGNIFY_RADIUS_SLOTS = 3` 格。 */
-  /* ⚠️ 2026-10-06 站主把放大收窄成**三档**（原话与常量注释见 `lib/dock.ts` 顶部）：
-     ① 指针正对的那个（hot）≈2×；② **紧邻两侧各一个**只"大一丢丢"（1.04~1.14）；
-     ③ **更外侧恒 1.0** —— 原来那套"按离指针的距离给**每个**图标算 scale"= 一圈都跟着变大，已被站主否掉
-     （「我只想要变大选中的那一个图标，其他图标只需要往两边移，不需要跟着变」）。
-     **原断言**：「指针正对的那个 ≥1.9× + 离指针越远越小（`monoOk` 单调递减）+ 最外侧 1.0×」。
-     它在旧模型下是对的，但它**允许"整圈都在放大"**（只要单调递减就算过）—— 那正是站主不要的。
-     所以**改写**为按**槽位距离**分档判定（hot / 紧邻 / 更外侧三档各自的区间）。 */
+  /* ⚠️ 2026-10-06 站主的口径**当天改过两次**，这里记清沿革，别再改回去：
+     ① 最早是"按离指针的距离给每个图标算 scale"；
+     ② 然后收窄成**三档**（只有正对那个 2×、紧邻只 1.08、更外侧恒 1.0）—— 当时这里量的就是
+        「紧邻 ∈ [1.04,1.14]、更外侧恒 1.0」；
+     ③ **最终口径（现在这条）是 macOS 的"波浪/鱼眼"**：「想要 macOS 那种指针扫过时的"波浪"，
+        越想 macOS 越好，最好一模一样」→ **三档被否**。
+     **改写**：原来那两条（紧邻区间 / 更外侧恒 1.0）描述的是被否掉的模型，换成波浪判据：
+       · **峰值在指针正对那个**（≥1.8×）；
+       · 按离指针的**格数单调不递增**（允许相等 —— 平滑衰减不该有台阶反复）；
+       · **半径收敛**：≥ `MAGNIFY_RADIUS_SLOTS`(5) 格回到 1.0×（±0.02）。
+     "让位不重叠"那条保留，见下面。 */
   const hotIdx = wheel0.hotIdx
   const hotScale = (wheel0.slotScales ?? [])[hotIdx] ?? 0
-  const neighborScales = [wheel0.slotScales?.[hotIdx - 1], wheel0.slotScales?.[hotIdx + 1]].filter(
-    (s) => typeof s === 'number',
-  )
-  const fartherScales = (wheel0.slotScales ?? []).filter((_, i) => i !== hotIdx && i !== hotIdx - 1 && i !== hotIdx + 1)
-  const fartherMax = fartherScales.length ? Math.max(...fartherScales) : 1
+  const bySlotDistance = (wheel0.slotScales ?? [])
+    .map((s, i) => ({ s, d: Math.abs(i - hotIdx) }))
+    .sort((a, b) => a.d - b.d)
+  const farScales = (wheel0.slotScales ?? []).filter((_, i) => Math.abs(i - hotIdx) >= 5)
+  const farMax = farScales.length ? Math.max(...farScales) : 1
   check(
-    '三档放大：**指针正对的那个 ≥1.8×**、**紧邻两侧各只"大一丢丢"（1.04~1.14）**、**更外侧恒 1.0×**',
+    '波浪（macOS 鱼眼）：**峰值在指针正对那个 ≥1.8×**、按离指针的格数**单调不递增**、≥5 格回到 1.0×',
     hotScale >= 1.8 &&
-      neighborScales.length === 2 &&
-      neighborScales.every((s) => s >= 1.04 && s <= 1.14) &&
-      fartherMax <= 1.02,
+      bySlotDistance.every((it, i) => i === 0 || it.s <= bySlotDistance[i - 1].s + 0.02) &&
+      farMax <= 1.02,
     JSON.stringify({
       指针正对: { 序号: hotIdx, 应用: (wheel0.slotLabels ?? [])[hotIdx], scale: hotScale },
-      紧邻两个: neighborScales,
-      更外侧最大: fartherMax,
-      全部槽位: wheel0.slotScales,
+      按格数: bySlotDistance.map((it) => Number(it.s.toFixed(3))),
+      五格之外最大: Number(farMax.toFixed(3)),
     }),
   )
-  /* 让位是这一单的**核心诉求**（「最主要是给变大的图标让位置」）：判据不能用"x 变了"，
-     要用"**放大那个的渲染盒与紧邻两个不相交**" —— 否则邻居让了 1px 也算过。 */
+  /* "波"不是"一边倒"：峰的**左右两侧都要降**。只测"整体单调"会漏掉
+     "峰偏在一端、另一半是平的"那种假波。 */
+  const leftScales = [1, 2, 3].map((k) => wheel0.slotScales?.[hotIdx - k]).filter((s) => typeof s === 'number')
+  const rightScales = [1, 2, 3].map((k) => wheel0.slotScales?.[hotIdx + k]).filter((s) => typeof s === 'number')
+  const descFromPeak = (arr) =>
+    arr.every((s, i) => (i === 0 ? s <= hotScale + 0.02 : s <= arr[i - 1] + 0.02))
   check(
-    '让位**真的生效**：放大的那个与紧邻两侧的渲染盒**不相交**（核心是让位，不是变大）',
+    '波是**两边一起收**：峰的两侧各自单调下降（不是"峰偏在一端、另一半平的"假波）',
+    leftScales.length >= 2 && rightScales.length >= 2 && descFromPeak(leftScales) && descFromPeak(rightScales),
+    JSON.stringify({ 峰: Number(hotScale.toFixed(3)), 左侧: leftScales, 右侧: rightScales }),
+  )
+  /* 让位（"整排铺开"的核心）：判据不能用"x 变了"，要用"**相邻图标的渲染盒不相交**"，
+     否则邻居只让 1px 也算过。 */
+  check(
+    '整排铺开：相邻图标的渲染盒**不相交**（波浪把两边推开，谁也不压谁）',
     wheel0.hotNeighborOverlap === false,
     JSON.stringify({
       hot与紧邻相交: wheel0.hotNeighborOverlap,
