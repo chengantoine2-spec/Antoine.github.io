@@ -1061,9 +1061,14 @@ async function run() {
     localStorage.removeItem('desktop.wikiAsideWidth')
   })
 
-  /* ── 14 任务栏图标区：默认是「循环轮盘」（wheel，用户 2026-10-05 要的）──────────
-     行为：永远单行 + 首尾相接循环 + 中央放大 + 按住拖动浏览 + 竖拖 44px 换位；
-     三个固定按钮（开始 / 全屏 / 位置）钉在两端，不参与循环与放大。
+  /* ── 14 任务栏图标区：默认是「图标区」（wheel）──────────────────────────────
+     ⚠️ 2026-10-06「跟随 macOS 改成回弹，一切以 macOS 为准」把这里从**循环**改成了**回弹**：
+       · 只渲染**一份**列表（原来是两份背靠背 + offset 取模归一化，转一圈回到起点）；
+       · `offset` 夹在 [0, maxOffset]（maxOffset = 内容长 − 可视长；= 0 就是"装得下、不可拖"）；
+       · 越界给橡皮筋阻尼（拉 100px 实移 < 100px）、松手用弹簧（1700/90）弹回端点；
+       · 松手**不吸附到格子**（macOS 的 Dock 是滚动视图，停在哪儿就是哪儿）；
+       · 放大峰仍 2×，但**边缘回到 1.0×**（macOS 不缩边缘图标，原来 0.8 那套撤了）。
+     三个固定按钮（开始 / 全屏 / 位置）钉在两端，不参与滚动与放大。
      旧的折行行为保留成设置里的可选项（wrap），那套断言在 14e 那一段。 */
   const wheelProbe = () =>
     p.evaluate((sel) => {
@@ -1095,8 +1100,8 @@ async function run() {
         centerD: Number((byDistance[0]?.d ?? 0).toFixed(1)),
         secondScale: Number((byDistance[2]?.s ?? 0).toFixed(3)),
         edgeScale: Number((byDistance[byDistance.length - 1]?.s ?? 0).toFixed(3)),
-        /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`（PEAK=2、MIN=0.8，u = 归一化距离）。
-           站主 2026-10-05：中心 2×，**越远越小**，外侧要**小于 1×**（不是被裁）。 */
+        /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`（PEAK=2、**MIN=1.0**，u = 归一化距离）。
+           2026-10-06「一切以 macOS 为准」：边缘图标回 1.0×（0.8 那套已撤）。 */
         monoOk: byDistance.every((it, i) => i === 0 || it.s <= byDistance[i - 1].s + 0.02),
         curve: byDistance.map((it) => Number(it.s.toFixed(2))),
         /* clip-path 只裁**主轴**：可视区左右两侧外面的点不该命中任何图标按钮（循环的第二份就藏在那儿） */
@@ -1145,57 +1150,65 @@ async function run() {
           }
         })(),
         mode: JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
+        /* 回弹那套：可拖动的最大偏移（= 内容长 − 可视长；0 = 装得下、根本不用拖），
+           以及橡皮筋最多能多拉出去多少（视口的 25%）。 */
+        maxOffset: (() => {
+          if (!vr || primary.length === 0) return 0
+          const st = primary.length > 1 ? primary[1].offsetLeft - primary[0].offsetLeft : 0
+          const content = primary.length > 1 ? (primary.length - 1) * st + primary[0].offsetWidth : 0
+          return Math.max(0, Math.round(content - vr.width))
+        })(),
+        rubberDim: vr ? Math.round(vr.width * 0.25) : 0,
       }
     }, DOCK)
   const wheel0 = await wheelProbe()
   check(
-    '任务栏图标区：永远单行（所有图标同一个布局 top），图标区是循环视口',
+    '任务栏图标区：永远单行（所有图标同一个布局 top），图标区是**可滚动视口**（macOS 的回弹就建在它上面）',
     wheel0.rows === 1 && wheel0.hasView && wheel0.hasTrack && wheel0.apps > 1,
     JSON.stringify({ rows: wheel0.rows, view: wheel0.hasView, track: wheel0.hasTrack, apps: wheel0.apps }),
   )
   check(
-    '循环：渲染两份背靠背的列表，且只有正本带无障碍名（副本带 aria-label 会让所有窗口按钮选择器命中两个）',
-    wheel0.copies === 2 && wheel0.items === wheel0.apps * 2 && wheel0.named === wheel0.apps,
+    '只渲染**一份**列表：应用按钮数 == 应用数、每个都带无障碍名（循环的两份已按"以 macOS 为准"拆掉）',
+    wheel0.copies === 1 && wheel0.items === wheel0.apps && wheel0.named === wheel0.apps,
     JSON.stringify({ copies: wheel0.copies, items: wheel0.items, named: wheel0.named, apps: wheel0.apps }),
   )
-  /* 14a 图标全换菜图（站主 2026-10-05：「任务栏图标全部换成蔬菜水果图」，本轮只改任务栏）。
-     身份层只有一份对应关系：`AppDef.veggie` → `lib/veggies.ts` 的 `veggieOfName()`。
-     ⚠️ 同时钉住"无障碍名一个都没动" —— 两个验证脚本点任务栏全靠 `button[aria-label="X"]`。 */
-  const veggieProbe = await p.evaluate((sel) => {
+  /* 14a 图标是**功能图标**（2026-10-06「一切以 macOS 为准」把 2026-10-05 那条"任务栏换菜图"撤了）：
+     彩色菜图与 macOS 那套圆角单色图标观感直接冲突 → 任务栏回到 `components/icons/**` 的功能图标。
+     ⚠️ **菜地身份一个字都没删**（`SITE.name` / `AppDef.veggie` / `lib/veggies.ts` 48 张菜图），
+     只是任务栏不再用它 —— 现在只出现在开始菜单与关于窗口。
+     ⚠️ 同时钉住"无障碍名一个都没动" —— 两个脚本点任务栏全靠 `button[aria-label="X"]`。 */
+  const glyphProbe = await p.evaluate((sel) => {
     const btns = [...document.querySelectorAll(`${sel} [data-dock-item][data-dock-copy="1"]`)]
-    const rows = btns.map((b) => {
-      const img = b.querySelector('img')
-      return {
-        label: b.getAttribute('aria-label'),
-        hasImg: !!img,
-        veg: (img?.getAttribute('src') ?? '').includes('veggies'),
-      }
-    })
+    const rows = btns.map((b) => ({
+      label: b.getAttribute('aria-label'),
+      hasImg: !!b.querySelector('img'),
+      hasSvg: !!b.querySelector('svg'),
+    }))
     return {
       total: rows.length,
       img: rows.filter((r) => r.hasImg).length,
-      veg: rows.filter((r) => r.veg).length,
+      svg: rows.filter((r) => r.hasSvg).length,
       labelled: rows.filter((r) => r.label).length,
-      sample: rows[0] ?? null,
     }
   }, DOCK)
   check(
-    '任务栏图标全是菜图（每个应用按钮里都是 <img>，src 指向 veggies），且无障碍名一个没动',
-    veggieProbe.total > 1 &&
-      veggieProbe.img === veggieProbe.total &&
-      veggieProbe.veg === veggieProbe.total &&
-      veggieProbe.labelled === veggieProbe.total,
-    JSON.stringify(veggieProbe),
+    '任务栏图标是**功能图标**（每个按钮里都是 <svg>、没有菜图 <img>），且无障碍名一个没动',
+    glyphProbe.total > 1 &&
+      glyphProbe.svg === glyphProbe.total &&
+      glyphProbe.img === 0 &&
+      glyphProbe.labelled === glyphProbe.total,
+    JSON.stringify(glyphProbe),
   )
 
-  /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`，PEAK = 2、MIN = 0.8、指数 1.5。
-     站主的口径是"中心 2×、越远越小、最外侧约 0.8×"（旧口径是 d≥R 之后恒等 1.0）。 */
+  /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`，PEAK = 2、**MIN = 1.0**、指数 1.5。
+     2026-10-06「一切以 macOS 为准」：macOS 的 Dock **不把边缘图标缩小**，
+     所以站主 2026-10-05 那条"越远越小、最外侧 0.8×"已经撤掉，最外侧必须回到 1.0×。 */
   check(
-    '中央放大：中心 ≥1.9×、按实测距离单调递减、最外侧 ≤0.85×（越远越小，外侧小于 1× 是要的效果）',
+    '中央放大：中心 ≥1.9×、按实测距离单调递减、**最外侧回到 1.0×**（macOS 不缩边缘图标；0.8 那套已撤）',
     wheel0.centerScale >= 1.9 &&
       wheel0.monoOk &&
-      wheel0.edgeScale <= 0.85 &&
-      wheel0.edgeScale >= 0.75,
+      wheel0.edgeScale >= 0.98 &&
+      wheel0.edgeScale <= 1.02,
     JSON.stringify({
       center: wheel0.centerScale,
       曲线: wheel0.curve,
@@ -1220,12 +1233,18 @@ async function run() {
     }),
   )
   check(
-    '图标区只裁主轴（clip-path ≠ none）：可视区左右两侧外面的点命不中任何图标（循环的第二份仍藏着）',
+    '图标区只裁主轴（clip-path ≠ none）：可视区左右两侧外面的点命不中任何图标（滚出可视区的图标点不到）',
     wheel0.clipPath !== 'none' && wheel0.mainAxisClipped,
     JSON.stringify({ clipPath: wheel0.clipPath, 主轴外侧命不中图标: wheel0.mainAxisClipped }),
   )
 
-  /* 14b 拖拽浏览：按住沿轴拖 120px 跟手；松手吸附到最近的整数格；往一个方向一直拖不到头 */
+  /* 14b 拖拽浏览 + **回弹**（2026-10-06「跟随 macOS 改成回弹」）：
+     按住沿轴拖 = 跟手；松手**不吸附到格子**（macOS 的 Dock 是滚动视图，停在哪儿就是哪儿）；
+     到两端**被夹住**、越界只给橡皮筋阻尼（拉一大截实际只挪一点点）、松手 ≤300ms 弹回端点；
+     装得下时根本不可拖。
+     ⚠️ 要测"能拖"，得先让**内容比视口宽**：把任务栏定长到一个窄于内容的宽度
+     （`length = null` 时图标区正好装下所有图标 → `maxOffset = 0` → macOS 行为就是不可拖，
+     这一条在本节最后单独断言）。 */
   const trackState = () =>
     p.evaluate((sel) => {
       const bar = document.querySelector(sel)
@@ -1235,13 +1254,17 @@ async function run() {
       const primary = items.filter((b) => b.getAttribute('data-dock-copy') === '1')
       const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
       const vr = view?.getBoundingClientRect()
+      const step = primary.length > 1 ? primary[1].offsetLeft - primary[0].offsetLeft : 0
+      const content = primary.length > 1 ? (primary.length - 1) * step + primary[0].offsetWidth : 0
       return {
+        /* tx = track 的 translateX = **−offset**（往右拖内容 ⇒ tx 变大） */
         tx: m ? Math.round(m.e) : 0,
-        step: primary.length > 1 ? primary[1].offsetLeft - primary[0].offsetLeft : 0,
-        cycle: primary.length > 1 ? primary.length * (primary[1].offsetLeft - primary[0].offsetLeft) : 0,
-        /* 可视区里"有事发生"的格数：**两份都要数** —— 循环接不上时这里会少于可视区能装的格数 */
+        step,
+        items: primary.length,
+        maxOffset: vr ? Math.max(0, Math.round(content - vr.width)) : 0,
+        rubberDim: vr ? Math.round(vr.width * 0.25) : 0,
         cover: vr
-          ? items.filter((b) => {
+          ? primary.filter((b) => {
               const r = b.getBoundingClientRect()
               return r.right > vr.x - 1 && r.x < vr.right + 1
             }).length
@@ -1249,50 +1272,86 @@ async function run() {
         viewW: vr ? Math.round(vr.width) : 0,
       }
     }, DOCK)
+
+  /* 压窄任务栏，让内容真的溢出（否则 maxOffset = 0，拖动什么都不动） */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+    Object.assign(raw, { length: 420, thickness: null, iconSize: null, position: 'bottom' })
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.waitForTimeout(800)
+
   const wheelCenter = await p.evaluate((sel) => {
     const r = document.querySelector(`${sel} [data-dock-view]`)?.getBoundingClientRect()
     return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null
   }, DOCK)
   const track0 = await trackState()
+  check(
+    '回弹的前提：把任务栏压窄（length=420）后图标区**真的能滚**（maxOffset > 一个图标步长）',
+    track0.maxOffset > track0.step,
+    JSON.stringify({ maxOffset: track0.maxOffset, step: track0.step, viewW: track0.viewW, items: track0.items }),
+  )
+  /* 往**左**拖 120px（内容跟着走 ⇒ tx 变 −120）：这条方向不越界，才测得出"跟手" */
   await p.mouse.move(wheelCenter.x, wheelCenter.y)
   await p.mouse.down()
-  for (let i = 1; i <= 12; i += 1) await p.mouse.move(wheelCenter.x + i * 10, wheelCenter.y)
+  for (let i = 1; i <= 12; i += 1) await p.mouse.move(wheelCenter.x - i * 10, wheelCenter.y)
   const trackDrag = await trackState()
   await p.mouse.up()
   await p.waitForTimeout(400)
   const trackSnap = await trackState()
   check(
-    '拖拽浏览：按住沿轴拖 120px，图标区跟着指针走（偏移按一个 cycle 取模后正好差 120）',
-    (() => {
-      if (!(trackDrag.cycle > 0)) return false
-      const mod = (v) => ((v % trackDrag.cycle) + trackDrag.cycle) % trackDrag.cycle
-      const delta = mod(trackDrag.tx - track0.tx)
-      /* 指针往右拖 120px ⇒ 内容跟着往右 120px ⇒ translateX 增加 120（tx 是 -offset）。
-         平移一个 cycle 画面完全一样，所以只能按 cycle 取模比 */
-      const want = mod(120)
-      return Math.abs(delta - want) <= 4
-    })(),
-    JSON.stringify({ before: track0.tx, during: trackDrag.tx, cycle: trackDrag.cycle }),
+    '拖拽浏览：按住沿轴拖 120px，内容跟着指针走（tx 正好差 −120）',
+    Math.abs(trackDrag.tx - track0.tx - -120) <= 4,
+    JSON.stringify({ before: track0.tx, during: trackDrag.tx, maxOffset: track0.maxOffset }),
   )
   check(
-    '松手吸附到最近的格子（偏移是 step 的整数倍）',
-    trackSnap.step > 0 && trackSnap.tx % trackSnap.step === 0,
-    JSON.stringify({ tx: trackSnap.tx, step: trackSnap.step }),
+    '松手**不吸附到格子**（macOS 的 Dock 是滚动视图：停在哪儿就是哪儿，位置相对拖动前是 120px 的整倍数与否都不管）',
+    Math.abs(trackSnap.tx - trackDrag.tx) <= 2,
+    JSON.stringify({ 松手时: trackDrag.tx, 松手后: trackSnap.tx }),
   )
-  /* 再往左连拖两段（约 2.5 个 cycle）：一直拖不会到头，图标始终铺满可视区 */
-  for (let k = 0; k < 2; k += 1) {
-    await p.mouse.move(wheelCenter.x, wheelCenter.y)
-    await p.mouse.down()
-    for (let i = 1; i <= 10; i += 1) await p.mouse.move(wheelCenter.x - i * 60, wheelCenter.y)
-    await p.mouse.up()
-    await p.waitForTimeout(320)
-  }
-  const trackFar = await trackState()
+  /* 越界：往**右**拖 300px（越过起点那一端）——按住不放先量"被阻尼了多少" */
+  await p.mouse.move(wheelCenter.x, wheelCenter.y)
+  await p.mouse.down()
+  for (let i = 1; i <= 6; i += 1) await p.mouse.move(wheelCenter.x + i * 50, wheelCenter.y)
+  const overshoot = await trackState()
+  await p.mouse.up()
+  await p.waitForTimeout(320)
+  const backHome = await trackState()
+  const over = overshoot.tx > 0 ? overshoot.tx : 0
   check(
-    '循环：往一个方向一直拖不会到头（图标始终铺满可视区，偏移归一化回一个 cycle 内）',
-    trackFar.cover >= Math.floor(trackFar.viewW / trackFar.step) &&
-      Math.abs(trackFar.tx) <= trackFar.cycle,
-    JSON.stringify({ cover: trackFar.cover, need: Math.floor(trackFar.viewW / trackFar.step), tx: trackFar.tx, cycle: trackFar.cycle }),
+    '越界被**橡皮筋阻尼**：拉出去 300px，实际只多挪出去一点点（>0、≤ 视口的 25%，且远小于拉动量）',
+    over > 0 && over <= overshoot.rubberDim + 1 && over < 300 * 0.5,
+    JSON.stringify({ 越界位移: over, 上限: overshoot.rubberDim, 原始拉动: 300 }),
+  )
+  check(
+    '松手**弹回端点**（≤300ms 内回到界内：起点那一端 = tx 0）',
+    Math.abs(backHome.tx) <= 1,
+    JSON.stringify({ 松手后: backHome.tx, 起点: 0 }),
+  )
+  /* 装得下 → 不可拖（macOS 的 Dock 这时就是静止的） */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') ?? '{}')
+    Object.assign(raw, { length: null })
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.goto(`${BASE}/`, { waitUntil: 'load' })
+  await p.waitForTimeout(800)
+  const autoState = await trackState()
+  const autoCenter = await p.evaluate((sel) => {
+    const r = document.querySelector(`${sel} [data-dock-view]`)?.getBoundingClientRect()
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null
+  }, DOCK)
+  await p.mouse.move(autoCenter.x, autoCenter.y)
+  await p.mouse.down()
+  for (let i = 1; i <= 8; i += 1) await p.mouse.move(autoCenter.x - i * 30, autoCenter.y)
+  await p.mouse.up()
+  await p.waitForTimeout(300)
+  const autoAfter = await trackState()
+  check(
+    '装得下时**根本不可拖**（maxOffset = 0：图标区正好装下所有图标，拖动之后偏移还是 0）',
+    autoState.maxOffset === 0 && Math.abs(autoAfter.tx) <= 1,
+    JSON.stringify({ maxOffset: autoState.maxOffset, 拖前: autoState.tx, 拖后: autoAfter.tx }),
   )
 
   /* 14c 竖拖 = 移动图标：只对"按在图标上"的拖动生效，门槛 44px；判定成浏览就锁死本次手势 */
@@ -1470,13 +1529,13 @@ async function run() {
     }
   }, DOCK)
   check(
-    '左停靠 = 单列轮盘：图标同一列、有垂直的循环轨道、中央一样放大、两份列表都在',
+    '左停靠 = 单列图标区：图标同一列、有垂直的滚动轨道、中央一样放大、**只渲染一份**（回弹，不是循环）',
     verticalWheel.verticalBar &&
       verticalWheel.cols === 1 &&
       verticalWheel.hasView &&
       verticalWheel.viewV &&
       verticalWheel.trackV &&
-      verticalWheel.copies === 2 &&
+      verticalWheel.copies === 1 &&
       verticalWheel.center >= 1.3 &&
       verticalWheel.edge <= 1.01,
     JSON.stringify(verticalWheel),

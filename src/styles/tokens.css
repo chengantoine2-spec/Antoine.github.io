@@ -62,6 +62,14 @@
   /* 圆角：窗口 8px（最大化时 0，见 .window--max）；Dock 底板 12px */
   --r-window: 8px;
   --r-dock: 12px;
+  /* ── Dock 底板（macOS，2026-10-06）──────────────────────────────────────────
+     规格来自 `MACOS-BRIEF.md` 第 2 节（`PuruVJ/macos-web` 的 `theme.css`，**MIT** —— 只取数值）：
+     `blur 40px + white/20 + 1px rgba(160,160,170,.4) + 投影 0 0 20px rgba(0,0,0,.17)`。
+     ⚠️ 加新主题时**这几条一起补**（底板 / 描边 / 模糊 / 投影），不然 Dock 会透明成一片。 */
+  --c-dock-bg: rgba(255, 255, 255, 0.2);
+  --dock-border: 1px solid rgba(160, 160, 170, 0.4);
+  --dock-blur: 40px;
+  --dock-shadow: 0 0 20px rgba(0, 0, 0, 0.17);
   /* 窗口标题栏高度（macOS 的 h-6 = 24px） */
   --titlebar-h: 24px;
   /* 交通灯：12px 圆点、间距 8px、距左 8px；字形平时隐藏、hover 才显（9px） */
@@ -117,6 +125,11 @@
 
   --r-window: 8px;
   --r-dock: 12px;
+  /* Dock 底板（深色）：同一套规格，底板与投影按深色面调过对比 */
+  --c-dock-bg: rgba(28, 28, 30, 0.35);
+  --dock-border: 1px solid rgba(160, 160, 170, 0.3);
+  --dock-blur: 40px;
+  --dock-shadow: 0 0 20px rgba(0, 0, 0, 0.35);
   --titlebar-h: 24px;
   --traffic-size: 12px;
   --traffic-gap: 8px;

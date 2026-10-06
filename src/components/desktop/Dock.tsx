@@ -14,7 +14,10 @@ import {
   MAGNIFY_MIN,
   MAGNIFY_PEAK,
   MOVE_THRESHOLD,
-  SNAP_MS,
+  SPRING_DAMPING,
+  SPRING_STIFFNESS,
+  dampedOffset,
+  dockMaxOffset,
   dockMinLength,
   dockStep,
   isVertical,
@@ -26,7 +29,6 @@ import {
   wrapPerLine,
   wrapSideGap,
 } from '../../lib/dock'
-import { veggieOfName } from '../../lib/veggies'
 import type { AppId } from '../../types/desktop'
 import { MenuGlyph, PositionGlyph } from '../icons'
 import { AppIcon } from './AppIcon'
@@ -38,26 +40,15 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
-/* 任务栏上的应用图：**菜图**（站主 2026-10-05：「任务栏图标全部换成蔬菜水果图」）。
-   身份层的对应关系只有一份：`AppDef.veggie`（中文菜名）→ `veggieOfName()` 查 URL。
-   - `logo-mark`：给透明底图形托一层主题投影（三套主题各有一份 `--logo-shadow`），
-     彩色菜图在深色 / 浅色的任务栏底色上都看得清；
-   - `alt=""` + `draggable={false}`：无障碍名仍然**只靠按钮的 `aria-label`**
-     （`button[aria-label="博客"]` 是两个验证脚本点任务栏的唯一入口，绝不能动），
-     同时避免浏览器原生图片拖拽抢走我们的指针手势；
-   - 找不到菜图时退回功能图标 —— 防的是"以后加了窗口却没配菜"时按钮空着。 */
+/* 任务栏上的应用图 = **功能图标**（`components/icons/**`）。
+   ⚠️ 2026-10-05 站主曾要求"全部换成蔬菜水果图"，2026-10-06「一切以 macOS 为准」把那条撤了：
+   彩色菜图与 macOS 那套圆角单色图标**观感直接冲突**，所以菜图让位、回功能图标。
+   ⚠️ **菜地身份一个字都没删**：`SITE.name` / `AppDef.veggie` / `lib/veggies.ts`（48 张菜图）
+   全部留在代码里备着（站主原话："菜地名称就保留在文件里面就好，等日后或再优化使用"），
+   菜图现在只出现在开始菜单与关于窗口，见 `lib/veggies.ts` 的 `dishRows()`。 */
 function appGlyph(id: AppId, className: string) {
   const app = getApp(id)
-  const veg = veggieOfName(app.veggie)
-  if (!veg) return <AppIcon name={app.icon} className={className} />
-  return (
-    <img
-      src={veg.src}
-      alt=""
-      draggable={false}
-      className={`logo-mark pointer-events-none select-none object-contain ${className}`}
-    />
-  )
+  return <AppIcon name={app.icon} className={className} />
 }
 
 /* 任务栏内部几何 GAP / PAD / BORDER 现在从 lib/dock 来 —— 厚度下限要用同一套数，
@@ -162,6 +153,8 @@ export function Dock() {
   const trackEl = useRef<HTMLDivElement | null>(null)
   const offset = useRef(0)
   const raf = useRef(0)
+  /** 松手回弹的弹簧动画句柄（用 rAF 自己积分，见 settle：不引动画依赖） */
+  const springRaf = useRef(0)
   const gesture = useRef<{
     axisStart: number
     crossStart: number
@@ -371,18 +364,26 @@ export function Dock() {
      ⚠️ 拖动过程**不进 React 状态**：offset 在 ref 里，用 rAF 直接改 track 的 transform、
      逐个改图标 scale。每帧 setState 会把图标区整棵子树重渲，手感会飘。
      只有"换位预览"这种离散事件才 setState（一次拖动最多几次）。 */
-  const cycle = itemCount * step
-  const normalize = (v: number) => (cycle > 0 ? ((v % cycle) + cycle) % cycle : 0)
+  /* ── 图标区的范围（macOS 回弹，2026-10-06）──
+     ⚠️ 这里原来是"循环"：渲染两份列表 + `offset` 取模归一化到 [0, cycle)，
+     往一个方向一直拖能绕回起点。站主改口「跟随 macOS 改成回弹，一切以 macOS 为准」，
+     所以现在**有头有尾**：`offset` 夹在 [0, maxOffset]，越界只给阻尼、松手弹回端点。
+     `maxOffset === 0`（装得下）= 根本不可拖，也不该有回弹。 */
+  const maxOffset = dockMaxOffset(itemCount, step, viewLen)
+  const canDrag = maxOffset > 1
+  /** 橡皮筋最多能多拉出去多少（= 视口的 25%）：拖动的原始值夹在这里，再远没有意义 */
+  const rubberDim = viewLen * 0.25
+  const clampRaw = (v: number) => clamp(v, -rubberDim * 1.5, maxOffset + rubberDim * 1.5)
   const alongOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientY : e.clientX)
   const crossOf = (e: { clientX: number; clientY: number }) => (vertical ? e.clientX : e.clientY)
 
-  /** 按当前 offset 把 track 与每个图标的 scale 画出来（同时负责"循环归一化"） */
+  /** 按当前 offset 把 track 与每个图标的 scale 画出来。
+   *  画的是 `dampedOffset()`：界内原样、越界按苹果的橡皮筋公式衰减（拉 100px 实移不到 100px）。 */
   function paint() {
     const view = viewEl.current
     const track = trackEl.current
     if (!view || !track) return
-    /* 归一化到 [0, cycle)：两份列表背靠背，平移一个 cycle 画面完全一样，所以这次跳变看不见 */
-    const off = normalize(offset.current)
+    const off = dampedOffset(offset.current, maxOffset, viewLen)
     track.style.transform = vertical ? `translate3d(0, ${-off}px, 0)` : `translate3d(${-off}px, 0, 0)`
     const vLen = vertical ? view.clientHeight : view.clientWidth
     if (!vLen) return
@@ -392,10 +393,9 @@ export function Dock() {
     /* 放大曲线：`u = clamp((d - dMin) / (dMax - dMin), 0, 1)`、`scale = PEAK - (PEAK-MIN)·u^1.5`。
        - **dMin**：把"最靠中心那个图标"当峰 → 中心恒 2.0×（格子是离散的，拿几何中心当峰时
          任务栏一短，实测峰值只有 1.76×，达不到"看着就是 2×"）；
-       - **dMax**：**可见的那一段**里最外那个图标的距离 → 最外侧恒 0.8×，中间按距离递减。
-         ⚠️ 别拿 `half`（可视半径）当分母：图标是离散的，默认几何下最外侧那个落在 220/240，
-         按 half 定标它只有 0.947× —— 根本看不出"越远越小"（站主这次要的正是这个）。
-         ⚠️ 也不能把循环第二份算进 dMax：它在可视区外、距离好几百 px，会把整条曲线压平。 */
+       - **dMax**：**可见的那一段**里最外那个图标的距离 → 最外侧恒 `MAGNIFY_MIN`。
+         ⚠️ `MAGNIFY_MIN` 现在是 **1.0**（macOS 不缩边缘图标；0.8 那套已按总原则撤掉）。
+       - 只渲染**一份**列表了，所以不再有"别把副本算进 dMax"那个特殊处理。 */
     const dist = new Map<HTMLElement, number>()
     let dMin = Infinity
     let dMax = 0
@@ -428,7 +428,7 @@ export function Dock() {
 
   /** 拖动中每帧只排一次 rAF */
   function schedulePaint(next: number) {
-    offset.current = next
+    offset.current = clampRaw(next)
     if (raf.current) return
     raf.current = requestAnimationFrame(() => {
       raf.current = 0
@@ -436,32 +436,61 @@ export function Dock() {
     })
   }
 
-  /** 松手吸附到最近的格子：先瞬时归一化（画面一样、看不见），再缓动 SNAP_MS */
-  function snapToGrid() {
-    const track = trackEl.current
-    offset.current = normalize(offset.current)
-    let target = Math.round(offset.current / step) * step
-    if (target >= cycle) target -= cycle
-    offset.current = target
-    if (!track) return
-    track.classList.add('dock__track--anim')
-    paint()
-    window.setTimeout(() => {
-      track.classList.remove('dock__track--anim')
-      /* 缓动结束后把内部值也收回 [0, cycle)，纯记账，画面不动 */
-      offset.current = normalize(offset.current)
-    }, SNAP_MS + 40)
+  /* 松手 / 滚轮之后**回弹到界内**（macOS 滚动视图的行为）：
+     - 越界了 → 弹簧弹回端点（`SPRING_STIFFNESS/DAMPING` 就是 playground-macos DockItem 那组 1700/90，
+       我们**不引依赖**，用同样的 k/c 自己积分。ζ = c/(2√k) ≈ 1.09 → 略过阻尼，不过冲，实测 ~100ms 落位）；
+     - 界内 → **不吸附到格子**（macOS 的 Dock 是滚动视图，图标跟着指针停在任意位置），只是夹一次。 */
+  function stopSpring() {
+    if (springRaf.current) {
+      cancelAnimationFrame(springRaf.current)
+      springRaf.current = 0
+    }
   }
 
-  /** 指针落在第几个图标上（没有就 null）：用布局位置算，不看 transform */
+  function settle(target = clamp(offset.current, 0, maxOffset)) {
+    stopSpring()
+    const from = offset.current
+    if (Math.abs(target - from) < 0.5) {
+      offset.current = target
+      paint()
+      return
+    }
+    let x = from
+    let v = 0
+    let last = performance.now()
+    const frame = (now: number) => {
+      const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000))
+      last = now
+      /* k 很大（1700），60Hz 下单步会飘 —— 按 8ms 子步进积分，稳一点 */
+      const steps = Math.max(1, Math.ceil((dt * 1000) / 8))
+      const h = dt / steps
+      for (let i = 0; i < steps; i += 1) {
+        const a = -SPRING_STIFFNESS * (x - target) - SPRING_DAMPING * v
+        v += a * h
+        x += v * h
+      }
+      offset.current = x
+      paint()
+      if (Math.abs(x - target) < 0.5 && Math.abs(v) < 8) {
+        offset.current = target
+        paint()
+        springRaf.current = 0
+        return
+      }
+      springRaf.current = requestAnimationFrame(frame)
+    }
+    springRaf.current = requestAnimationFrame(frame)
+  }
+
+  /** 指针落在第几个图标上（没有就 null）：用布局位置算，不看 transform。
+   *  ⚠️ 循环拆掉之后**不再取模**：下标夹在 [0, itemCount-1]（列表有头有尾，最后一个就是最后一个）。 */
   function iconAtPoint(e: { clientX: number; clientY: number }): number | null {
     const view = viewEl.current
     if (!view || itemCount === 0) return null
     const rect = view.getBoundingClientRect()
     const p = alongOf(e) - (vertical ? rect.top : rect.left)
-    const off = normalize(offset.current)
-    const i = Math.round((p + off - btn / 2) / step)
-    const idx = ((i % itemCount) + itemCount) % itemCount
+    const raw = Math.round((p + offset.current - btn / 2) / step)
+    const idx = clamp(raw, 0, itemCount - 1)
     /* 再确认指针真的压在某个图标上（点空白不进入换位） */
     const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
     const hit = items ? [...items].some((el) => {
@@ -473,6 +502,8 @@ export function Dock() {
 
   function wheelDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return
+    /* 手一按下去就掐掉还在跑的回弹，否则跟手会和弹簧打架（macOS 也是"一碰就停"） */
+    stopSpring()
     const onIcon = iconAtPoint(e)
     gesture.current = {
       axisStart: alongOf(e),
@@ -515,7 +546,6 @@ export function Dock() {
       if (Math.abs(along) >= 4) g.kind = 'browse'
       else if (g.onIcon !== null && Math.abs(cross) >= MOVE_THRESHOLD) g.kind = 'move'
       else return
-      if (g.kind === 'browse') trackEl.current?.classList.remove('dock__track--anim')
     }
 
     if (g.kind === 'browse') {
@@ -529,7 +559,7 @@ export function Dock() {
     const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
     if (!items || !g.dragId) return
     const id = g.dragId
-    const el = [...items].find((x) => x.dataset.dockItem === id && x.getAttribute('data-dock-copy') === '1')
+    const el = [...items].find((x) => x.dataset.dockItem === id)
     if (el && !lift.current) {
       el.classList.add('dock__item--lift')
       lift.current = { el, id }
@@ -543,13 +573,13 @@ export function Dock() {
       )}px, 0)`
     }
 
-    /* 落点下标：指针位置换算成"第几个格子"。**要取模** —— 列表是循环的，
-       把最后一个图标继续往右拖，落点应该是队首（第 0 个），不是卡在末尾 */
+    /* 落点下标：指针位置换算成"第几个格子"，夹在 [0, itemCount-1]。
+       ⚠️ 以前这里要取模（列表是循环的，拖过最后一个绕回队首）；循环拆掉之后**不绕**了 ——
+       拖到两端就是两端（macOS 的 Dock 有头有尾）。 */
     const rect = view.getBoundingClientRect()
     const p = alongOf(e) - (vertical ? rect.top : rect.left)
-    const off = normalize(offset.current)
-    const raw = Math.round((p + off - btn / 2) / step)
-    const to = ((raw % itemCount) + itemCount) % itemCount
+    const raw = Math.round((p + offset.current - btn / 2) / step)
+    const to = clamp(raw, 0, itemCount - 1)
     if (to !== g.to) {
       g.to = to
       const order = [...(preview ?? shownApps)]
@@ -578,7 +608,8 @@ export function Dock() {
       return
     }
     if (g.kind === 'browse') {
-      snapToGrid()
+      /* 松手：界内就停在那儿（macOS 的 Dock 不吸附到格子），越界由弹簧弹回端点 */
+      settle()
       return
     }
     if (g.kind === 'move' && g.onIcon !== null && g.dragId) {
@@ -593,23 +624,29 @@ export function Dock() {
 
   function wheelOnWheel(e: React.WheelEvent<HTMLDivElement>) {
     e.preventDefault()
+    /* 装得下就没什么可滚的（macOS 的 Dock 这时是静止的，不该动） */
+    if (!canDrag) return
     const d = vertical ? e.deltaY : e.deltaX || e.deltaY
-    /* 滚轮 = 一格一格地浏览（方向与拖动一致）；落点本来就是整数格，吸附只是顺手归一化 */
-    offset.current += (d > 0 ? 1 : -1) * step
-    snapToGrid()
+    /* 滚轮 = 一格一格地走；收尾用同一根弹簧（和拖动松手回弹同一套手感） */
+    settle(clamp(offset.current + (d > 0 ? 1 : -1) * step, 0, maxOffset))
   }
 
   /* 轮盘：首帧与几何变化后重画一次。换了模式 / 位置 / 图标尺寸 / 列表顺序 / 长度厚度都要重画，
      否则 DOM 上留下的还是上一次的 transform。 */
   useEffect(() => {
     if (mode !== 'wheel') return
+    /* 几何一变，原来的 offset 可能已经越界（比如任务栏拖长了）—— 夹回界内再画 */
+    offset.current = clamp(offset.current, 0, maxOffset)
     paint()
     const view = viewEl.current
     if (!view) return
     const ro = new ResizeObserver(() => paint())
     ro.observe(view)
-    return () => ro.disconnect()
-  }, [mode, position, btn, itemCount, length, thickness, preview, dockApps])
+    return () => {
+      ro.disconnect()
+      stopSpring()
+    }
+  }, [mode, position, btn, itemCount, length, thickness, preview, dockApps, maxOffset])
 
   /* 幽灵一出现就先摆到当前指针位置：否则要等下一个 pointermove 才跟手，
      中间那一帧它会停在左上角（浮层默认位置）闪一下。 */
@@ -719,33 +756,30 @@ export function Dock() {
   )
 
   /* 一个应用图标按钮：两种模式共用。
-     `copy`：1 = 正本（带无障碍名），2 = 循环用的副本。
-     ⚠️ **副本绝不能带 `aria-label`**：两份同名按钮会让 Playwright 的
-     `button[aria-label="博客"]` 一次命中两个，strict mode 直接报错 —— 两个验证脚本都会炸。
-     副本同时 `aria-hidden` + `tabIndex=-1`，键盘与读屏只走正本。 */
-  function iconButton(id: AppId, opts: { copy: 1 | 2; index: number; wheel: boolean }) {
+     ⚠️ `data-dock-copy` **恒为 "1"**：这属性是"渲染两份循环列表"那个年代留下的，现在只剩一份，
+     但 `verify.mjs` 里有近十处选择器用它（`[data-dock-item][data-dock-copy="1"]`），
+     所以**保留成稳定挂钩**，不再有 `copy === 2` 那种分支。 */
+  function iconButton(id: AppId, opts: { index: number; wheel: boolean }) {
     const app = getApp(id)
     const running = windows.some((w) => w.tabs.some((tab) => tab.id === app.id))
     const active = pathname === app.path || pathname.startsWith(`${app.path}/`)
-    /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上 */
+    /* 芹菜耕地的说法：每个窗口是一样菜，提示里带上（菜名留着，只是不再当图标） */
     const label = `${app.name} · ${app.veggie}`
     const loop = opts.wheel
 
     return (
       <button
-        key={`${opts.copy}-${app.id}`}
+        key={app.id}
         type="button"
         style={btnStyle}
         title={label}
         /* ⚠️ 无障碍名**只用窗口名**：验证脚本（verify.mjs / verify-dst.mjs）都按
            `button[aria-label="博客"]` 这类选择器点按钮，往里塞"菜名"会把它们全弄坏。
            菜名放 title 与悬浮提示里。 */
-        aria-label={opts.copy === 1 ? app.name : undefined}
-        aria-hidden={loop && opts.copy === 2 ? true : undefined}
-        tabIndex={loop && opts.copy === 2 ? -1 : undefined}
+        aria-label={app.name}
         aria-current={active ? 'page' : undefined}
         data-dock-item={loop ? app.id : undefined}
-        data-dock-copy={loop ? String(opts.copy) : undefined}
+        data-dock-copy={loop ? '1' : undefined}
         data-dock-index={loop ? opts.index : undefined}
         onClick={() => openApp(app.id)}
         onMouseEnter={(e) => showName(e.currentTarget, label)}
@@ -759,9 +793,8 @@ export function Dock() {
         {appGlyph(app.id, 'h-1/2 w-1/2')}
         {running ? (
           <span
-            /* 正在跑的小圆点：底色跟着"有没有被选中"走 —— 菜图是彩色的、不吃主题色，
-               所以"哪个是当前应用"靠按钮底（bg-accent）+ 这个点两处一起表达。
-               点色用 chrome-ink / accent-ink 两个**面向前景**的令牌，三套主题都不会糊。 */
+            /* 正在跑的小圆点（macOS 的 4px 指示点）：未运行时**不渲染**，所以不占位。
+               底色跟着"有没有被选中"走，两个都是**面向前景**的令牌，两套主题都不会糊。 */
             className={`absolute bottom-0.5 h-1 w-1 rounded-full ${
               active ? 'bg-accent-ink' : 'bg-chrome-ink'
             }`}
@@ -778,8 +811,9 @@ export function Dock() {
       aria-label="任务栏"
       style={barStyle}
       onMouseLeave={() => setHover(null)}
-      /* justify-center：拖长任务栏后 bar 比内容宽，整组要居中（内容自适应宽度时没有富余空间，不受影响） */
-      className={`absolute z-50 flex justify-center gap-1 rounded-dock border border-edge bg-chrome p-1.5 shadow-xl ${
+      /* justify-center：拖长任务栏后 bar 比内容宽，整组要居中（内容自适应宽度时没有富余空间，不受影响）
+         底板走 `.dock__panel`（macOS：半透明 + blur 40 + 描边 + 圆角 12 + 投影），颜色全在令牌里 */
+      className={`dock__panel absolute z-50 flex justify-center gap-1 p-1.5 ${
         vertical ? 'flex-col items-center' : 'items-center'
       }`}
     >
@@ -807,9 +841,10 @@ export function Dock() {
       {vertical ? null : menuButton}
 
       {mode === 'wheel' ? (
-        /* ── 循环轮盘（默认）──
-           视口里放**两份**背靠背的列表，offset 归一化到 [0, N*step)：往一个方向一直拖能绕回起点，
-           永远不到头（也不会像滚动那样到头卡住）。中央放大按"离视口中心的距离"衰减。 */
+        /* ── 图标区（默认）：macOS 的观感与行为（2026-10-06「一切以 macOS 为准」）──
+           **有头有尾**：只渲染**一份**列表，`offset` 夹在 [0, maxOffset]，越界给橡皮筋阻尼、
+           松手用弹簧弹回端点；中央放大峰 2×、边缘回到 1.0×（macOS 不缩边缘图标）。
+           ⚠️ 原来是"循环"（两份列表 + 取模归一化），已拆掉 —— 别再改回来，回归断言在 verify 14b/14d。 */
         <div
           /* key 让两种模式**各用各的 DOM 节点**：轮盘与折行整棵子树结构不同，但外层都是 <div>，
              不给 key 时 React 会**复用同一个节点**并把它的 `scrollLeft` 一起带过去 ——
@@ -838,11 +873,10 @@ export function Dock() {
             style={{ gap: GAP }}
             className={`dock__track ${vertical ? 'dock__track--v' : ''}`}
           >
-            {[1, 2].map((copy) =>
-              (preview ?? shownApps).map((id, i) =>
-                iconButton(id, { copy: copy === 1 ? 1 : 2, index: i, wheel: true }),
-              ),
-            )}
+            {/* ⚠️ **只渲染一份**（循环拆掉之后不再需要背靠背的第二份）。
+                这也顺手解决了一个老坑：两份同名按钮会让 `button[aria-label="博客"]` 一次命中两个、
+                Playwright strict mode 直接报错 —— 现在每个应用只有一颗按钮。 */}
+            {(preview ?? shownApps).map((id, i) => iconButton(id, { index: i, wheel: true }))}
           </div>
         </div>
       ) : (
@@ -874,7 +908,7 @@ export function Dock() {
               vertical ? 'flex-col' : ''
             }`}
           >
-            {shownApps.map((id, i) => iconButton(id, { copy: 1, index: i, wheel: false }))}
+            {shownApps.map((id, i) => iconButton(id, { index: i, wheel: false }))}
           </div>
         </div>
       )}

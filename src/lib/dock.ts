@@ -5,8 +5,10 @@ export const DOCK_THICKNESS = 54
 /** 厚度下限（再薄就装不下默认尺寸的按钮） */
 export const DOCK_MIN_THICKNESS = 48
 
-/* 任务栏内部几何：Dock 组件与下面的厚度下限共用，改一处即可 */
-export const DOCK_GAP = 4
+/* 任务栏内部几何：Dock 组件与下面的厚度下限共用，改一处即可。
+   ⚠️ GAP = **8px** 是 macOS 的 Dock 图标间距（原先 4px）——2026-10-06「一切以 macOS 为准」。
+   它是 `dockStep()` 的一半，所以改它会连带放大/吸附/长度下限的几何，别单独在组件里写死别的间距。 */
+export const DOCK_GAP = 8
 export const DOCK_PAD = 6
 export const DOCK_BORDER = 1
 
@@ -21,14 +23,17 @@ export function minDockThickness(iconSize: number | null): number {
   return Math.max(DOCK_MIN_THICKNESS, iconSize + (DOCK_PAD + DOCK_BORDER) * 2)
 }
 
-/* ── 循环轮盘（mode: 'wheel'，2026-10-05 用户要的）─────────────────────────────
-   中央放大：**中心 2×，越远越小，到可视边缘约 0.8×**（站主拍板的口径）。
+/* ── 图标区（mode: 'wheel'，2026-10-06 起改成 macOS 的观感与行为）────────────────
+   中央放大：**峰 2×，越往外越小，到可视边缘回到 1.0×**。
    公式 `scale = PEAK - (PEAK - MIN) * u^1.5`，`u = 归一化距离`（0 = 峰所在的那个图标，1 = 可视边缘）。
-   拖拽浏览松手吸附到最近格子，缓动 SNAP_MS。竖拖 44px 才进入"移动图标"。 */
-/** 正中（峰）的倍数 */
+   ⚠️ **MIN 是 1.0，不是 0.8**：macOS 的 Dock **不把边缘图标缩小**（站主 2026-10-05 曾要过"越远越小"，
+   2026-10-06「一切以 macOS 为准」把那条撤了）。别改回小于 1 的值。
+   拖拽浏览松手**回弹**（不再循环、不再吸附到任意格子，见下面 RUBBER/SPRING）。
+   竖拖 MOVE_THRESHOLD 才进入"移动图标"。 */
+/** 峰（正中）的倍数 */
 export const MAGNIFY_PEAK = 2
-/** 可视边缘的倍数：**小于 1×** —— 外侧图标比基础尺寸还小一圈，这是要的效果，不是被裁 */
-export const MAGNIFY_MIN = 0.8
+/** 可视边缘的倍数 = **1.0×**（macOS 不缩边缘图标） */
+export const MAGNIFY_MIN = 1
 /** 衰减曲线的指数（1.5：中心附近变化慢、外侧收得快） */
 export const MAGNIFY_EXP = 1.5
 export const MOVE_THRESHOLD = 44
@@ -39,6 +44,55 @@ export const DOCK_VIEW_MIN_SLOTS = 3
 export const DOCK_MIN_LENGTH = 140
 /** 任务栏与屏幕边缘的间距 */
 export const DOCK_MARGIN = 8
+
+/* ── 回弹（站主 2026-10-06：「跟随 macOS 改成回弹，**一切以 macOS 为准**」）────────
+   ⚠️ 先把事实说清楚（`MACOS-BRIEF.md` 4.1 节）：**macOS 的 Dock 本身不滚动** ——
+   图标多了它是**整体缩小**；回弹是 macOS / iOS **滚动视图**的行为。我们按滚动视图做：
+   两端是终点、越界阻尼、松手弹回。站主选的就是这条，所以不是"折中方案"。
+   ⚠️ 旧实现是**循环**（渲染两份背靠背的列表 + `offset` 取模归一化，转一圈回到起点），
+   已按总原则拆掉 —— **别再改回来**（站主的原话是"有头有尾、到两端回弹"）。
+   回归断言在 `verify.mjs` 14b/14d：「到端被夹住」「越界被阻尼」「松手回弹到端点」「装得下不可拖」。 */
+
+/** 橡皮筋公式里的常数（苹果滚动视图那套 `f(x,d,c) = (1 − 1/(x·c/d + 1))·d` 的 c） */
+export const RUBBER_C = 0.55
+/** `d` = 视口长度的这个比例（480px 的可视区 → 最多能多拉 120px 就被"拽住"） */
+export const RUBBER_D_RATIO = 0.25
+/** 松手回弹的弹簧：**取 `playground-macos` DockItem 用的那组**（1700 / 90，MIT）。
+ *  它原本喂给 framer-motion，我们**不引依赖**，用同一个 k/c 自己积分（见 Dock.tsx 的 settle）。
+ *  ζ = c/(2√k) ≈ 1.09 → 略过阻尼，没有回弹过冲，实测 ~200ms 落位。 */
+export const SPRING_STIFFNESS = 1700
+export const SPRING_DAMPING = 90
+
+/** 图标区内容的总长度（N 个图标 + N−1 个间距）。`dockStep()` 是"中心距"，别拿来当内容长度。 */
+export function dockContentLength(count: number, step: number): number {
+  return count > 0 ? count * step - DOCK_GAP : 0
+}
+
+/**
+ * 可拖动的最大偏移 = 内容长度 − 可视长度，**不小于 0**。
+ * = 0 表示"装得下、根本不用拖"（这时不许拖，也不许有回弹）—— 站主要的 macOS 行为里，
+ * Dock 装得下就是静止的。
+ */
+export function dockMaxOffset(count: number, step: number, viewLen: number): number {
+  return Math.max(0, dockContentLength(count, step) - viewLen)
+}
+
+/** 苹果滚动视图的橡皮筋位移：拉得越远、增量越小（永远不超过 d） */
+export function rubberBand(x: number, dim: number, c = RUBBER_C): number {
+  const d = Math.max(1, dim)
+  return (1 - 1 / ((Math.max(0, x) * c) / d + 1)) * d
+}
+
+/**
+ * 把"原始偏移"（拖动时可能越界）换成**实际画出来的偏移**：界内原样、越界按橡皮筋阻尼。
+ * 拖动时用它画、松手时用 spring 收回端点 —— 这样"拉 100px 实移不到 100px、增量递减"。
+ */
+export function dampedOffset(offset: number, maxOffset: number, viewLen: number): number {
+  const dim = viewLen * RUBBER_D_RATIO
+  if (offset < 0) return -rubberBand(-offset, dim)
+  if (offset > maxOffset) return maxOffset + rubberBand(offset - maxOffset, dim)
+  return offset
+}
 
 /* ── 两套模式各自的几何 ────────────────────────────────────────────────
    `wheel` = 循环轮盘（**永远单行**）；`wrap` = 旧的折行（最多 3 行，完全旧行为）。

@@ -972,10 +972,20 @@
 .dock__track--v {
   flex-direction: column;
 }
-/* 只有"松手吸附 / 滚轮"时才缓动：拖动过程中必须关掉 transition，否则跟手会飘（工作单第四节） */
-.dock__track--anim,
-.dock__track--anim .dock__item {
-  transition: transform 150ms cubic-bezier(0.22, 0.61, 0.36, 1);
+/* ── Dock 底板（macOS，2026-10-06「一切以 macOS 为准」）─────────────────────────
+   规格见 `MACOS-BRIEF.md` 第 2 节：`blur 40px + white/20 + 1px rgba(160,160,170,.4) + 圆角 12px + 投影`。
+   颜色 / 模糊 / 投影全部读令牌（`tokens.css` 两套主题各一份）。
+   ⚠️ 原来那条 `.dock__track--anim`（松手吸附靠 CSS transition 缓动）**已经删掉**：
+   现在的松手回弹是 rAF 弹簧（`Dock.tsx` 的 `settle`），再叠一层 CSS transition 会跟手发飘。
+   ⚠️ `backdrop-filter` 会成为后代 `fixed` 元素的包含块 —— 拖拽幽灵是 portal 到 `document.body` 的，
+   不在这个容器里，所以不受影响（**别把幽灵挪进任务栏**）。 */
+.dock__panel {
+  background: var(--c-dock-bg);
+  backdrop-filter: blur(var(--dock-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--dock-blur)) saturate(180%);
+  border: var(--dock-border);
+  border-radius: var(--r-dock);
+  box-shadow: var(--dock-shadow);
 }
 /* 换位时被拖走的那个图标：**留在原位当占位**（淡出），跟手的实体是下面那个浮层幽灵 */
 .dock__item--lift {
