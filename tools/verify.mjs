@@ -1351,16 +1351,36 @@ async function run() {
      ⚠️ 同时钉住"无障碍名一个都没动" —— 两个脚本点任务栏全靠 `button[aria-label="X"]`。 */
   const glyphProbe = await p.evaluate((sel) => {
     const btns = [...document.querySelectorAll(`${sel} [data-dock-item][data-dock-copy="1"]`)]
-    const rows = btns.map((b) => ({
-      label: b.getAttribute('aria-label'),
-      hasImg: !!b.querySelector('img'),
-      hasSvg: !!b.querySelector('svg'),
-    }))
+    /* 量"图标 / 按钮"的填充比：**先把按钮上的放大 transform 摘掉再量**（放大后的 rect 不是布局尺寸），
+       量完立刻装回去 —— 同一个 evaluate 里同步做完，不触发绘制，所以不会闪
+       （和下面 `edge` 那条用同一个手法）。 */
+    const measure = (b) => {
+      const svg = b.querySelector('svg')
+      if (!svg) return { btn: b.offsetWidth, glyph: 0 }
+      const saved = b.style.transform
+      b.style.transform = ''
+      const bw = b.getBoundingClientRect().width
+      const gw = svg.getBoundingClientRect().width
+      b.style.transform = saved
+      return { btn: Number(bw.toFixed(1)), glyph: Number(gw.toFixed(1)) }
+    }
+    const rows = btns.map((b) => {
+      const m = measure(b)
+      return {
+        label: b.getAttribute('aria-label'),
+        hasImg: !!b.querySelector('img'),
+        hasSvg: !!b.querySelector('svg'),
+        ...m,
+        fill: m.btn > 0 ? Number((m.glyph / m.btn).toFixed(3)) : 0,
+      }
+    })
     return {
       total: rows.length,
       img: rows.filter((r) => r.hasImg).length,
       svg: rows.filter((r) => r.hasSvg).length,
       labelled: rows.filter((r) => r.label).length,
+      fill: rows.map((r) => r.fill),
+      sample: rows.slice(0, 3).map((r) => ({ btn: r.btn, glyph: r.glyph, fill: r.fill })),
     }
   }, DOCK)
   check(
@@ -1370,6 +1390,16 @@ async function run() {
       glyphProbe.img === 0 &&
       glyphProbe.labelled === glyphProbe.total,
     JSON.stringify(glyphProbe),
+  )
+
+  /* 14a2 图标**填充比**：`.dock__glyph` 读 `--dock-icon-fill`（默认 **72%**）。
+     来历：`design/ICON-MACOS-BRIEF.md` 读代码量出来「图标只有按钮的一半」（默认 40px 按钮里 20px）
+     是**与 macOS 差距最大的单点** —— macOS 的 Dock 图标几乎填满格子。这个值就是那条的回归：
+     谁把 `.dock__glyph` 退回 `h-1/2`（或忘了挂 `--dock-icon-fill`），这里会红。 */
+  check(
+    'Dock 图标占按钮边长的 **72%**（原来 50%：40px 按钮里只有 20px、周围一圈空）',
+    glyphProbe.fill.length > 0 && glyphProbe.fill.every((f) => Math.abs(f - 0.72) <= 0.04),
+    JSON.stringify({ 期望: 0.72, 实测样本: glyphProbe.sample }),
   )
 
   /* 放大曲线：`scale = PEAK - (PEAK-MIN)·u^1.5`，PEAK = 2、**MIN = 1.0**、指数 1.5。

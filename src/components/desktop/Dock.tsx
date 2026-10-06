@@ -7,6 +7,7 @@ import { useWindows } from '../../hooks/useWindows'
 import {
   DOCK_BORDER as BORDER,
   DOCK_GAP as GAP,
+  DOCK_ICON_FILL,
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
@@ -733,6 +734,17 @@ export function Dock() {
     if (thickness !== null) barStyle.height = thickness
   }
 
+  /* 图标区的内联几何 + 图标填充比。
+     `--dock-icon-fill` 挂在这一层 → 整棵子树继承，`.dock__glyph` 读它定图标大小
+     （默认 40px 按钮里约 29px；原来 `h-1/2 w-1/2` 只有 20px，见 lib/dock 的 DOCK_ICON_FILL）。
+     ⚠️ 自定义属性不在 `CSSProperties` 的类型里，所以要 `as unknown as`（TS 只允许这样绕）。 */
+  const wheelViewStyle = {
+    /* length 定了就吃掉剩余空间，没定就按内容（= 装下所有图标） */
+    flex: length === null ? '0 0 auto' : '1 1 auto',
+    ...(vertical ? { height: viewLen } : { width: viewLen }),
+    '--dock-icon-fill': `${DOCK_ICON_FILL * 100}%`,
+  } as unknown as CSSProperties
+
   const menuButton = (
     <button
       type="button"
@@ -787,7 +799,9 @@ export function Dock() {
           loop ? 'dock__item' : ''
         } ${active ? 'bg-accent text-accent-ink' : ''}`}
       >
-        {appGlyph(app.id, 'h-1/2 w-1/2')}
+        {/* 图标区（wheel）用 `.dock__glyph`（占按钮 72%，macOS 那种填满格子）；
+            折行（wrap）仍是 `h-1/2 w-1/2` —— 那是它的旧观感，按规矩不动。 */}
+        {appGlyph(app.id, loop ? 'dock__glyph' : 'h-1/2 w-1/2')}
         {running ? (
           <span
             /* 正在跑的小圆点（macOS 的 4px 指示点）：未运行时**不渲染**，所以不占位。
@@ -857,11 +871,7 @@ export function Dock() {
           onPointerUp={wheelUp}
           onPointerCancel={wheelUp}
           onWheel={wheelOnWheel}
-          style={{
-            /* length 定了就吃掉剩余空间，没定就按内容（= 装下所有图标，超了由循环补） */
-            flex: length === null ? '0 0 auto' : '1 1 auto',
-            ...(vertical ? { height: viewLen } : { width: viewLen }),
-          }}
+          style={wheelViewStyle}
           className={`dock__view ${vertical ? 'dock__view--v' : 'dock__view--h'}`}
         >
           <div

@@ -1197,6 +1197,14 @@
 .dock__track--v {
   flex-direction: column;
 }
+/* 图标区里那个应用图占按钮边长的比例（默认 72%，由内联的 `--dock-icon-fill` 给值）。
+   ⚠️ 来历：原来是 `h-1/2 w-1/2` —— 默认 40px 的按钮里图标只有 **20px**，周围一圈空；
+   `design/ICON-MACOS-BRIEF.md` 量出这是**与 macOS 差距最大的单点**（macOS 的 Dock 图标几乎填满格子）。
+   ⚠️ 只给**图标区**用：折行模式（`wrap`）仍是 50%，那是它的旧观感，按规矩不动。 */
+.dock__glyph {
+  width: var(--dock-icon-fill, 72%);
+  height: var(--dock-icon-fill, 72%);
+}
 /* ── Dock 底板（macOS，2026-10-06「一切以 macOS 为准」）─────────────────────────
    规格见 `MACOS-BRIEF.md` 第 2 节：`blur 40px + white/20 + 1px rgba(160,160,170,.4) + 圆角 12px + 投影`。
    颜色 / 模糊 / 投影全部读令牌（`tokens.css` 两套主题各一份）。

@@ -36,6 +36,18 @@ export const MAGNIFY_PEAK = 2
 export const MAGNIFY_MIN = 1
 /** 衰减曲线的指数（1.5：中心附近变化慢、外侧收得快） */
 export const MAGNIFY_EXP = 1.5
+/**
+ * Dock 按钮里图标占按钮边长的比例。
+ *
+ * 来历：`design/ICON-MACOS-BRIEF.md` 读代码量出来的**与 macOS 差距最大的单点** ——
+ * 图标原来是 `h-1/2 w-1/2`，按钮是 `clamp(iconSize,32,64)`，所以默认 **40px 的按钮里图标只有 20px**，
+ * 周围一圈空；而 macOS 的 Dock 图标几乎**填满格子**。0.72 → 40px 按钮里约 **29px**。
+ *
+ * ⚠️ 它只作用于 `wheel`（图标区）模式的 `.dock__glyph`；折行模式仍用 50%（那是它的"旧观感"，
+ * 按项目规矩一个字不改）。改这个值会连带影响 **2× 放大后的凸出量**（图标变大 → 凸出更多），
+ * 验证里那条"凸出 ≥ 整个增量、贴栏边漂移 ≤2px"要跟着看。
+ */
+export const DOCK_ICON_FILL = 0.72
 export const MOVE_THRESHOLD = 44
 export const SNAP_MS = 150
 /** 循环轮盘的可视长度至少要有这么多个图标位：少于 3 个，放大后的中心图标会被裁掉一半 */
