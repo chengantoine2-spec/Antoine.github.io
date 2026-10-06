@@ -226,8 +226,8 @@ bg-hover                         悬停底色（**给任务栏那种深色面用
 bg-[var(--c-control-hover)]      浅面上小按钮（含标签上那个小 ×）悬停时的淡底色
 bg-[var(--c-danger)]             ⚠️ **关闭键已经不用它了**（macOS 交通灯自带红黄绿）。令牌仍然有值，
                                  留给以后的破坏性操作（删除确认之类）；别拿它去做普通关闭键的悬停底
---traffic-size/-gap/-inset       交通灯：12px 圆点 / 间距 8px / 距标题栏左边 8px
---traffic-glyph(-size)           交通灯字形色与字号（平时 opacity:0，悬停到那一簇才显）
+--traffic-size/-gap/-inset       交通灯：**14px** 圆点 / **9px** 间距 / 距标题栏左边 8px
+--traffic-glyph(-size)           交通灯字形色与字号（平时 opacity:0；hover 到那一簇才显，**11px、0.85**）
 --c-traffic-close/min/max        交通灯三色（红 / 黄 / 绿；取自 playground-macos 用的 Tailwind 500 档）
 --titlebar-h                     标题栏高度 = 24px（macOS 值，标签行跟着压到 18px）
 --shadow-window                  窗口投影（macOS 的 shadow-lg + black/30）

@@ -687,7 +687,13 @@
 }
 
 /* ── 窗口标题栏：macOS 交通灯（左）+ 居中的标签行 ──
-   规格见 MACOS-BRIEF 第 2.2 节：12px 圆点、间距 8px、距左 8px；**字形平时隐藏、hover 才显**（9px）。
+   规格见 MACOS-BRIEF 第 2.2 节 + 站主 2026-10-06 的两条加码：
+   **14px 圆点、间距 9px、距左 8px**（原来是 12/8/8 —— 站主说"再大一点"）；
+   **字形平时隐藏、hover 才显，且 hover 时 opacity 0.85、字号 11px**
+   （原来是 9px / opacity 1 —— 站主说"鼠标上去的时候再明显一点"，0.85 × 更深一档的字形色更清楚）。
+   ⚠️ 标题栏只有 24px（`--titlebar-h`，macOS 值，**别为了塞进 14px 去加高它**）：
+   14px 圆点在 24px 里上下各留 5px，`align-items: center` 已居中；`verify.mjs` 会量
+   "圆点完整落在标题栏里且垂直居中（±1px）"。
    站主 2026-10-06 批准「其他照 macOS 全改」——所以右侧那套 `– □ ×`、
    关闭键的红底（`--c-danger`）与"悬停显按钮形状"那套**都撤掉了**。
    ⚠️ 按钮的 `aria-label` 与容器 `[data-window-controls]` **不许改**：
@@ -728,7 +734,9 @@
   background: var(--c-traffic-max);
 }
 
-/* 平时就是三个纯色圆点，指针进到这一簇 / 键盘聚焦到某个按钮时才显字形 */
+/* 平时就是三个纯色圆点，指针进到这一簇 / 键盘聚焦到某个按钮时才显字形。
+   ⚠️ hover 用 0.85 而不是 1：站主要的"更明显"是**看得清**，不是纯黑压上去；
+   0.85 配上更深的 `--traffic-glyph` 才既清楚又不糊。改这个值要同步 `verify.mjs` 的 `≥0.8` 断言 */
 .traffic > span {
   opacity: 0;
   transition: opacity 90ms ease-out;
@@ -736,7 +744,7 @@
 
 .traffic-lights:hover .traffic > span,
 .traffic:focus-visible > span {
-  opacity: 1;
+  opacity: 0.85;
 }
 
 /* 标签行：装得下**居中**（macOS 的标题在正中间）、装不下退化成 start。

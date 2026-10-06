@@ -2239,8 +2239,10 @@ async function run() {
     await p.waitForTimeout(120)
     return p.evaluate((s) => getComputedStyle(document.querySelector(s)).backgroundColor, sel)
   }
-  /* macOS 交通灯（站主 2026-10-06 批准「其他照 macOS 全改」）：
-     12px 圆点 / 间距 8px / 距左 8px，顺序红黄绿、都在**左侧**；
+  /* macOS 交通灯（站主 2026-10-06 批准「其他照 macOS 全改」，同日又加码两条：
+     「再大一点」→ 12→14px、间距 8→9px；「图标鼠标上去再明显一点」→ 字形 9→11px、hover opacity 1→0.85、
+     字形色 0.55→0.78/0.85 加深一档）：
+     14px 圆点 / 间距 9px / 距左 8px，顺序红黄绿、都在**左侧**；
      **字形平时隐藏、hover 才显**；悬停**不给底色** ——
      旧的「悬停显按钮形状 + 关闭键红底」那套已经撤掉（--c-danger 只留令牌，不再用于关闭键）。
      标签上那个小 × 也不再是红底（红色只属于交通灯里的关闭圆点）。 */
@@ -2272,6 +2274,14 @@ async function run() {
       inset: Math.round((r[0]?.left ?? 0) - w.left),
       colors: dots.map((d) => getComputedStyle(d).backgroundColor),
       glyph: dots.map((d) => getComputedStyle(d.querySelector('span')).opacity),
+      glyphSize: dots.map((d) => parseFloat(getComputedStyle(d.querySelector('span')).fontSize)),
+      /* 14px 圆点要塞进 24px 标题栏：量它有没有溢出、有没有偏心 */
+      fit: {
+        headH: Math.round(w.height),
+        top: Math.round(r[0].top - w.top),
+        bottom: Math.round(w.bottom - r[2].bottom),
+        centerOff: Math.round(r[0].top + r[0].height / 2 - (w.top + w.height / 2)),
+      },
       labels: dots.map((d) => d.getAttribute('aria-label')),
     }
   }, WIN)
@@ -2279,16 +2289,45 @@ async function run() {
   const [mr, mg, mb] = chan(lights.colors[1])
   const [gr, gg, gb] = chan(lights.colors[2])
   check(
-    '交通灯在左：12px 圆点 / 间距 8px / 距左 8px，字形平时隐藏（aria-label 仍是 关闭 / 最小化 / 最大化|还原）',
+    '交通灯在左：14px 圆点 / 间距 9px / 距左 8px、字形 11px 平时隐藏（aria-label 仍是 关闭 / 最小化 / 最大化|还原）',
     lights.n === 3 &&
-      lights.size === 12 &&
-      lights.gap === 8 &&
+      lights.size === 14 &&
+      lights.gap === 9 &&
       lights.inset === 8 &&
+      lights.glyphSize.every((s) => s === 11) &&
       lights.glyph.every((o) => Number(o) === 0) &&
       lights.labels[0] === '关闭' &&
       lights.labels[1] === '最小化' &&
       (lights.labels[2] === '最大化' || lights.labels[2] === '还原'),
     JSON.stringify(lights),
+  )
+  check(
+    '交通灯完整落在 24px 标题栏里且垂直居中（14px 圆点不溢出、也不把标题栏撑高）',
+    lights.fit.headH === 24 &&
+      lights.fit.top >= 0 &&
+      lights.fit.bottom >= 0 &&
+      Math.abs(lights.fit.centerOff) <= 1,
+    JSON.stringify(lights.fit),
+  )
+  /* 右端那颗"等宽占位"是用令牌算出来的（inset + 3*size + 2*gap），圆点一变大它就该跟着变宽。
+     这里直接量标签块的中线有没有跟着偏 —— 占位写死或忘了联动，这条就红 */
+  const titleMid = await p.evaluate((sel) => {
+    const win = document.querySelector(sel)
+    const head = win.querySelector('[data-frame-head]')
+    const tabs = [...win.querySelectorAll('[data-tab]')]
+    const h = head.getBoundingClientRect()
+    const first = tabs[0].getBoundingClientRect()
+    const last = tabs[tabs.length - 1].getBoundingClientRect()
+    return {
+      headMid: Math.round(h.left + h.width / 2),
+      tabsMid: Math.round((first.left + last.right) / 2),
+      n: tabs.length,
+    }
+  }, WIN)
+  check(
+    '标签块在标题栏里居中（右端占位宽度跟着交通灯令牌走，中线偏差 ≤2px）',
+    titleMid.n >= 1 && Math.abs(titleMid.headMid - titleMid.tabsMid) <= 2,
+    JSON.stringify(titleMid),
   )
   check(
     '交通灯三色 = 红 / 黄 / 绿（按通道判定，不钉死 hex）',
@@ -2299,15 +2338,49 @@ async function run() {
   await p.waitForTimeout(150)
   const litHover = await p.evaluate((sel) => {
     const d = document.querySelector(sel)
+    const span = d.querySelector('span')
     return {
-      glyph: getComputedStyle(d.querySelector('span')).opacity,
+      glyph: getComputedStyle(span).opacity,
+      glyphColor: getComputedStyle(span).color,
       bg: getComputedStyle(d).backgroundColor,
     }
   }, WIN + '[data-window-controls] button[aria-label="关闭"]')
   check(
-    '交通灯悬停：字形显现，且不给底色（旧的悬停显形状已撤）',
-    Number(litHover.glyph) === 1 && litHover.bg === lights.colors[0],
+    '交通灯悬停：字形明显显现（opacity ≥0.8）、且不给底色（旧的悬停显形状已撤）',
+    Number(litHover.glyph) >= 0.8 && litHover.bg === lights.colors[0],
     JSON.stringify(litHover),
+  )
+  /* 「更明显」不能只量 opacity：**字形色自己的 alpha 与元素 opacity 是相乘的**
+     （第一版就踩在这儿：把字形色加深到 0.78 又乘 0.85，有效只剩 0.66，反而比旧的 0.55 强不了多少）。
+     这里按 WCAG 公式算"黑字压在圆点上"的**实际对比度**，三个圆点都要 ≥4.5:1；
+     旧值 0.55 × 1.0 只有 3.0 / 3.9 / 3.7 —— 这条就是站主那句"再明显一点"的回归。 */
+  const alphaOf = (c) => {
+    const m = /rgba?\(([^)]+)\)/.exec(c || '')
+    if (!m) return 1
+    const parts = m[1].split(',').map(Number)
+    return parts.length > 3 ? parts[3] : 1
+  }
+  const lumOf = (rgb) => {
+    const f = (v) => {
+      v /= 255
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2])
+  }
+  const ratioOf = (a, b) => {
+    const l1 = lumOf(a)
+    const l2 = lumOf(b)
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+  }
+  const effAlpha = Number((alphaOf(litHover.glyphColor) * Number(litHover.glyph)).toFixed(3))
+  const glyphRatios = lights.colors.map((c) => {
+    const dot = chan(c)
+    return Number(ratioOf(dot.map((v) => Math.round(v * (1 - effAlpha))), dot).toFixed(2))
+  })
+  check(
+    '交通灯悬停：字形实际对比度 ≥4.5:1（有效 alpha = 字形色 alpha × 元素 opacity，只量一个会算错）',
+    effAlpha >= 0.78 && glyphRatios.every((r) => r >= 4.5),
+    JSON.stringify({ effAlpha, glyphRatios, glyphColor: litHover.glyphColor, 旧值: '0.55×1.0 → 3.0/3.9/3.7' }),
   )
   const tabCloseBg = await hoverBg(WIN + '[data-tab-close]')
   check(

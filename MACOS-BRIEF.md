@@ -103,6 +103,11 @@
 | 标题栏高度 | **24px**（`h-6`），内容区 `calc(100% - 1.5rem)` | AppWindow.tsx / component.css |
 | 交通灯尺寸 | **12px**（`size-3`）圆点，间距 8px（`space-x-2`），距左 8px（`pl-2`） | unocss.config.ts（`window-btn`） |
 | 交通灯字形 | **平时隐藏、hover 才显示**：`.traffic-lights .icon{display:none}` + `:hover .icon{display:block}`；字号 9~10px | component.css |
+
+> ⚠️ **这两行是"参考项目用多少"，不是本站规格**：站主 2026-10-06 看过之后加码了两条，本站实现已经更大更明显 ——
+> 圆点 **14px**、间距 **9px**、字形 **11px**、hover opacity **0.85**、字形色 **0.95（浅）/ 1.0（深）**
+> （实测字形压在圆点上的对比度 4.97 / 8.91 / 7.69:1，全过 WCAG 4.5）。本站规格以 `ARCH-WINDOW.md` 与
+> `tokens.css` 为准。
 | Dock 底板 | `backdrop-blur-2xl`（**40px 模糊**）+ `bg-white/20` + `border 1px rgba(160,160,170,0.4)` + `rounded-xl`（12px） | dock/Dock.tsx |
 | Dock 高度 | 图标边长 **+ 15px** | dock/Dock.tsx |
 | Dock 内间距 | 图标之间 **8px**、左右内边距 **8px** | dock/Dock.tsx |

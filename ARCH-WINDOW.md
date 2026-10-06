@@ -20,10 +20,16 @@
     这一行里，右边紧挨着 `[data-window-controls]`（那三个按钮）。⚠️ 因此
     **别再按 `header button` 去数标题栏按钮**（标签的按钮也在里面了），要用 `[data-window-controls] button`；
     验证里那条检查也叫「整扇窗只有一行」并断言"**交通灯贴左、标签行与它同排**"
-  - **交通灯（macOS，2026-10-06「其他照 macOS 全改」）**：左起 **红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）**，
-    12px 圆点、间距 8px、距标题栏左边 8px；**字形平时隐藏、hover 到这一簇才显**（9px）。
+  - **交通灯（macOS，2026-10-06「其他照 macOS 全改」；同日站主又加码两条：
+    「再大一点」+「图标鼠标上去再明显一点」）**：左起 **红（关闭）→ 黄（最小化）→ 绿（最大化 / 还原）**，
+    **14px 圆点、间距 9px、距标题栏左边 8px**（原 12 / 8 / 8）；
+    **字形平时隐藏、hover 到这一簇才显**（**11px、opacity 0.85**，原 9px / 1.0），
+    字形色也从 `rgba(0,0,0,.55)` 加深到 **.78（浅）/ .85（深）** —— 压在亮色圆点上才看得清。
     样式在 `globals.css` 的 `.traffic-lights` / `.traffic*`，尺寸与颜色全走令牌
-    （`--traffic-size/-gap/-inset/-glyph`、`--c-traffic-close/min/max`）。
+    （`--traffic-size/-gap/-inset/-glyph`、`--traffic-glyph-size`、`--c-traffic-close/min/max`）。
+    ⚠️ **标题栏仍是 24px**（`--titlebar-h`）：14px 圆点上下各留 5px，靠 `align-items: center` 居中，
+    **别为了塞进圆点去加高标题栏**；`verify.mjs` 有两条钉住"圆点完整落在标题栏内 + 垂直居中 ±1px"
+    与"标签块中线偏差 ≤2px"（后者是因为右端占位宽 = `inset + 3*size + 2*gap`，圆点一变大占位就得跟着变）。
     ⚠️ **撤掉的旧做法，别往回加**：右侧的 `– □ ×`（连同 `MaximizeGlyph` 的引用）、
     关闭键的**红底** `hover:bg-[var(--c-danger)]`、以及"悬停显按钮形状"那套 `--c-control-hover`。
     `--c-danger` / `--c-danger-fg` **令牌仍然留着并有值**（给以后的破坏性操作，比如删除确认用），
