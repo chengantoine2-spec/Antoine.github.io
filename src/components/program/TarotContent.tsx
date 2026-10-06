@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PENDING_SPREADS, SPREADS, spreadOfId } from '../../data/tarot/spreads'
+import { QUESTION_ROTATE_MS, pickQuestion } from '../../data/tarot/questions'
 import { drawReading } from '../../lib/tarot/draw'
 import {
   appendHistory,
@@ -39,6 +40,37 @@ export default function TarotContent() {
   const [reviewing, setReviewing] = useState(false)
 
   const timer = useRef<number | null>(null)
+
+  /* 「想问什么」的示例：按时段分桶（清晨/上午/午后/傍晚/深夜）、每 20 秒换一条。
+     ⚠️ 走时用**对齐整秒的自调度 setTimeout**，不用 setInterval —— 后台标签页节流、Edge 的睡眠标签页
+     会把它停掉（项目里栽过）；窗口不可见时干脆不排下一次，回到可见立刻重新对表。 */
+  const [hintTick, setHintTick] = useState(0)
+  const questionHint = useMemo(() => pickQuestion(new Date()), [hintTick])
+
+  useEffect(() => {
+    let id: number | null = null
+    const schedule = () => {
+      if (document.visibilityState === 'hidden') return
+      /* 对齐到下一个 20s 边界；20s 是整秒的整数倍，所以落点也在整秒上 */
+      const wait = QUESTION_ROTATE_MS - (Date.now() % QUESTION_ROTATE_MS)
+      id = window.setTimeout(() => {
+        setHintTick((n) => n + 1)
+        schedule()
+      }, wait)
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (id !== null) window.clearTimeout(id)
+      setHintTick((n) => n + 1)
+      schedule()
+    }
+    schedule()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      if (id !== null) window.clearTimeout(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   useEffect(
     () => () => {
@@ -182,9 +214,13 @@ export default function TarotContent() {
               value={question}
               maxLength={80}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="例如：这份工作要不要换？"
+              placeholder={questionHint.text}
               className="mt-1.5 w-full rounded-md border border-edge bg-surface-2 px-3 py-2 text-sm text-ink outline-none placeholder:text-dim focus:border-[var(--c-accent)]"
             />
+            {/* 这一行既是提示、也是"它会变"的证据（验证脚本按 data-tarot-hint 找它） */}
+            <p className="mt-1.5 text-[11px] text-dim" data-tarot-hint data-bucket={questionHint.bucket.id}>
+              例子会随时间换：现在是「{questionHint.bucket.name}」的写法，每 {QUESTION_ROTATE_MS / 1000} 秒换一条。
+            </p>
           </section>
 
           <div className="mt-4 flex items-center gap-2">

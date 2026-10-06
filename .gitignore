@@ -5,9 +5,12 @@ dist-ssr
 .DS_Store
 .vite
 
-# ���Ͳݸ壨��������������վ�㣻ͼ����������ֶ��ϴ���
+# 博客草稿（待发布，不属于站点；图放这儿方便手动上传）
 blog-draft/
 
 # 塔罗源素材（43.6MB，处理后才进 public/tarot/cards）与本地截图：都不进仓库
-tarot/
+# ⚠️ 必须带前导斜杠 —— 写成 `tarot/` 会连 src/data/tarot/**、src/lib/tarot/**、
+#    src/components/program/tarot/** 一起吞掉，那几个目录里的**新文件**会静默提交不进去
+#    （2026-10-06 踩过：questions.ts 中招）
+/tarot/
 preview/*.png

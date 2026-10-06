@@ -310,6 +310,74 @@ async function run() {
   check('选择页列出了刚才那一把', historyShown.rows >= 1, `${historyShown.rows} 条`)
   check('历史条目带着问题', historyShown.text.includes('这份工作要不要换'), historyShown.text.slice(0, 40))
 
+  /* ── 「想问什么」的例子：日常小事 + 按时段分桶 + 随时间轮换（站主 2026-10-06） ── */
+  const hints = await page.evaluate(async () => {
+    const q = await import('/src/data/tarot/questions.ts')
+    const at = (h, m = 0) => new Date(2026, 9, 6, h, m, 0, 0)
+    const textAt = (h) => q.pickQuestion(at(h)).text
+    const all = q.QUESTION_BUCKETS.flatMap((b) => b.questions)
+    const list = q.questionBucketForHour(14).questions
+    const t0 = at(14, 0)
+    const t1 = new Date(t0.getTime() + q.QUESTION_ROTATE_MS)
+    const t2 = new Date(t0.getTime() + q.QUESTION_ROTATE_MS * list.length)
+    return {
+      total: q.questionTotal(),
+      buckets: q.QUESTION_BUCKETS.map((b) => ({ id: b.id, name: b.name, n: b.questions.length })),
+      unique: new Set(all).size,
+      hourMap: [1, 7, 10, 14, 18, 23].map((h) => ({ h, bucket: q.questionBucketForHour(h).id })),
+      crossBucket: [textAt(7), textAt(14), textAt(23)],
+      rotateMs: q.QUESTION_ROTATE_MS,
+      sameBucket: { a: q.pickQuestion(t0).text, b: q.pickQuestion(t1).text, cycle: q.pickQuestion(t2).text },
+    }
+  })
+  check(
+    '「想问什么」的例子够多（≥30 条，五个时段各 ≥5 条）',
+    hints.total >= 30 && hints.buckets.every((b) => b.n >= 5),
+    `${hints.total} 条 / ${hints.buckets.map((b) => b.name + b.n).join(' ')}`,
+  )
+  check('例子互不重复（同一句不会出现在两个时段）', hints.unique === hints.total, `${hints.unique}/${hints.total}`)
+  check(
+    '按小时分桶：清晨 / 午后 / 深夜各归各的时段（含跨零点那桶）',
+    hints.hourMap.find((x) => x.h === 7)?.bucket === 'dawn' &&
+      hints.hourMap.find((x) => x.h === 14)?.bucket === 'afternoon' &&
+      hints.hourMap.find((x) => x.h === 1)?.bucket === 'night' &&
+      hints.hourMap.find((x) => x.h === 23)?.bucket === 'night',
+    JSON.stringify(hints.hourMap),
+  )
+  check('不同时段取到的例子不一样', new Set(hints.crossBucket).size === 3, hints.crossBucket.join(' | '))
+  check(
+    `同一时段内每 ${hints.rotateMs / 1000} 秒换一条（一个循环后回到原句）`,
+    hints.sameBucket.a !== hints.sameBucket.b && hints.sameBucket.a === hints.sameBucket.cycle,
+    `${hints.sameBucket.a} → ${hints.sameBucket.b}`,
+  )
+
+  const hintUi = await page.evaluate(() => {
+    const input = document.querySelector('#tarot-question')
+    const hint = document.querySelector('[data-tarot-hint]')
+    return {
+      placeholder: input?.getAttribute('placeholder') ?? '',
+      hint: (hint?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      bucket: hint?.getAttribute('data-bucket') ?? '',
+    }
+  })
+  check(
+    '占位文案已经换成新例子（不再是旧的「这份工作要不要换」）',
+    hintUi.placeholder.length > 4 && hintUi.placeholder !== '例如：这份工作要不要换？',
+    hintUi.placeholder,
+  )
+  check('提示行标出当前时段与轮换周期', hintUi.hint.includes('秒') && hintUi.bucket.length > 0, hintUi.hint)
+
+  /* 真等一个周期：证明走时是活的（不是只在打开时算一次） */
+  await page.waitForTimeout(hints.rotateMs + 1500)
+  const placeholderAfter = await page.evaluate(
+    () => document.querySelector('#tarot-question')?.getAttribute('placeholder') ?? '',
+  )
+  check(
+    `等一个周期（${hints.rotateMs / 1000}s）后占位真的会变`,
+    placeholderAfter !== hintUi.placeholder,
+    `${hintUi.placeholder} → ${placeholderAfter}`,
+  )
+
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()
