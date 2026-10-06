@@ -1883,6 +1883,25 @@ async function run() {
     Math.abs(trackSnap.tx - trackDrag.tx) <= 2,
     JSON.stringify({ 松手时: trackDrag.tx, 松手后: trackSnap.tx }),
   )
+  /* ⚠️ 2026-10-06 站主**第二次**报「鼠标放到图标上面没有变大」。
+     我先做了 13 步"真实长会话"探针（开关窗口 / 拖动任务栏 120px / 竖拖换位 / 指针移出停 3 秒再回来 /
+     切后台再回前台 / 派发 visibilitychange / window blur+focus / 在任务栏上滚轮 / 从上方直落图标）——
+     **每一步之后再悬停都仍是 ≈2×**，所以**不是"用久了状态卡死"**。
+     真因是**另一个模式**：`wrap`（折行）**本来就没有悬停放大**（旧行为，见 14e 段新增的那条断言）。
+     但为了防第三次复发，这里把"**拖动过任务栏之后再悬停仍然放大**"固化下来 ——
+     拖动是最容易把 offset / rAF / 指针状态搅乱的交互，真出问题这里先红。
+     判据用"指针停在可视区中间 → 一定有某个图标被放大到 ≥1.8×"（不挑具体图标，避免依赖顺序）。 */
+  await p.mouse.move(wheelCenter.x, wheelCenter.y)
+  await p.waitForTimeout(360)
+  const afterDragHover = await wheelProbe(wheelCenter.x)
+  check(
+    '**拖动过任务栏之后再悬停**，放大仍然生效（有图标 ≥1.8×）—— 防"用一会儿就不放大"复发',
+    (afterDragHover.slotScales ?? []).some((s) => s >= 1.8),
+    JSON.stringify({
+      全部槽位: afterDragHover.slotScales,
+      最大: Math.max(...(afterDragHover.slotScales ?? [1])),
+    }),
+  )
   /* 越界：往**右**拖 300px（越过起点那一端）——按住不放先量"被阻尼了多少" */
   await p.mouse.move(wheelCenter.x, wheelCenter.y)
   await p.mouse.down()
@@ -2246,6 +2265,29 @@ async function run() {
     () => JSON.parse(localStorage.getItem('desktop.dock') ?? '{}').mode ?? null,
   )
   check('设置里能切到「折行」：desktop.dock.mode 落盘为 wrap', wrapStored === 'wrap', String(wrapStored))
+
+  /* ⚠️ 2026-10-06 站主报「鼠标放到图标上面没有变大」—— **真凶就在这条**：
+     `wrap`（折行）模式**没有悬停放大**（它是"完全旧行为"，按规矩不许改），
+     而站主的存档里很可能是老版本留下的 `mode: 'wrap'`（老默认值），于是他的 Dock 既不放大、还折行。
+     这条断言把"折行没有放大"**明确钉住并写进名字**：既是旧行为的回归保护，
+     也是以后有人再问"为什么不放大"时的第一份证据 —— **先看 `desktop.dock.mode`**。 */
+  const wrapHover = await p.evaluate((sel) => {
+    const b = document.querySelector(`${sel} button[aria-label="博客"]`)
+    if (!b) return null
+    const r = b.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  }, DOCK)
+  if (wrapHover) await p.mouse.move(wrapHover.x, wrapHover.y)
+  await p.waitForTimeout(400)
+  const wrapScales = await p.evaluate((sel) => {
+    const btns = [...document.querySelectorAll(`${sel} button[aria-label]`)]
+    return btns.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
+  }, DOCK)
+  check(
+    '折行（wrap）模式**没有悬停放大**（旧行为，刻意不改）—— 站主报"鼠标放上去不变大"时**先看 `desktop.dock.mode`**',
+    wrapScales.length > 0 && wrapScales.every((s) => s <= 1.02),
+    JSON.stringify({ mode: wrapStored, 悬停后全部scale: wrapScales }),
+  )
 
   /* 加厚到 150、长度拖到 260：折行模式下应该折成多行（旧行为） */
   await p.evaluate(() => {
