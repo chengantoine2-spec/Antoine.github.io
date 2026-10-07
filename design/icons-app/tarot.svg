@@ -9,5 +9,10 @@
   </defs>
   <rect x="44" y="44" width="424" height="424" rx="96" fill="url(#g)"/>
   <g clip-path="url(#c)"><rect x="44" y="44" width="424" height="424" fill="url(#hl)"/></g>
-  <g transform="translate(256 256) scale(1.16) translate(-256 -256)" fill="#fff"><g transform="rotate(-9 256 256)"><rect x="192" y="132" width="128" height="196" rx="18"/></g><path d="M256 246 L270 292 L316 306 L270 320 L256 366 L242 320 L196 306 L242 292 Z" fill="#7E22CE" opacity=".75"/></g>
+  <!-- 两张交叠的牌 + 牌面星（2026-10-06 修：原来只有一张牌，28px 下与「博客」的文稿撞脸；改成"双牌斜置"剪影） -->
+  <g transform="translate(256 256) scale(1.16) translate(-256 -256)" fill="#fff">
+    <g transform="rotate(11 256 256)" opacity=".5"><rect x="188" y="130" width="136" height="200" rx="20"/></g>
+    <g transform="rotate(-14 256 256)"><rect x="186" y="124" width="140" height="208" rx="22"/></g>
+    <g transform="rotate(-14 256 256)"><path d="M256 178 L272 226 L320 242 L272 258 L256 306 L240 258 L192 242 L240 226 Z" fill="#7E22CE" opacity=".8"/></g>
+  </g>
 </svg>
