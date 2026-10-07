@@ -12,12 +12,14 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
-  ASYM_BIAS,
+  /* ⚠️ 2026-10-07 站主口径反转：**两侧邻居等大**（不再随滑动方向变化）→ 这里**不再 import**
+     `ASYM_BIAS` / `ASYM_V_REF`（常量本身留在 `lib/dock.ts` 记沿革，别删）。
+     `ASYM_DEAD` / `ASYM_DECAY` 仍要：速度 EMA 还要**衰减到 0**，`tick` 的安定判据在用。 */
   ASYM_DEAD,
   ASYM_DECAY,
-  ASYM_V_REF,
   LATCH_MS,
   LATCH_SNAP_TAU,
+  LEAVE_SLACK,
   MAGNIFY_EXP,
   MAGNIFY_PEAK,
   MAGNIFY_RADIUS_SLOTS,
@@ -149,6 +151,9 @@ export function Dock() {
   const [hover, setHover] = useState<HoverState | null>(null)
   /* 点图标时的"弹一下"（macOS 的启动反馈）：只挂 300ms 的类名，纯离散事件，不进逐帧路径 */
   const [bouncing, setBouncing] = useState<AppId | null>(null)
+  /* ⭐ 2026-10-07（第 13 轮）"指针在**栏外那截放大图标**上"的标记：见 `wheelLeave` 与它的守卫 effect。
+     只由 `pointerleave` 置真、`wheelMove`／取消时置假 —— **离散事件**，不进逐帧路径。 */
+  const [overhang, setOverhang] = useState(false)
   const bar = useRef<HTMLElement | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
   const drag = useRef<{ px: number; py: number; sx: number; sy: number; moved: boolean } | null>(
@@ -507,12 +512,14 @@ export function Dock() {
       const t = Math.min(1, Math.abs(d) / MAGNIFY_RADIUS_SLOTS)
       return Math.pow(1 - t, MAGNIFY_EXP)
     }
-    /* ② 方向不对称：**把波峰按平滑速度偏置**（`ASYM_BIAS`，最多 0.3 格），而不是给左右邻居各乘
-       一个系数 —— 后者在指针跨过"两图标中点"时左右互换，scale 会瞬间跳 ~0.35（更震）。
-       偏置天然连续：右滑 → 波峰偏右 → **左邻居小、右邻居大**；停手后速度归零 → 偏置归零 → 左右对称。
-       ⚠️ 绝不许拿逐帧位移直接判方向 —— 那是"震动感"的源头。 */
-    const vNorm = Math.max(-1, Math.min(1, pointer.current.vEma / ASYM_V_REF))
-    const hotEff = hot + vNorm * ASYM_BIAS
+    /* ② **两侧邻居等大**（2026-10-07 站主口径反转：「两侧图标生长大小改为**略大于正常图标、且一样大**」）。
+       原来是"把波峰按平滑速度偏置"（`hotEff = hot + vNorm * ASYM_BIAS`，最多 0.3 格）做出
+       "左邻居小、右邻居大"的方向感 —— **现在取消**（那条口径被站主推翻）。
+       于是 `hotEff = hot`：两侧同一个 `wave(1)` 值 ⇒ **严格等大**，且与滑动方向无关（滑动中、
+       停手后都等大）。邻居的大小改由 `MAGNIFY_EXP`（=1.9）定，实测 d=1 → **1.12**。
+       ⚠️ 想恢复方向感：把 `ASYM_BIAS`/`ASYM_V_REF` 重新 import，并把这行改回 `hot + vNorm * ASYM_BIAS`
+       （`vNorm` 的定义是 `clamp(pointer.current.vEma / ASYM_V_REF, -1, 1)`）—— 常量都还在 `lib/dock.ts`。 */
+    const hotEff = hot
     const scales = items.map((_, i) => {
       if (!active) return 1
       return 1 + (MAGNIFY_PEAK - 1) * wave(i - hotEff) * amp
@@ -860,11 +867,49 @@ export function Dock() {
   /** 指针离开图标区：**只把放大强度的目标置 0**（图标平滑回 1×）。
    *  ⚠️ 这里绝不碰 `offset` / `lift` / 手势状态机 —— 拖动中指针跑远时也会触发 leave，
    *  误动那些就会把"竖拖换位"与幽灵弄坏（上一版就是先红在这两条上）。 */
-  function wheelLeave() {
+  /** 指针是否还在「**任务栏盒 ∪ 当前放大图标的渲染盒**」外扩 `LEAVE_SLACK` 的范围里。
+   *  ⚠️ 别拿"是否还在图标区那个视口盒里"代替 —— 放大中的图标**往栏外长**（底栏向上、顶栏向下），
+   *  那部分本来就在栏盒外面，而站主恰恰要求"在放大之后的图标范围内移动**不改变**放大状态"。
+   *  ⚠️ 交叉轴坐标只参与这个判定，**绝不许用它去定槽位**（槽位只看主轴，见 `wheelMove`）。 */
+  function pointerInDockUnion(e: { clientX: number; clientY: number }): boolean {
+    const s = LEAVE_SLACK
+    const { clientX: x, clientY: y } = e
+    const barRect = bar.current?.getBoundingClientRect()
+    if (barRect && x >= barRect.left - s && x <= barRect.right + s && y >= barRect.top - s && y <= barRect.bottom + s) {
+      return true
+    }
+    const hotIdx = pointer.current.target > 0 ? Math.round(pointer.current.hot) : -1
+    const hotEl = hotIdx >= 0 ? mainCentres().els[hotIdx] : null
+    if (hotEl) {
+      const r = hotEl.getBoundingClientRect()
+      if (x >= r.left - s && x <= r.right + s && y >= r.top - s && y <= r.bottom + s) return true
+    }
+    return false
+  }
+  function wheelLeave(e?: { clientX: number; clientY: number }) {
     if (gesture.current) return
+    /* ⭐ 2026-10-07（第 13 轮）**站主报的真 bug**：「图标放大之后，移动到任务栏**上边缘**会取消选中图标」。
+       根因：放大中的图标往栏外长，指针移到栏外那一截时视口触发 `pointerleave` → 这里立刻 `target = 0`
+       → `fade` 收回 → 放大被取消（那截虽然看得见，但它不在**图标区视口**的盒子里）。
+       现在**先判并集**（任务栏盒 ∪ 放大那个图标的渲染盒，外扩 `LEAVE_SLACK = 5px`）：还在里面就
+       **什么都不做**（不收、不清 `pos`、不解冻）—— 于是"上下方向小范围移动"不再改变放大状态；
+       真正的取消只剩两条：**主轴移到另一个图标**（换目标，由 `wheelMove` 处理）／**移出这个并集**。
+       ⚠️ 指针在栏外那截时收不到 `pointermove`（事件派给别的元素了），所以槽位会**停住不动** ——
+       这正是站主要的"不移动到其他图标上面就不会变化"。 */
+    if (e && pointer.current.target > 0 && pointerInDockUnion(e)) {
+      /* 还在并集里 → **保持放大**。指针这时在栏外那截图标上，视口收不到 `pointermove` 了，
+         所以挂一个**临时 window 守卫**（见下面的 `overhang` effect）来负责"真的移出去才取消"。 */
+      setOverhang(true)
+      return
+    }
+    cancelMagnify()
+  }
+
+  /** 真正取消放大：清指针、`target = 0`、解锁冻结（然后交给 `fade` 平滑收回，末态严格 scale 1 / 位移 0）。 */
+  function cancelMagnify() {
+    setOverhang(false)
     pointer.current.pos = null
     pointer.current.target = 0
-    /* ⭐ 离开 = **解锁冻结**（然后交给 `fade` 平滑收回，末态严格 scale 1 / 位移 0） */
     pointer.current.latched = -1
     pointer.current.settleTo = null
     pointer.current.slotSeen = -1
@@ -872,8 +917,29 @@ export function Dock() {
     scheduleTick()
   }
 
+  /* ⭐ 2026-10-07（第 13 轮）**栏外那截的守卫**：指针停在"放大图标凸出任务栏"的那部分时，
+     它已经不在图标区视口里了 → 视口再也不会收到 `pointermove`/`pointerleave`，
+     于是"继续往上移出并集"这件事**没人负责**（放大就会一直挂着）。
+     所以只要处于 `overhang`（"指针在栏外、但还在并集里"）就挂一个 window 级 `pointermove`：
+     **只做一件事 —— 判并集，出了就取消**。
+     ⚠️ 它**不是**第二条"放大用"的 pointermove 循环：只在 overhang 期间存在、只读坐标比矩形、
+       绝不写布局；指针一回到栏内 `wheelMove` 会立刻把 `overhang` 置假、这个监听随之摘掉。 */
+  useEffect(() => {
+    if (!overhang) return
+    const onMove = (ev: PointerEvent) => {
+      if (gesture.current) return
+      if (pointerInDockUnion(ev)) return
+      cancelMagnify()
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => window.removeEventListener('pointermove', onMove)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overhang])
+
   function wheelMove(e: React.PointerEvent<HTMLDivElement>) {
     const view = viewEl.current
+    /* 指针回到图标区里了 → 摘掉栏外守卫 */
+    if (overhang) setOverhang(false)
     /* ① 指针位置 → 放大中心（**必须在"有没有手势"的判断之前**：鼠标只悬停、没按键也要放大）。
        `pos` 用主轴上的**视口坐标**，和 paint() 里算图标中心时同一套坐标系。 */
     if (view) {

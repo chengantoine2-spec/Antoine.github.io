@@ -2371,8 +2371,13 @@ async function run() {
       outer.length > 2 && outerScaleOk && outerMoved >= 2 && neighborOk && gapOk && peakI === midI,
       JSON.stringify({ 峰: peakI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t), 让路格数: outerMoved, 间隙: gaps.map((g) => Number(g.toFixed(2))), 间隙极差: Number(gapSpread.toFixed(2)) }),
     )
-    /* (2) **方向不对称**：快扫左→右时 左邻 < 右邻；右→左时相反（都在**滑动过程中**采样）。
-       做法：1 槽一步（45px，落在图标布局中心上）、每步只等 1 帧 —— 那时速度 EMA 已经建立。 */
+    /* (2) ⭐ **两侧邻居等大**（2026-10-07 站主口径反转）。
+       **改写自**：「方向不对称：左→右滑动时左邻比右邻小、右→左时相反」（那是 2026-10-06 的口径，
+       站主当时说"从左往右滑，左边比右边小一点"；**2026-10-07 他改成**「两侧图标生长大小改为
+       **略大于正常图标、且一样大**」）→ 于是 `ASYM_BIAS` 的方向偏置被取消（常量留在 `lib/dock.ts`），
+       邻居大小改由 `MAGNIFY_EXP=1.9` 定（`d=1 → 1.12`）。
+       判据：两个方向**滑动过程中**各采一遍（1 槽一步、每步只等 1 帧，速度 EMA 已建立）：
+       **|左 − 右| ≤0.01 且两者都 ∈[1.06, 1.18]**。 */
     const asymSweep = async (dir) => {
       await p.mouse.move(640, 120)
       await p.waitForTimeout(300)
@@ -2386,16 +2391,27 @@ async function run() {
         out.push({ pk, left: m[pk - 1]?.s ?? null, right: m[pk + 1]?.s ?? null })
       }
       const tail = out.slice(2).filter((r) => r.left !== null && r.right !== null)
-      const good = tail.filter((r) => (dir > 0 ? r.left < r.right : r.left > r.right)).length
-      const last = out[out.length - 1]
-      const lastOk = last.left !== null && last.right !== null && (dir > 0 ? last.left < last.right : last.left > last.right)
-      return { dir, 尾段: tail.length, 方向正确: good, 最后一片: last, lastOk }
+      const diff = tail.map((r) => Math.abs(r.left - r.right))
+      const allInBand = tail.every((r) => r.left >= 1.06 && r.left <= 1.18 && r.right >= 1.06 && r.right <= 1.18)
+      return {
+        dir,
+        尾段: tail.length,
+        最大左右差: Number(Math.max(...diff).toFixed(4)),
+        都在区间: allInBand,
+        邻居取值: [...new Set(tail.map((r) => Number(r.left.toFixed(3))))],
+        最后一片: out[out.length - 1],
+      }
     }
     const a1 = await asymSweep(1)
     const a2 = await asymSweep(-1)
     check(
-      '方向不对称：**左→右滑动时左邻比右邻小**、**右→左时相反**（都在滑动过程中采样，不是停手后）',
-      a1.lastOk && a2.lastOk && a1.方向正确 >= Math.ceil(a1.尾段 * 0.6) && a2.方向正确 >= Math.ceil(a2.尾段 * 0.6),
+      '⭐ **两侧邻居等大、且只"略大于正常"**：左→右 / 右→左 两个方向**滑动过程中**采样，|左邻 − 右邻| ≤0.01 且两者都 ∈[1.06, 1.18]（**改写自**「方向不对称」那条：2026-10-07 站主口径反转成"两侧一样大"）',
+      a1.尾段 > 3 &&
+        a2.尾段 > 3 &&
+        a1.最大左右差 <= 0.01 &&
+        a2.最大左右差 <= 0.01 &&
+        a1.都在区间 &&
+        a2.都在区间,
       JSON.stringify({ 左到右: a1, 右到左: a2 }),
     )
     /* (3) **停手后收敛回对称**：速度衰减到 0 → 波峰偏置归 0 → 左右邻居 scale 差 ≤0.02 */
@@ -2410,6 +2426,110 @@ async function run() {
       '停手后**收敛回左右对称**：等 340ms 后左右邻居 scale 差 ≤0.02（速度归零 → 偏置归零）',
       symDiff <= 0.02,
       JSON.stringify({ 峰: pk3, 左: r3[pk3 - 1]?.s, 右: r3[pk3 + 1]?.s, 差: Number(symDiff.toFixed(3)) }),
+    )
+    /* (3b) ⭐⭐ 2026-10-07（第 13 轮）**放大时"凸出任务栏的那一截"仍算在任务栏上** —— 站主报的真 bug：
+       「图标放大之后，移动到任务栏**上边缘**会取消选中图标」。
+       根因：放大中的图标**往栏外长**，那部分在任务栏盒（和图标区视口）外面 → 指针移过去时
+       视口触发 `pointerleave` → `target = 0` → 放大被收回。
+       修法：`wheelLeave()` 改成判**并集**（任务栏盒 ∪ 放大那个图标的渲染盒，外扩 `LEAVE_SLACK = 5px`），
+       落在里面就保持；并且给"栏外那截"挂一个临时的 window `pointermove` 守卫，
+       负责"真的移出并集才取消"（指针在栏外时视口收不到事件了）。
+       三条判据都在**底栏**上量：
+         N1 移到**图标顶部内侧**（y 比任务栏 top 还小 = 真的在栏外）→ 该图标 scale 仍 ≥1.9、整排形状不变；
+         N2 再往上移出**并集 + 容差**之外 → `fade` 收回（max scale ≤1.05）；
+         N3 **交叉轴不影响槽位**：同一 x 上把 y 从栏内中部扫到"图标顶部内侧"，argmax 不变。 */
+    const unionProbe = async () => {
+      await p.mouse.move(640, 120)
+      await p.waitForTimeout(380)
+      await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
+      await p.waitForTimeout(460)
+      return p.evaluate((sel) => {
+        const bar = document.querySelector(sel)
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        const scales = items.map((el) => {
+          const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+          return m ? Number(m[1]) : 1
+        })
+        const hot = scales.indexOf(Math.max(...scales))
+        const r = items[hot].getBoundingClientRect()
+        const b = bar.getBoundingClientRect()
+        return {
+          hot,
+          barTop: Number(b.top.toFixed(1)),
+          iconTop: Number(r.top.toFixed(1)),
+          iconCx: Number(((r.left + r.right) / 2).toFixed(1)),
+          scales,
+        }
+      }, DOCK)
+    }
+    const readScalesNow = () =>
+      p.evaluate((sel) => {
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        return items.map((el) => {
+          const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+          return m ? Number(m[1]) : 1
+        })
+      }, DOCK)
+    const u1 = await unionProbe()
+    /* N1：移到放大图标**顶部内侧**（这里 y < 任务栏 top，确实在栏外）→ 必须**保持**放大 */
+    await p.mouse.move(u1.iconCx, u1.iconTop + 3)
+    await p.waitForTimeout(320)
+    const u1os = await readScalesNow()
+    const u1max = Math.max(...u1os)
+    const u1shape = u1.scales.every((s, i) => Math.abs(s - (u1os[i] ?? s)) <= 0.02)
+    check(
+      '⭐ **移到放大图标的顶部区域（栏外那截）不取消放大**：指针 y 比任务栏 top 还小（真的出了栏）时，该图标 scale 仍 ≥1.9、整排形状不变（±0.02）—— 站主 2026-10-07 报的真 bug',
+      u1.iconTop + 3 < u1.barTop && u1max >= 1.9 && u1shape,
+      JSON.stringify({
+        探针: { x: u1.iconCx, y: Number((u1.iconTop + 3).toFixed(1)) },
+        任务栏top: u1.barTop,
+        图标top: u1.iconTop,
+        在栏外: u1.iconTop + 3 < u1.barTop,
+        峰值: Number(u1max.toFixed(3)),
+        整排: u1os.map((s) => Number(s.toFixed(3))),
+        形状未变: u1shape,
+      }),
+    )
+    /* N2：继续上移到**并集 + 容差之外** → 必须收回（`fade` 归 0，max scale ≤1.05） */
+    await p.mouse.move(u1.iconCx, u1.iconTop - 9)
+    await p.waitForTimeout(520)
+    const u2os = await readScalesNow()
+    const u2max = Math.max(...u2os)
+    check(
+      '⭐ **移出"放大图标上下范围"才取消**：再往上到并集 + 5px 容差之外 → 放大收回（整排 max scale ≤1.05）',
+      u2max <= 1.05,
+      JSON.stringify({ 探针y: Number((u1.iconTop - 9).toFixed(1)), 图标top: u1.iconTop, 整排: u2os.map((s) => Number(s.toFixed(3))), 峰值: Number(u2max.toFixed(3)) }),
+    )
+    /* N3：**交叉轴不影响槽位** —— 同一 x，y 从"栏内中部"扫到"图标顶部内侧"，argmax 必须不变 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(320)
+    await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
+    await p.waitForTimeout(430)
+    const u3 = await p.evaluate((sel) => {
+      const bar = document.querySelector(sel)
+      const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+      const scales = items.map((el) => {
+        const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+        return m ? Number(m[1]) : 1
+      })
+      const hot = scales.indexOf(Math.max(...scales))
+      const r = items[hot].getBoundingClientRect()
+      const b = bar.getBoundingClientRect()
+      return { hot, iconTop: Number(r.top.toFixed(1)), iconCx: Number(((r.left + r.right) / 2).toFixed(1)), barTop: Number(b.top.toFixed(1)), barBottom: Number(b.bottom.toFixed(1)) }
+    }, DOCK)
+    const argmaxAt = async (y) => {
+      await p.mouse.move(u3.iconCx, y)
+      await p.waitForTimeout(180)
+      const sc = await readScalesNow()
+      return sc.indexOf(Math.max(...sc))
+    }
+    const amBarMid = await argmaxAt((u3.barTop + u3.barBottom) / 2)
+    const amLow = await argmaxAt(u3.barTop + 4)
+    const amTop = await argmaxAt(u3.iconTop + 3)
+    check(
+      '⭐ **交叉轴不影响槽位**：同一 x 上把 y 从"栏内中部 / 栏内偏上"扫到"放大图标顶部内侧（栏外）"，argmax 始终不变（槽位只由主轴坐标决定）',
+      amBarMid === u3.hot && amLow === u3.hot && amTop === u3.hot,
+      JSON.stringify({ 期望槽位: u3.hot, 栏内中部: amBarMid, 栏内偏上: amLow, 图标顶部内侧: amTop, 探针x: u3.iconCx, 图标top: u3.iconTop, 任务栏top: u3.barTop }),
     )
     /* (4) **不许抖**：恒速慢扫（2px/步、每步 28ms），盯着**固定一个图标**采样：
        相邻两次变化 ≤0.06，且方向**不许来回翻转**（≤1 次）。 */
