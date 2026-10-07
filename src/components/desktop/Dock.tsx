@@ -112,12 +112,8 @@ function resizeEdges(vertical: boolean): ResizeEdge[] {
 
 interface HoverState {
   name: string
-  /** 被悬停按钮的视口矩形 */
-  rect: DOMRect
-  /** 任务栏自身的视口矩形，用来换算成任务栏内坐标 */
-  layoutW: number
-  layoutH: number
-  bar: DOMRect
+  /** 被悬停的按钮本体。⚠️ **不存捕获时的 rect** —— 见 `showName` 的长注释 */
+  el: HTMLElement
 }
 
 interface GripState {
@@ -161,6 +157,8 @@ export function Dock() {
   /* ── 轮盘模式的 ref 与手势状态（拖动过程只动 ref，不进 React 状态）── */
   const viewEl = useRef<HTMLDivElement | null>(null)
   const trackEl = useRef<HTMLDivElement | null>(null)
+  /** 名称气泡本体：波浪稳定后再"贴正"一次主轴位置（只改 style，不进 React 状态） */
+  const tipEl = useRef<HTMLSpanElement | null>(null)
   const offset = useRef(0)
   const raf = useRef(0)
   /** 松手回弹的弹簧动画句柄（用 rAF 自己积分，见 settle：不引动画依赖） */
@@ -277,7 +275,14 @@ export function Dock() {
   const chromeLen = wheelChrome(btn)
   const viewMin = wheelViewMin(btn)
   const autoView = Math.max(viewMin, itemCount * step - GAP)
-  const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen)
+  /* ⚠️ 固定按钮（「所有项目」）只在一侧，而它**参与 flex 居中** → 图标组整体被顶偏
+     **22px = 按钮宽 44 的一半**（站主 2026-10-06：「位置没有对齐哦，左右方向」；实测组中心 662 / 栏中心 640）。
+     对策是**布局层对称**：在按钮**对侧加一个等宽的无障碍隐藏占位**（见下面 JSX），
+     图标组自然落在**整条任务栏**的中心。显式长度时把占位一起扣掉，总宽不变。
+     ⚠️ **不许改用绝对定位**：上一版那么改过（偏差确实 0），但按钮脱离布局后被图标区盖住 →
+     `page.click` 超时、**整套 verify 中止**（中止比没对齐严重得多，已回退）。 */
+  const chromePad = btn + GAP
+  const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen - chromePad)
   /* ⚠️ 这里**不再有**"交叉轴溢出余量"（原 `--dock-spill` + 负外边距那套）：站主要的是
      "放大的图标从任务栏边**凸出去**"（macOS 那种夸张感），所以图标区交叉轴不裁（见 globals.css
      的 `.dock__view--h/--v`：`clip-path` 只裁主轴），2× 的图标自然凸在栏外，不需要预留空间。
@@ -322,59 +327,78 @@ export function Dock() {
 
   /* 悬停/聚焦显示名称：用任务栏内坐标的浮层，避免被滚动容器裁掉 */
   function showName(target: HTMLElement, name: string) {
-    const barRect = bar.current?.getBoundingClientRect()
-    if (!barRect) return
-    setHover({
-      name,
-      rect: target.getBoundingClientRect(),
-      /* ⚠️ 再采一份**布局尺寸**（offsetWidth/Height 不含 transform）：
-         站主 2026-10-06 第三条「从一个图标移动到另一个图标时气泡的位置会变高」的根因就是
-         原来只用 `getBoundingClientRect()` —— 它含放大中的 scale，动画每推进一帧那个高度都在变，
-         切换图标时又按"新图标当时的中间态"重算一次，于是气泡忽高忽低。
-         贴栏侧 `transform-origin` 让**贴栏那条边不动**，所以 layoutTop = rect.bottom − 布局高 是常量。 */
-      layoutW: target.offsetWidth,
-      layoutH: target.offsetHeight,
-      bar: barRect,
-    })
+    /* ⚠️⚠️ 2026-10-06（站主：「从一个图标移动到另一个图标时气泡的位置会变高」）——
+       **绝不在这里捕获 rect**。指针是分步滑过去的，`mouseenter` 往往在**上一批图标还带着波浪位移/放大**
+       的中间态触发，那一刻的 `getBoundingClientRect()` 是**被污染的盒子**；而旧算式又拿 `rect.height`
+       （**含 scale**）去算增量 → **捕到哪一帧就把气泡定死在哪一帧**，误差沿排累积（实测三个图标差 15px）。
+       它同时解释了那个反常现象：**"过渡中途 == 稳定后"永远相等**（同一次捕获当然相等），
+       却**图标之间不一致** —— 因为每个图标的捕获时机不同。
+       ⇒ 这里只存**元素本身**，位置一律在 `hoverStyle` 里按**实时**几何现算。 */
+    setHover({ name, el: target })
   }
 
+  /* 波浪稳定后再把气泡"贴正"一次：**主轴**（底部停靠 = 横向）会随让位位移变化，
+     而 `hover` 是在 `mouseenter` 那一刻（往往是上一批图标的中间态）就算好样式渲染的。
+     这里 260ms 后按实时几何重设一次 `left/top` —— **只改 style、不进 React 状态**
+     （项目规矩：逐帧的东西一律走 ref，别让动画进 state）。交叉轴本来就是常量，重设不影响它。 */
+  useEffect(() => {
+    if (!hover) return
+    const t = window.setTimeout(() => {
+      const node = tipEl.current
+      if (!node) return
+      const next = hoverStyle(hover)
+      if (typeof next.left === 'number') node.style.left = `${next.left}px`
+      if (typeof next.top === 'number') node.style.top = `${next.top}px`
+    }, 260)
+    return () => window.clearTimeout(t)
+  }, [hover])
+
   function hoverStyle(state: HoverState): CSSProperties {
-    const cx = state.rect.left - state.bar.left + state.rect.width / 2
-    const cy = state.rect.top - state.bar.top + state.rect.height / 2
-    /* ⚠️ 2026-10-06 站主：「图标的名字气泡放在**放大之后的图标上面**，现在是在放大图标的内部」——
-       放大是 `transform: scale()`，**不动布局**，所以按钮的布局盒还是原尺寸；
-       气泡原来贴的是**布局盒**的边，于是被 2× 的图标顶穿。
-       这里按"放大后的可见包围盒"算：贴栏侧 `transform-origin` → 增量 `(PEAK − 1) × 盒子边长`
-       **整个长到栏外**，所以往外挪这么多再加上 8px 间距就永远在图标上方。 */
-    const layoutH = state.layoutH || state.rect.height
-    const layoutW = state.layoutW || state.rect.width
-    /* 贴栏那条边不动 → 布局顶边 = 渲染盒底边 − 布局高（竖排同理取另一条边） */
-    const layoutTop = state.rect.bottom - layoutH
-    const layoutLeft = state.rect.right - layoutW
-    const grownY = (MAGNIFY_PEAK - 1) * state.rect.height
-    const grownX = (MAGNIFY_PEAK - 1) * state.rect.width
+    const barRect = bar.current?.getBoundingClientRect()
+    const el = state.el
+    if (!barRect || !el) return {}
+    /* ⚠️ 2026-10-06 三条要求叠在这一处，别再退回旧写法：
+       ①「气泡放在**放大之后的图标上面**，现在是在放大图标的内部」—— 放大是 `transform: scale()`、
+          **不动布局**，所以要按"放大后的可见包围盒"算；
+       ②「切换图标时气泡**变高**」—— 见 `showName` 的注释：**不许用捕获值**，现算；
+       ③ 增量**必须用布局尺寸**（`offsetWidth/Height`，不含 transform）。旧代码用 `rect.height`
+          （**含 scale**）→ 捕到哪一帧就定死哪一帧，三个图标能差 15px。
+       **交叉轴**（底部/顶部停靠 = 纵向；左/右停靠 = 横向）只用布局量 ⇒ 各图标算出来完全一致；
+       **主轴中心**用实时渲染盒 ⇒ 气泡跟着波浪的让位走（该动的那一维才动）。
+       贴栏侧 `transform-origin` 让**贴栏那条边不动**，所以那条边可以直接从渲染盒反推布局边。 */
+    const rect = el.getBoundingClientRect()
+    const layoutH = el.offsetHeight || rect.height
+    const layoutW = el.offsetWidth || rect.width
+    const cx = rect.left - barRect.left + rect.width / 2
+    const cy = rect.top - barRect.top + rect.height / 2
+    const grownY = (MAGNIFY_PEAK - 1) * layoutH
+    const grownX = (MAGNIFY_PEAK - 1) * layoutW
     switch (position) {
       case 'bottom':
+        /* 原点 `center bottom` ⇒ **底边不动**：布局顶边 = 渲染盒底边 − 布局高 */
         return {
           left: cx,
-          top: layoutTop - state.bar.top - grownY - 8,
+          top: rect.bottom - layoutH - barRect.top - grownY - 8,
           transform: 'translate(-50%, -100%)',
         }
       case 'top':
+        /* 原点 `center top` ⇒ **顶边不动**：布局顶边 = 渲染盒顶边 */
         return {
           left: cx,
-          top: layoutTop + layoutH - state.bar.top + grownY + 8,
+          top: rect.top - barRect.top + layoutH + grownY + 8,
           transform: 'translateX(-50%)',
         }
       case 'left':
+        /* 原点 `left center` ⇒ **左边不动**：布局左边 = 渲染盒左边 */
         return {
-          left: layoutLeft + layoutW - state.bar.left + grownX + 8,
+          left: rect.left - barRect.left + layoutW + grownX + 8,
           top: cy,
           transform: 'translateY(-50%)',
         }
       default:
+        /* 原点 `right center` ⇒ **右边不动**：布局左边 = 渲染盒右边 − 布局宽 */
         return {
-          left: layoutLeft - state.bar.left - grownX - 8,
+          left: rect.right - layoutW - barRect.left - grownX - 8,
           top: cy,
           transform: 'translate(-100%, -50%)',
         }
@@ -598,39 +622,65 @@ export function Dock() {
     springRaf.current = requestAnimationFrame(frame)
   }
 
+  /** 图标的**布局中心**换算到「图标区视口的主轴坐标系」—— 与 `pointer.current.pos` 同一套坐标。
+   *  ⚠️ 只用布局量、**不含任何 scale**：
+   *    · `el.offsetLeft/offsetTop` 是相对 **track** 的（实测 `offsetParent === .dock__track`）；
+   *    · `track.getBoundingClientRect()` **不带 scale**（track 从不缩放，只有浏览产生的 translate），
+   *      所以「track 的布局原点在视口里」= `tr.left − vr.left + off`（把 translate 加回去）。
+   *  2026-10-06 修正（站主报"滚动之后指哪放大哪不对"时的真根因）：
+   *    track 的**渲染盒已经含 translate**，而 `offsetLeft` 是 track 内的布局值 → 图标在视口里的
+   *    位置就是 `(tr.left − vr.left) + offsetLeft`，**不需要再加减 `off`**。
+   *    旧写法在 `here` 上加了 `off`、在 `centre` 上又减了 `off` → **一滚动就整体偏 `2 × off`**
+   *    （未滚动时 `off = 0` 恰好正确，所以一直没暴露）。
+   *    「恒等映射在**滚动之后**仍成立」那条断言抓到的就是它 —— 这也是必须补那条工况的原因。 */
+  function mainCentres() {
+    const view = viewEl.current
+    const track = trackEl.current
+    const els = track ? [...track.querySelectorAll<HTMLElement>('[data-dock-item]')] : []
+    const vr = view?.getBoundingClientRect()
+    const tr = track?.getBoundingClientRect()
+    if (!vr || !tr || els.length === 0) {
+      return { els, origin: 0, centre: () => 0, size: () => 0 }
+    }
+    /* ⚠️ **不加 `off`**：渲染盒含 translate，加了就等于把滚动量算两遍（见上面的注释） */
+    const origin = vertical ? tr.top - vr.top : tr.left - vr.left
+    return {
+      els,
+      origin,
+      centre: (el: HTMLElement) =>
+        origin +
+        (vertical ? el.offsetTop : el.offsetLeft) +
+        (vertical ? el.offsetHeight : el.offsetWidth) / 2,
+      size: (el: HTMLElement) => (vertical ? el.offsetHeight : el.offsetWidth),
+    }
+  }
+
   /** 指针落在第几个图标上（没有就 null）：用布局位置算，不看 transform。
    *  ⚠️ 循环拆掉之后**不再取模**：下标夹在 [0, itemCount-1]（列表有头有尾，最后一个就是最后一个）。 */
   function iconAtPoint(e: { clientX: number; clientY: number }): number | null {
     const view = viewEl.current
     if (!view || itemCount === 0) return null
     const rect = view.getBoundingClientRect()
-    /* ⚠️ 2026-10-06：轨道现在会**居中**（`.dock__track { margin: auto }`，站主要图标居中），
-       所以不能再拿 `p + offset` 反推槽位（那套默认内容从视口原点开始，居中之后会偏半个余量）。
-       改成直接用**渲染盒**找最近的那个 —— 居中与否都对，也顺带支持放大后的盒子。 */
-    const items = trackEl.current?.querySelectorAll<HTMLElement>('[data-dock-item]')
-    if (!items || items.length === 0) return null
-    /* ⚠️ 2026-10-06 **必须用布局几何**（offset* + 布局尺寸）：站主报「鼠标在一个图标上面，放大的却是
+    /* ⚠️ 2026-10-06 **必须用布局几何**（见 `mainCentres`）：站主报「鼠标在一个图标上面，放大的却是
        右边的图标」= 系统性 off-by-one。根因就是这里曾改用 getBoundingClientRect —— 渲染盒含波浪的
        scale 与铺开位移、会随 hot 变化，于是形成**自指环**：指针在 i → 算 hot → 波浪把图标推走 →
        渲染盒中心变了 → 下次算 hot 落到邻居 → 稳定在 i+1。布局值不受 transform 影响，天然免疫。 */
-    const off0 = dampedOffset(offset.current, maxOffset, viewLen)
+    const { els, origin, centre, size } = mainCentres()
+    if (!els.length) return null
     const p = alongOf(e) - (vertical ? rect.top : rect.left)
-    const centreOf = (el: HTMLElement) =>
-      (vertical ? el.offsetTop : el.offsetLeft) + (vertical ? el.offsetHeight : el.offsetWidth) / 2 - off0
     let idx = -1
     let best = Infinity
-    ;[...items].forEach((el, i) => {
-      const d = Math.abs(centreOf(el) - p)
+    els.forEach((el, i) => {
+      const d = Math.abs(centre(el) - p)
       if (d < best) {
         best = d
         idx = i
       }
     })
     /* 再确认指针真的压在某个图标上（点空白不进入换位）—— 同样只用布局盒 */
-    const hit = [...items].some((el) => {
-      const a = (vertical ? el.offsetTop : el.offsetLeft) - off0
-      const b = a + (vertical ? el.offsetHeight : el.offsetWidth)
-      return p >= a && p <= b
+    const hit = els.some((el) => {
+      const a = origin + (vertical ? el.offsetTop : el.offsetLeft)
+      return p >= a && p <= a + size(el)
     })
     return hit && idx >= 0 ? idx : null
   }
@@ -676,19 +726,12 @@ export function Dock() {
       /* ② **连续**的 hot 槽位（带小数）：指针在两格之间时它是 k+0.5 这种值，
          于是放大与让位会**在相邻两个图标之间平滑滑动**（站主要的那种"看得见"的过渡）。
          指针刚进图标区（fade 还≈0）时**直接吸到目标**，免得从最左边滑过来。 */
-      /* ⚠️ 同样只用**布局几何**：在相邻两个图标的**布局中心**之间线性插值出连续槽位。
-         旧式子 (pos + offset − btn/2)/step 默认"内容从视口原点开始"，而轨道现在会居中
-         （margin:auto，实测余量约 7px）且不看预览态条数 → 也会引入偏差。 */
-      const els = trackEl.current
-        ? [...trackEl.current.querySelectorAll<HTMLElement>('[data-dock-item]')]
-        : []
+      /* ⚠️ 同样只用**布局几何**（`mainCentres`）：在相邻两个图标的**布局中心**之间线性插值出连续槽位。
+         旧式子把 `off` 减了两次（`here = pos + off`、`centre = … − off`）—— 未滚动时恰好对，
+         **一滚动就整体偏 `2 × off`**；现在两边都统一在「视口主轴坐标」里比，`off` 只出现一次。 */
+      const { els, centre } = mainCentres()
       if (els.length) {
-        const offNow = dampedOffset(offset.current, maxOffset, viewLen)
-        const centre = (el: HTMLElement) =>
-          (vertical ? el.offsetTop : el.offsetLeft) +
-          (vertical ? el.offsetHeight : el.offsetWidth) / 2 -
-          offNow
-        const here = pointer.current.pos + offNow
+        const here = pointer.current.pos
         let target = 0
         if (here <= centre(els[0])) target = 0
         else if (here >= centre(els[els.length - 1])) target = els.length - 1
@@ -1056,6 +1099,13 @@ export function Dock() {
         />
       ))}
 
+      {/* 竖排时固定按钮在**末端**，所以占位补在**起端**；横排反过来（见下面那颗）。
+          `aria-hidden` + 无内容 + 不可聚焦：它只是几何配重，不许进无障碍树（否则会污染无障碍名断言）。
+          ⚠️ **只在轮盘模式渲染** —— 折行模式是"完全旧行为，一个字不改"。 */}
+      {mode === 'wheel' && vertical ? (
+        <span aria-hidden="true" className="shrink-0" style={{ height: btn }} />
+      ) : null}
+
       {vertical ? null : menuButton}
 
       {mode === 'wheel' ? (
@@ -1132,6 +1182,12 @@ export function Dock() {
 
       {vertical ? menuButton : null}
 
+      {/* 横排时固定按钮在**起端**，占位补在**末端** —— 让「按钮 + 图标组 + 占位」整体对称，
+          图标组才会落在整条任务栏的中心（原来偏右 22px = 按钮宽的一半）。 */}
+      {mode === 'wheel' && !vertical ? (
+        <span aria-hidden="true" className="shrink-0" style={{ width: btn }} />
+      ) : null}
+
       {/* ⚠️ 2026-10-06（macOS P2）：这里**原本**还有「全屏 ⛶」与「任务栏位置」两颗固定按钮，
           现在都挪进顶部菜单栏了（macOS 的 Dock 两端只有启动台与废纸篓，没有这类系统按钮）。
           任务栏这一侧只剩左端的「所有项目」（≈ 启动台）。别把这两颗加回来。 */}
@@ -1140,6 +1196,7 @@ export function Dock() {
       {hover ? (
         <span
           role="tooltip"
+          ref={tipEl}
           style={hoverStyle(hover)}
           /* 站主 2026-10-06：「气泡背景改成**灰色的半透明**状，文字增加对比度，显得更清楚」——
              颜色全在令牌里（`--c-tip-bg` / `--c-tip-ink`，两套主题各一份），组件里不写死颜色。

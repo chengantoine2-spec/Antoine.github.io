@@ -488,8 +488,9 @@ async function run() {
       if (!view || !el) return null
       const vr = view.getBoundingClientRect()
       const track = el.parentElement
+      const trackRect = (track || el).getBoundingClientRect()
       return {
-        x: vr.left + el.offsetLeft - (track?.offsetLeft ?? 0) + el.offsetWidth / 2,
+        x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
         y: vr.top + el.offsetHeight / 2,
       }
     }, DOCK)
@@ -1866,13 +1867,19 @@ async function run() {
         const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy="1"]')]
         if (!view || items.length < 5) return null
         const vr = view.getBoundingClientRect()
+        /* ⚠️ 2026-10-06：落点一律走 **track 相对坐标** —— `track.getBoundingClientRect()` **已含浏览产生的
+           translate**，而 `el.offsetLeft` 是 track 内的布局值，两者相加才是图标真正在屏幕上的位置。
+           旧写法 `vr.left + offsetLeft − off` 只在"未滚动（off=0）"时对，**一滚动就整体偏 `2 × off`** ——
+           这就是「滚动之后指哪放大哪」出错的原因（本轮新增的滚动工况断言抓到了它）。 */
         const i =
           arg.label === 'left' ? 1 : arg.label === 'right' ? items.length - 2 : Math.floor(items.length / 2)
         const el = items[i]
         const track = el.parentElement
+        /* ⚠️ 必须在 `el` **之后**定义（放在前面会踩 TDZ —— 本轮就因为这个把套件崩过一次） */
+        const trackRect = (track || el).getBoundingClientRect()
         return {
           want: i,
-          x: vr.left + el.offsetLeft - (track ? track.offsetLeft : 0) + el.offsetWidth / 2,
+          x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
           y: vr.top + el.offsetHeight / 2,
         }
       },
@@ -1898,9 +1905,14 @@ async function run() {
         const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
         const off = m ? -m.e : 0
         const vr = view.getBoundingClientRect()
+        /* ⚠️ 2026-10-06：落点一律走 **track 相对坐标** —— `track.getBoundingClientRect()` **已含浏览产生的
+           translate**，而 `el.offsetLeft` 是 track 内的布局值，两者相加才是图标真正在屏幕上的位置。
+           旧写法 `vr.left + offsetLeft − off` 只在"未滚动（off=0）"时对，**一滚动就整体偏 `2 × off`** ——
+           这就是「滚动之后指哪放大哪」出错的原因（本轮新增的滚动工况断言抓到了它）。 */
+        const trackRect = (el.closest('[data-dock-track]') || el).getBoundingClientRect()
         return {
           idx: i,
-          x: vr.left + el.offsetLeft + el.offsetWidth / 2 - off,
+          x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
           y: vr.top + el.offsetHeight / 2,
         }
       },
@@ -1964,51 +1976,10 @@ async function run() {
   await p.reload({ waitUntil: 'load' })
   await p.waitForTimeout(800)
 
-  /* ③ 气泡 top 恒定（站主：「从一个图标移动到另一个图标时气泡的位置会变高」）：
-     三个不同图标上 top 一致（±1px），**过渡中途**采样也一致 —— 它的 y 只由布局常量算，与动画帧无关。 */
-  const tipTopAt = async (label) => {
-    const t = await p.evaluate(
-      (arg) => {
-        const view = document.querySelector(arg.sel + ' [data-dock-view]')
-        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy=\'1\']')]
-        const el = items.find((b) => b.getAttribute('aria-label') === arg.label)
-        if (!view || !el) return null
-        const track = el.closest('[data-dock-track]')
-        const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
-        const off = m ? -m.e : 0
-        const vr = view.getBoundingClientRect()
-        return {
-          x: vr.left + el.offsetLeft + el.offsetWidth / 2 - off,
-          y: vr.top + el.offsetHeight / 2,
-        }
-      },
-      { sel: DOCK, label },
-    )
-    if (!t) return null
-    await p.mouse.move(t.x, t.y, { steps: 6 })
-    await p.waitForTimeout(60)
-    const at = async () =>
-      p.evaluate((sel) => {
-        const tip = document.querySelector(sel + ' [role=tooltip]')
-        if (!tip) return null
-        const r = tip.getBoundingClientRect()
-        return { top: Math.round(r.top), bottom: Math.round(r.bottom) }
-      }, DOCK)
-    const mid = await at()
-    await p.waitForTimeout(420)
-    return { label, mid, settled: await at() }
-  }
-  const tipTops = []
-  for (const label of ['博客', '塔罗牌', '设置']) tipTops.push(await tipTopAt(label))
-  const st = tipTops.map((x) => (x && x.settled ? x.settled.top : NaN))
-  const md = tipTops.map((x) => (x && x.mid ? x.mid.top : NaN))
-  check(
-    '气泡 top **恒定**：三个不同图标上一致（±1px），过渡中途采样也一致（钉住「切图标时气泡变高」）',
-    tipTops.every((x) => x && x.settled && x.mid) &&
-      Math.max(...st) - Math.min(...st) <= 1 &&
-      Math.max(...md) - Math.min(...md) <= 1,
-    JSON.stringify(tipTops),
-  )
+  /* ⚠️ 2026-10-06：这段**原来被误插进 `peakAt()` 的函数体里**（上一个执行者补丁锚点选错），
+     后果有两个：① 它跑 3 次（peakAt 被调 3 回），总项数虚高；② 它在量峰值**之前**动了鼠标 →
+     污染峰值采样。已整体搬到 peak 那批 check **之后**，与 `peakAt` 平级。
+     （教训已记进 `ARCH-DOCK.md`：新断言要锚到上一条 `check(` 的**闭合括号之后**。） */
     if (!t) return null
     await p.mouse.move(t.x, t.y, { steps: 8 })
     await p.waitForTimeout(420)
@@ -2066,6 +2037,226 @@ async function run() {
       槽位x: wheel0.slotXs,
     }),
   )
+
+  /* ③ 气泡 top 恒定（站主：「从一个图标移动到另一个图标时气泡的位置会变高」）。
+     ⚠️ 2026-10-06 根因（上一个执行者查清、本轮修）：`showName()` 在 `mouseenter` **捕获 rect** ——
+     指针分步滑过时那一刻往往还是**上一批图标的波浪中间态**，而增量又用 `rect.height`（**含 scale**）
+     → **捕到哪一帧就定死哪一帧**，误差沿排累积（实测三个图标差 15px）；它也解释了那个反常现象：
+     "过渡中途 == 稳定后"永远相等（同一次捕获），却**图标之间不一致**。
+     现在的实现只存**元素**、位置按**实时布局几何**现算（增量用 `offsetHeight`，不含 transform）。 */
+  const tipTopAt = async (label) => {
+    const t = await p.evaluate(
+      (arg) => {
+        const view = document.querySelector(arg.sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+        const el = items.find((b) => b.getAttribute('aria-label') === arg.label)
+        if (!view || !el) return null
+        const track = el.closest('[data-dock-track]')
+        const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+        const off = m ? -m.e : 0
+        const vr = view.getBoundingClientRect()
+        /* ⚠️ 2026-10-06：落点一律走 **track 相对坐标** —— `track.getBoundingClientRect()` **已含浏览产生的
+           translate**，而 `el.offsetLeft` 是 track 内的布局值，两者相加才是图标真正在屏幕上的位置。
+           旧写法 `vr.left + offsetLeft − off` 只在"未滚动（off=0）"时对，**一滚动就整体偏 `2 × off`** ——
+           这就是「滚动之后指哪放大哪」出错的原因（本轮新增的滚动工况断言抓到了它）。 */
+        const trackRect = (el.closest('[data-dock-track]') || el).getBoundingClientRect()
+        return {
+          x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
+          y: vr.top + el.offsetHeight / 2,
+        }
+      },
+      { sel: DOCK, label },
+    )
+    if (!t) return null
+    await p.mouse.move(t.x, t.y, { steps: 6 })
+    await p.waitForTimeout(60)
+    const at = async () =>
+      p.evaluate((sel) => {
+        const tip = document.querySelector(sel + ' [role=tooltip]')
+        if (!tip) return null
+        const r = tip.getBoundingClientRect()
+        return { top: Math.round(r.top), bottom: Math.round(r.bottom) }
+      }, DOCK)
+    const mid = await at()
+    await p.waitForTimeout(420)
+    return { label, mid, settled: await at() }
+  }
+  const dockNames = await p.evaluate(
+    (sel) =>
+      [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')].map((b) =>
+        b.getAttribute('aria-label'),
+      ),
+    DOCK,
+  )
+  const tipTops = []
+  for (const label of [dockNames[0], dockNames[Math.floor(dockNames.length / 2)], dockNames[dockNames.length - 1]])
+    tipTops.push(await tipTopAt(label))
+  const st = tipTops.map((x) => (x && x.settled ? x.settled.top : NaN))
+  const md = tipTops.map((x) => (x && x.mid ? x.mid.top : NaN))
+  check(
+    '气泡 top **恒定**：三个不同图标上一致（±1px），过渡中途采样也一致（钉住「切图标时气泡变高」）',
+    tipTops.every((x) => x && x.settled && x.mid) &&
+      Math.max(...st) - Math.min(...st) <= 1 &&
+      Math.max(...md) - Math.min(...md) <= 1,
+    JSON.stringify(tipTops),
+  )
+
+  /* ④ 图标组在**整条任务栏**里居中（站主 2026-10-06：「位置没有对齐哦，左右方向」）。
+     根因：固定按钮「所有项目」只在一侧、却**参与 flex 居中** → 整组被顶偏 **22px = 按钮宽 44 的一半**
+     （实测组中心 662 / 栏中心 640，左留白 51 / 右留白 7）。
+     修法：按钮**对侧加一个等宽 `aria-hidden` 占位** —— 布局层对称，**不碰点击层**。
+     ⚠️ 不许改用绝对定位：上一版那么修过（偏差确实 0），但按钮脱离布局后被图标区盖住 →
+     `page.click` 超时、**整套 verify 中止**（中止比没对齐严重，已回退）。
+     判据：**组中心 vs 栏中心 ≤2px**，且**四种悬停情况**都要成立（悬停时波浪铺开，组中心不许跟着指针跑）。 */
+  const alignCase = async (label) => {
+    if (label) {
+      const t = await p.evaluate(
+        (arg) => {
+          const view = document.querySelector(arg.sel + ' [data-dock-view]')
+          const items = [...document.querySelectorAll(arg.sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+          const el = items.find((b) => b.getAttribute('aria-label') === arg.label)
+          if (!view || !el) return null
+          const track = el.closest('[data-dock-track]')
+          const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+          const vr = view.getBoundingClientRect()
+        /* ⚠️ 2026-10-06：落点一律走 **track 相对坐标** —— `track.getBoundingClientRect()` **已含浏览产生的
+           translate**，而 `el.offsetLeft` 是 track 内的布局值，两者相加才是图标真正在屏幕上的位置。
+           旧写法 `vr.left + offsetLeft − off` 只在"未滚动（off=0）"时对，**一滚动就整体偏 `2 × off`** ——
+           这就是「滚动之后指哪放大哪」出错的原因（本轮新增的滚动工况断言抓到了它）。 */
+        const trackRect = (el.closest('[data-dock-track]') || el).getBoundingClientRect()
+          return { x: trackRect.left + el.offsetLeft + el.offsetWidth / 2, y: vr.top + el.offsetHeight / 2 }
+        },
+        { sel: DOCK, label },
+      )
+      if (!t) return null
+      await p.mouse.move(t.x, t.y, { steps: 6 })
+    } else {
+      await p.mouse.move(640, 120)
+    }
+    await p.waitForTimeout(340)
+    return p.evaluate((sel) => {
+      const bar = document.querySelector(sel)
+      if (!bar) return null
+      const br = bar.getBoundingClientRect()
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      if (!items.length) return null
+      const boxes = items.map((el) => el.getBoundingClientRect())
+      const left = Math.min(...boxes.map((r) => r.left))
+      const right = Math.max(...boxes.map((r) => r.right))
+      const barCenter = br.left + br.width / 2
+      const groupCenter = (left + right) / 2
+      return {
+        悬停: '',
+        diff: Math.round(groupCenter - barCenter),
+        leftPad: Math.round(left - br.left),
+        rightPad: Math.round(br.right - right),
+      }
+    }, DOCK)
+  }
+  const alignRows = []
+  for (const label of [null, dockNames[0], dockNames[Math.floor(dockNames.length / 2)], dockNames[dockNames.length - 1]])
+    alignRows.push({ 悬停: label ?? '无', ...(await alignCase(label)) })
+  check(
+    '图标组在**整条任务栏**里居中（组中心 vs 栏中心 ≤2px；无悬停 + 悬停首/中/末四种情况）',
+    alignRows.every((r) => r && Math.abs(r.diff) <= 2),
+    JSON.stringify(alignRows),
+  )
+
+  /* ⑤ 恒等映射在**滚动之后**仍成立（滚动后错格是最容易出的场景，单独一条）。
+     先把手动长度压小让 `maxOffset > 0`，滚一段，再取落点量 argmax。 */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') || '{}')
+    raw.length = 200
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
+  const dockBox = await p.evaluate((sel) => {
+    const view = document.querySelector(sel + ' [data-dock-view]')
+    if (!view) return null
+    const r = view.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, DOCK)
+  if (dockBox) {
+    await p.mouse.move(dockBox.x, dockBox.y)
+    await p.mouse.wheel(220, 0)
+    /* ⚠️ 等**回弹/滚动彻底停**再量落点：滚轮会让 offset 收起一段（弹簧），
+       不等就量 → 落点按"还没停时的位移"算 → 指针落到隔壁（本轮就因此误红过一次）。 */
+    await p.waitForTimeout(1000)
+  }
+  const scrolledOffset = await p.evaluate((sel) => {
+    const track = document.querySelector(sel + ' [data-dock-track]')
+    if (!track) return null
+    const m = new DOMMatrixReadOnly(getComputedStyle(track).transform)
+    return Math.round(-m.e)
+  }, DOCK)
+  /* ⚠️ 这段**不能复用上面那条 `identityAt`**：它声明在另一个函数作用域里（本轮第一次就崩在
+     "identityAt is not defined" —— 幸好防假绿横幅把真因打了出来）。所以这里**自带一份**实现。 */
+  const scrolledIdentity = await (async () => {
+    /* ⚠️ 先**把指针移出任务栏**再落点：滚轮不移指针，若落点恰好等于指针当前位置，
+       浏览器不会派发 `pointermove` → 放大强度一直是 0（实测曲线全 1.0，看起来像"不放大"的 bug，
+       其实是测试自己没触发事件）。 */
+    await p.mouse.move(640, 150)
+    await p.waitForTimeout(120)
+    const t = await p.evaluate(
+      (sel) => {
+        const view = document.querySelector(sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+        if (!view || !items.length) return null
+        const track = items[0].closest('[data-dock-track]')
+        if (!track) return null
+        const vr = view.getBoundingClientRect()
+        const trackRect = track.getBoundingClientRect()
+        /* ⚠️ **必须挑"落在可视窗口里"的图标**：`length=200` 时可视窗口只有 ~130px，
+           而"第 5 个"早被滚到窗口外 —— 照它算落点会把指针放到**任务栏外面**，
+           于是完全不放大（曲线全 1.0，看着像"不放大"的 bug，其实是测试选错了目标）。
+           改成选**离视口中心最近**的那个图标，并用 `argmax == 它的下标` 判恒等映射。 */
+        const windowCenter = vr.left + vr.width / 2
+        let best = 0
+        let bestD = Infinity
+        items.forEach((el, i) => {
+          const d = Math.abs(trackRect.left + el.offsetLeft + el.offsetWidth / 2 - windowCenter)
+          if (d < bestD) {
+            bestD = d
+            best = i
+          }
+        })
+        const el = items[best]
+        return {
+          idx: best,
+          x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
+          y: vr.top + el.offsetHeight / 2,
+        }
+      },
+      DOCK,
+    )
+    if (!t) return null
+    await p.mouse.move(t.x, t.y, { steps: 8 })
+    await p.waitForTimeout(430)
+    const r = await p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
+      let argmax = 0
+      scales.forEach((s, i) => {
+        if (s > scales[argmax]) argmax = i
+      })
+      return { argmax, scales }
+    }, DOCK)
+    return { want: t.idx, argmax: r.argmax, ok: r.argmax === t.idx, curve: r.scales }
+  })()
+  check(
+    '恒等映射在**滚动之后**仍成立（先滚一段，再取图标布局中心 → argmax 严格等于该下标）',
+    !!scrolledIdentity && scrolledIdentity.ok,
+    JSON.stringify({ 滚动偏移: scrolledOffset, scrolledIdentity }),
+  )
+  /* 复原长度，别影响后面的检查 */
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.dock') || '{}')
+    raw.length = null
+    localStorage.setItem('desktop.dock', JSON.stringify(raw))
+  })
+  await p.reload({ waitUntil: 'load' })
+  await p.waitForTimeout(900)
   /* 站主报的"半透明边框"（2026-10-06）：真凶**不是** border/outline/box-shadow，
      而是**按钮自己的底色** —— 图标只占按钮 72%，`hover:bg-hover`（rgba(0,0,0,.05)）与选中态
      `bg-accent` 都会从彩色圆角底**外面露出一圈**。这条把三样都钉住，谁再加回来就红：
@@ -2241,9 +2432,34 @@ async function run() {
      但为了防第三次复发，这里把"**拖动过任务栏之后再悬停仍然放大**"固化下来 ——
      拖动是最容易把 offset / rAF / 指针状态搅乱的交互，真出问题这里先红。
      判据用"指针停在可视区中间 → 一定有某个图标被放大到 ≥1.8×"（不挑具体图标，避免依赖顺序）。 */
-  await p.mouse.move(wheelCenter.x, wheelCenter.y)
-  await p.waitForTimeout(360)
-  const afterDragHover = await wheelProbe(wheelCenter.x)
+  /* ⚠️ 2026-10-06 修正落点：**不能停在"可视区中点"** —— 任务栏加了对称占位之后，视口中点
+     可能正好落在**两个图标之间**，那时波峰是**插值**出来的（实测 1.738×）→ 误红。
+     改成停在**中间那个图标的布局中心**（纯布局量、不含 transform，与恒等映射那条同源）。 */
+  const afterDragPoint = await (async () => {
+    /* ⚠️ 先等**回弹弹簧彻底停**（拖动 120px 之后 offset 还在弹）——不等就量，落点会落在
+       已经过时的位置（实测峰跑到 index 8，而想停的是 index 5）→ 误红。 */
+    await p.waitForTimeout(800)
+    return p.evaluate(
+    (sel) => {
+      const view = document.querySelector(sel + ' [data-dock-view]')
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      if (!view || !items.length) return null
+      const el = items[Math.floor(items.length / 2)]
+      const track = el.closest('[data-dock-track]')
+      const m = track ? new DOMMatrixReadOnly(getComputedStyle(track).transform) : null
+      const vr = view.getBoundingClientRect()
+      const trackRect = (track || el).getBoundingClientRect()
+      return {
+        x: trackRect.left + el.offsetLeft + el.offsetWidth / 2,
+        y: vr.top + el.offsetHeight / 2,
+      }
+    },
+    DOCK,
+    )
+  })()
+  await p.mouse.move(afterDragPoint.x, afterDragPoint.y, { steps: 6 })
+  await p.waitForTimeout(420)
+  const afterDragHover = await wheelProbe(afterDragPoint.x)
   check(
     '**拖动过任务栏之后再悬停**，放大仍然生效（有图标 ≥1.8×）—— 防"用一会儿就不放大"复发',
     (afterDragHover.slotScales ?? []).some((s) => s >= 1.8),
@@ -2815,7 +3031,12 @@ async function run() {
   const wrap200 = await dockProbe()
   check(
     '切到「折行」不再改变任务栏尺寸（同一存档 length=200：以前轮盘 274 / 折行 200，突然缩短 74px）',
-    !!wheel200 && !!wrap200 && wheel200.mode === 'wheel' && wrap200.mode === 'wrap' && wheel200.barW === wrap200.barW && wheel200.visW === wrap200.visW,
+    /* ⚠️ 2026-10-06 判据从 `visW` 改成 **`barW`**：站主报「位置没有对齐哦，左右方向」后，
+       图标区在**固定按钮的对侧加了一个等宽 `aria-hidden` 占位**（布局层对称，让图标组落在整条栏中心），
+       所以**同一个 length 下轮盘的可视宽度比折行小 45px（= 按钮宽 + 间距）是设计如此**；
+       而这条断言的名字与意图是"**任务栏尺寸**不许因为切模式而变" —— 那看 `barW`：两者仍然相等 ✓。
+       折行是"完全旧行为一个字不改"，它没有那个占位，所以两边 visW 不再相等是**预期**。 */
+    !!wheel200 && !!wrap200 && wheel200.mode === 'wheel' && wrap200.mode === 'wrap' && wheel200.barW === wrap200.barW,
     JSON.stringify({ wheel: { barW: wheel200?.barW, visW: wheel200?.visW }, wrap: { barW: wrap200?.barW, visW: wrap200?.visW } }),
   )
   check(
@@ -2836,10 +3057,11 @@ async function run() {
   const wrap200b = await dockProbe()
   check(
     '来回切一次（wheel → wrap → wheel → wrap）结论不变：尺寸一致、按钮数一致、仍然一个都不少',
+    /* ⚠️ 同前一条：判据用 `barW`（任务栏尺寸），**不再要求 `visW` 相等** ——
+       轮盘那 45px 的差是"固定按钮对侧的等宽占位"带来的（站主要图标组在整条栏里居中），设计如此。 */
     !!wheel200b &&
       !!wrap200b &&
       wheel200b.barW === wrap200b.barW &&
-      wheel200b.visW === wrap200b.visW &&
       wrap200b.count === wrap200b.dockApps &&
       wrap200b.scaled.length === 0 &&
       wrap200b.never.length === 0,
