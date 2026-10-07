@@ -12,9 +12,14 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
+  ASYM_BIAS,
+  ASYM_DEAD,
+  ASYM_DECAY,
+  ASYM_V_REF,
+  MAGNIFY_EXP,
   MAGNIFY_PEAK,
+  PUSH_FACTOR,
   MAGNIFY_RADIUS_SLOTS,
-  SPREAD_FACTOR,
   MOVE_THRESHOLD,
   SPRING_DAMPING,
   SPRING_STIFFNESS,
@@ -192,6 +197,11 @@ export function Dock() {
        `hotTarget` = 指针当前对应的槽位（连续），`hot` = 每帧向它推进的显示值。 */
     hot: number
     hotTarget: number
+    /** 波峰位置的**平滑速度**（格/秒，EMA）—— 只用来做"左右不对称"，见 `ASYM_*` 常量。 */
+    vEma: number
+    /** 上一次指针事件的时间戳 / 当时的连续槽位 —— 只用于在**事件里**算速度（见 `wheelMove`） */
+    moveT: number
+    prevMoveHot: number
   }>({
     pos: null,
     fade: 0,
@@ -199,6 +209,11 @@ export function Dock() {
     last: 0,
     hot: 0,
     hotTarget: 0,
+    /** 波峰位置的**平滑速度**（格/秒，EMA）—— 只用来做"左右不对称"，见 `ASYM_*` 常量。
+     *  ⚠️ 不许拿逐帧位移直接判方向（那是站主报的"震动感"的源头）。 */
+    vEma: 0,
+    moveT: 0,
+    prevMoveHot: 0,
   })
   /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
   const [preview, setPreview] = useState<AppId[] | null>(null)
@@ -452,39 +467,45 @@ export function Dock() {
     track.style.transform = vertical ? `translate3d(0, ${-off}px, 0)` : `translate3d(${-off}px, 0, 0)`
     const items = [...track.querySelectorAll<HTMLElement>('[data-dock-item]')]
     if (!items.length) return
-    const { pos, fade, hot } = pointer.current
-    const active = pos !== null && fade > 0.002
+    const { fade, hot } = pointer.current
+    /* ⚠️ 2026-10-06（第 8 轮·补充口径）「**离开必须回到原样**」：
+       `active` **只看 `fade`**，不再看 `pos` —— 指针滑出后 `pos` 立刻变 null，若此时直接判 inactive，
+       图标会**瞬移**回布局位（留半截状态的观感）。改成让 `fade` 自然衰减到 0：
+       缩放与位移都乘 `amp = fade`，所以**衰减过程中平滑地收回原样**，末态严格是 scale 1 / 位移 0。 */
+    const active = fade > 0.002
+    const amp = active ? fade : 0
     const magBtn = Math.max(1, step - GAP)
-    /* ① macOS 的**波浪**（站主 2026-10-06 最终口径：「想要 macOS 那种指针扫过时的"波浪"，
-       越想 macOS 越好，最好一模一样」；中间那条三档模型已被否）：
-       `wave(d) = (1 − min(d/RADIUS, 1))^2.0` —— d = 离指针的**格数**（`hot` 是连续浮点，
-       所以波峰会跟着指针平滑移动）。
-       ⚠️ **实测教训**：半径 5 + 余弦曲线时紧邻那个也到 **1.89×** —— "中部最鼓"变成"一大片都鼓"，
-       而且邻居让不开、渲染盒相交（被"不相交"断言当场抓住）。换成幂 1.5 后曲线是
-       `2.00 / 1.65 / 1.35 / 1.13 / 1.00`（R=4）：峰附近变化快、远处趋平，
-       正是站主说的"中部最鼓、两端迅速收平"。 */
+    /* ①3 2026-10-06（第 8 轮）**最终口径**：站主「图标问题还是**震动感太强**……**其他图标要是尽量不动的，
+       只有左右两个图标变化**。从左往右滑动，左边就比右边的小一点；从右往左滑动，右边就比左边小一点」。
+       → 半径收到 **1.5 格**（`MAGNIFY_RADIUS_SLOTS`）、曲线幂 **1.9**（`MAGNIFY_EXP`）：
+         实测曲线 `d=0 → 2.00 / d=0.5 → 1.46 / d=1 → 1.12 / d=1.5 → 1.00 / d≥2 → 1.00`。
+         **到窗口边缘正好回 0**，所以第 2 格之外的图标既不缩放也不位移，**且不会在边界 pop 一下**。
+       ⚠️ 别把半径改回 3~5：那样"整排都在动"，正是站主说的"其他图标被挤"和"震动感"。 */
     const wave = (d: number) => {
       const t = Math.min(1, Math.abs(d) / MAGNIFY_RADIUS_SLOTS)
-      return Math.pow(1 - t, 2.0)
+      return Math.pow(1 - t, MAGNIFY_EXP)
     }
-    const scales = items.map((_, i) => 1 + (MAGNIFY_PEAK - 1) * wave(i - hot) * (active ? fade : 0))
-    /* ② **整排铺开**（波浪的关键，也是 macOS 的做法）：图标被放大 `(s−1)·边长`，每侧涨出一半；
-       相邻两个的**两个半边之和**就是它们之间必须让开的量。所以位移按**逐个缝隙累加**：
-       `gapShift(j) = ((s_j − 1) + (s_{j+1} − 1)) · 边长 / 2`。
-       这条式子的好处：`step ≥ 边长` 时**数学上必然不相交**，剩下的正好是 `GAP` 那点缝 ——
-       不用拍脑袋乘系数（上一版用固定倍数，余弦曲线下被断言抓出重叠）。 */
-    const gapShift = (j: number) =>
-      ((scales[j] - 1) + (scales[j + 1] - 1)) * magBtn * 0.5 * SPREAD_FACTOR
-    const hotInt = Math.round(hot)
+    /* ② 方向不对称：**把波峰按平滑速度偏置**（`ASYM_BIAS`，最多 0.3 格），而不是给左右邻居各乘
+       一个系数 —— 后者在指针跨过"两图标中点"时左右互换，scale 会瞬间跳 ~0.35（更震）。
+       偏置天然连续：右滑 → 波峰偏右 → **左邻居小、右邻居大**；停手后速度归零 → 偏置归零 → 左右对称。
+       ⚠️ 绝不许拿逐帧位移直接判方向 —— 那是"震动感"的源头。 */
+    const vNorm = Math.max(-1, Math.min(1, pointer.current.vEma / ASYM_V_REF))
+    const hotEff = hot + vNorm * ASYM_BIAS
+    const scales = items.map((_, i) => {
+      if (!active) return 1
+      return 1 + (MAGNIFY_PEAK - 1) * wave(i - hotEff) * amp
+    })
+    /* ③ 位移：**峰值那个绝不动**（它往栏外长，位移会让它和邻居叠在一起）；
+       **第 2 格之外位移恒 0**（站主：「其他图标要是尽量不动的」）；
+       紧邻按**峰值增量的一半**让路（进入时看得出"滑开"约 12px；乘 `amp` → 离开时平滑收回、末态严格 0）。
+       ⚠️ 大图标会**压住邻居的圆角**（macOS 就是这样），所以这里不追求"互不相交"——
+       `verify` 里那条"交叠不超过一半"的放宽断言正是为此，别改成"不许交叠"。 */
     const shifts = items.map((_, i) => {
-      if (!active || i === hotInt) return 0
-      let acc = 0
-      if (i > hotInt) {
-        for (let j = hotInt; j < i && j < scales.length - 1; j += 1) acc += gapShift(j)
-        return acc
-      }
-      for (let j = i; j < hotInt; j += 1) acc += gapShift(j)
-      return -acc
+      if (!active) return 0
+      const d = i - hotEff
+      if (Math.abs(d) < 0.5) return 0
+      if (wave(d) <= 0.001) return 0
+      return (d < 0 ? -1 : 1) * (MAGNIFY_PEAK - 1) * magBtn * 0.5 * PUSH_FACTOR * amp
     })
     items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
@@ -530,8 +551,14 @@ export function Dock() {
        macOS 的波峰是**锁在光标上**的，所以这里直接赋值（`hot = hotTarget`）。
        进/出栏那种离散变化仍由上面的 `fade` 负责平滑 —— 两者别混。 */
     pt.hot = pt.hotTarget
+    /* 方向不对称的速度**在指针事件里算**（`wheelMove`），这里只负责**衰减**：
+       指针停住后 `vEma` 平滑归零 → 波峰偏置归零 → **左右收敛回对称**（站主明确要求）。
+       循环也因此要多跑一会儿（速度没归零就不能停，否则不对称会"冻"在歪的状态）。 */
+    pt.vEma += (0 - pt.vEma) * Math.min(1, dt / ASYM_DECAY)
+    if (Math.abs(pt.vEma) < ASYM_DEAD) pt.vEma = 0
     paint()
-    if (fadeSettled) {
+    /* 循环收尾：强度与**速度**都安定下来才停 */
+    if (fadeSettled && pt.vEma === 0) {
       raf.current = 0
     } else {
       raf.current = requestAnimationFrame(tick)
@@ -719,6 +746,26 @@ export function Dock() {
           }
         }
         pointer.current.hotTarget = target
+        /* **方向不对称用的速度在这里算**（不是在 tick 里）：用指针事件自己的时间戳与位移 ——
+           事件之间可能一帧都没跑（快速滑动），放 tick 里会取不到样本、速度忽有忽无
+           （实测不对称会来回翻、看着就是"震动"）。⚠️ 仍然只有一个 pointermove 监听。 */
+        {
+          const pt2 = pointer.current
+          const evT = e.timeStamp || performance.now()
+          if (pt2.moveT) {
+            const dtEv = Math.max(0.004, Math.min(0.08, (evT - pt2.moveT) / 1000))
+            const dHot = target - pt2.prevMoveHot
+            const vRaw = dHot / dtEv
+            /* ⚠️ 权重**按位移**给（不是纯按时间）：时间型 EMA 在 `dtEv≈4~16ms` 时每次事件只吃
+               3%~13%，要几十个事件才建立起来 —— 实测那样偏置只有设计值的 1/4，"方向感"几乎看不见。
+               按位移加权 → 快滑 2~3 个事件就到位，慢滑仍然平缓。 */
+            const alpha = Math.min(0.5, Math.max(0.06, Math.abs(dHot) / 0.5))
+            pt2.vEma += (vRaw - pt2.vEma) * alpha
+            if (Math.abs(pt2.vEma) < ASYM_DEAD) pt2.vEma = 0
+          }
+          pt2.prevMoveHot = target
+          pt2.moveT = evT
+        }
       }
       if (pointer.current.fade < 0.02) pointer.current.hot = pointer.current.hotTarget
       scheduleTick()

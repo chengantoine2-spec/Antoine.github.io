@@ -2198,9 +2198,15 @@ async function run() {
       const br = bar.getBoundingClientRect()
       const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
       if (!items.length) return null
-      const boxes = items.map((el) => el.getBoundingClientRect())
-      const left = Math.min(...boxes.map((r) => r.left))
-      const right = Math.max(...boxes.map((r) => r.right))
+      /* ⚠️ 2026-10-06 改量**布局几何**（`trackRect.left + offsetLeft`），不量渲染盒：
+         悬停最左/最右那个图标时，2× 的它本来就会**溢出任务栏**，用渲染盒量出来的"组中心"
+         会跟着溢出量跑（实测偏移 ±10px）—— 那是放大造成的，不是"没居中"。
+         "居中"说的是**布局**居中，所以判据必须用布局量。 */
+      const tr = items[0].closest('[data-dock-track]').getBoundingClientRect()
+      const lefts = items.map((el) => tr.left + el.offsetLeft)
+      const rights = items.map((el) => tr.left + el.offsetLeft + el.offsetWidth)
+      const left = Math.min(...lefts)
+      const right = Math.max(...rights)
       const barCenter = br.left + br.width / 2
       const groupCenter = (left + right) / 2
       return {
@@ -2268,15 +2274,24 @@ async function run() {
   const atStop = sweep[sweep.length - 1] ?? null
   await p.waitForTimeout(220)
   const afterStop = atStop ? await readScales() : null
+  await p.waitForTimeout(200)
+  const settled2 = atStop ? await readScales() : null
+  /* ⚠️ 2026-10-06（第 8 轮）**判据改写**：现在方向不对称是"按速度偏置波峰"，停手后偏置会
+     **主动衰减归零**（站主明确要求"停手后收敛回对称"）→ 所以停手瞬间 peak 可能只有 1.7（波峰在
+     两格之间），220ms 后收回该图标上、长到 2.0。**这不是"自己追上来"**，是设计里的收敛。
+     新的判据分两段：① **220ms 之后必须已经安定**（argmax 不变、peak 变化 ≤0.03）；
+     ② 安定后 peak **≥1.9**（偏置确实归零、波峰落回图标中心）。 */
   check(
-    '放大**跟手**：快扫时波峰逐个推进（不跳格）、**停下后峰值不再自己追上来**（argmax 不变、peak 变化 ≤0.03）',
+    '放大**跟手**：快扫时波峰逐个推进（不跳格）、**停下 220ms 后已经安定**（之后 argmax 不变、peak 变化 ≤0.03、且 peak 回落到 ≥1.9）',
     !!dockGeom &&
       !!atStop &&
       !!afterStop &&
+      !!settled2 &&
       new Set(sweepArgmax).size >= Math.min(6, dockGeom.centres.length) &&
-      afterStop.argmax === atStop.argmax &&
-      Math.abs(afterStop.peak - atStop.peak) <= 0.03,
-    JSON.stringify({ 快扫argmax: sweepArgmax, 停手: atStop, '220ms后': afterStop }),
+      settled2.argmax === afterStop.argmax &&
+      Math.abs(settled2.peak - afterStop.peak) <= 0.03 &&
+      settled2.peak >= 1.9,
+    JSON.stringify({ 快扫argmax: sweepArgmax, 停手: atStop, '220ms后': afterStop, '420ms后': settled2 }),
   )
   /* ⑤ 单步 2px 的 scale 变化上限（防"突然跳一下"）：实测改后 0.16、改前 0.21 → 判据 0.25 */
   await p.mouse.move(640, 120)
@@ -2305,6 +2320,165 @@ async function run() {
     microSteps.length > 5 && maxStepDelta <= 0.25,
     JSON.stringify({ 单步最大变化: Number(maxStepDelta.toFixed(3)), 采样步数: microSteps.length }),
   )
+
+  /* ── 2026-10-06（第 8 轮）「波浪」最终口径的四组断言 ────────────────────────────
+     站主：「图标问题还是**震动感太强**……**其他图标要是尽量不动的，只有左右两个图标变化**。
+     从左往右滑动，左边就比右边的小一点；从右往左滑动，右边就比左边小一点」+
+     补充：「**进入任务栏时允许让路**，**滑出去要变回原样**」。 */
+  const readT = () =>
+    p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      return items.map((el) => {
+        const m = new DOMMatrixReadOnly(getComputedStyle(el).transform)
+        return { s: Number(m.a.toFixed(3)), t: Number(m.e.toFixed(2)) }
+      })
+    }, DOCK)
+  let waveRound = null
+  if (dockGeom) {
+    const cen = dockGeom.centres
+    const midI = Math.floor(cen.length / 2)
+    /* (1) **外圈一律不动**：悬停中间那个 → ≥2 格的图标 scale 1.0(±0.02)、位移 0(±1px)；峰值自身位移 0 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(320)
+    await p.mouse.move(cen[midI], dockGeom.y, { steps: 4 })
+    await p.waitForTimeout(320)
+    const r1 = await readT()
+    const peakI = r1.reduce((b, v, i) => (v.s > r1[b].s ? i : b), 0)
+    const outer = r1.map((v, i) => ({ d: Math.abs(i - peakI), ...v })).filter((v) => v.d >= 2)
+    const outerOk = outer.every((v) => Math.abs(v.s - 1) <= 0.02 && Math.abs(v.t) <= 1)
+    const neighborOk = [peakI - 1, peakI + 1].every((i) => i < 0 || i >= r1.length || (r1[i].s > 1.05 && r1[i].s < 1.45))
+    check(
+      '波浪半径收到 **1 格**：只有「指针正对 + 紧邻左右各一个」在变（紧邻 1.05~1.45），**≥2 格之外 scale 1.0(±0.02) 且位移 0(±1px)**，峰值自身也不位移',
+      outer.length > 2 && outerOk && neighborOk && Math.abs(r1[peakI].t) <= 0.5 && peakI === midI,
+      JSON.stringify({ 峰: peakI, 期望峰: midI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t) }),
+    )
+    /* (2) **方向不对称**：快扫左→右时 左邻 < 右邻；右→左时相反（都在**滑动过程中**采样）。
+       做法：1 槽一步（45px，落在图标布局中心上）、每步只等 1 帧 —— 那时速度 EMA 已经建立。 */
+    const asymSweep = async (dir) => {
+      await p.mouse.move(640, 120)
+      await p.waitForTimeout(300)
+      const idxs = dir > 0 ? [2, 3, 4, 5, 6, 7, 8, 9] : [9, 8, 7, 6, 5, 4, 3, 2]
+      const out = []
+      for (const i of idxs) {
+        await p.mouse.move(cen[i], dockGeom.y)
+        await p.waitForTimeout(20)
+        const m = await readT()
+        const pk = m.reduce((b, v, k) => (v.s > m[b].s ? k : b), 0)
+        out.push({ pk, left: m[pk - 1]?.s ?? null, right: m[pk + 1]?.s ?? null })
+      }
+      const tail = out.slice(2).filter((r) => r.left !== null && r.right !== null)
+      const good = tail.filter((r) => (dir > 0 ? r.left < r.right : r.left > r.right)).length
+      const last = out[out.length - 1]
+      const lastOk = last.left !== null && last.right !== null && (dir > 0 ? last.left < last.right : last.left > last.right)
+      return { dir, 尾段: tail.length, 方向正确: good, 最后一片: last, lastOk }
+    }
+    const a1 = await asymSweep(1)
+    const a2 = await asymSweep(-1)
+    check(
+      '方向不对称：**左→右滑动时左邻比右邻小**、**右→左时相反**（都在滑动过程中采样，不是停手后）',
+      a1.lastOk && a2.lastOk && a1.方向正确 >= Math.ceil(a1.尾段 * 0.6) && a2.方向正确 >= Math.ceil(a2.尾段 * 0.6),
+      JSON.stringify({ 左到右: a1, 右到左: a2 }),
+    )
+    /* (3) **停手后收敛回对称**：速度衰减到 0 → 波峰偏置归 0 → 左右邻居 scale 差 ≤0.02 */
+    await p.mouse.move(cen[midI] - 22, dockGeom.y, { steps: 3 })
+    await p.waitForTimeout(50)
+    await p.mouse.move(cen[midI], dockGeom.y, { steps: 2 })
+    await p.waitForTimeout(340)
+    const r3 = await readT()
+    const pk3 = r3.reduce((b, v, i) => (v.s > r3[b].s ? i : b), 0)
+    const symDiff = Math.abs((r3[pk3 - 1]?.s ?? 1) - (r3[pk3 + 1]?.s ?? 1))
+    check(
+      '停手后**收敛回左右对称**：等 340ms 后左右邻居 scale 差 ≤0.02（速度归零 → 偏置归零）',
+      symDiff <= 0.02,
+      JSON.stringify({ 峰: pk3, 左: r3[pk3 - 1]?.s, 右: r3[pk3 + 1]?.s, 差: Number(symDiff.toFixed(3)) }),
+    )
+    /* (4) **不许抖**：恒速慢扫（2px/步、每步 28ms），盯着**固定一个图标**采样：
+       相邻两次变化 ≤0.06，且方向**不许来回翻转**（≤1 次）。 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(300)
+    await p.mouse.move(cen[midI - 2], dockGeom.y)
+    await p.waitForTimeout(220)
+    const watch = midI
+    const series = []
+    for (let k = 0; k < 20; k += 1) {
+      await p.mouse.move(cen[midI - 2] + k * 2, dockGeom.y)
+      await p.waitForTimeout(28)
+      series.push((await readT())[watch].s)
+    }
+    const dser = series.slice(1).map((s, i) => Math.abs(s - series[i]))
+    const sgn = series.slice(1).map((s, i) => Math.sign(Number((s - series[i]).toFixed(3))))
+    let flips = 0
+    for (let i = 1; i < sgn.length; i += 1) if (sgn[i] !== 0 && sgn[i - 1] !== 0 && sgn[i] !== sgn[i - 1]) flips += 1
+    check(
+      '**不许抖**：恒速慢扫时固定图标的 scale 相邻两次变化 ≤0.06、方向翻转 ≤1 次（改前的"左右各乘系数"写法会来回翻）',
+      series.length === 20 && Math.max(...dser) <= 0.06 && flips <= 1,
+      JSON.stringify({ 最大帧间差: Number(Math.max(...dser).toFixed(3)), 方向翻转: flips, 序列: series.map((s) => s.toFixed(3)) }),
+    )
+    /* (5) **进入时让路**：栏外 → 栏内，紧邻位移 >2px，且**是渐进的**（50ms 时处于中间态） */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(340)
+    const beforeIn = await readT()
+    await p.mouse.move(cen[midI], dockGeom.y, { steps: 2 })
+    await p.waitForTimeout(50)
+    const duringIn = await readT()
+    await p.waitForTimeout(340)
+    const afterIn = await readT()
+    const nL = midI - 1
+    const nR = midI + 1
+    const dist = (arr, i) => Math.abs(arr[i]?.t ?? 0)
+    check(
+      '**进入任务栏时让路**：紧邻图标的位移 >2px（看得出"滑开"），且**是渐进的**（50ms 时处于 0 与到位值之间）',
+      dist(afterIn, nL) > 2 &&
+        dist(afterIn, nR) > 2 &&
+        dist(duringIn, nL) > 0.5 &&
+        dist(duringIn, nL) < dist(afterIn, nL) &&
+        dist(beforeIn, nL) < 0.5,
+      JSON.stringify({
+        进入前: [beforeIn[nL]?.t, beforeIn[nR]?.t],
+        '50ms': [duringIn[nL]?.t, duringIn[nR]?.t],
+        到位: [afterIn[nL]?.t, afterIn[nR]?.t],
+      }),
+    )
+    /* (6) ⭐ **离开后完全还原**（含"快速扫出"这条最容易留半截状态的路径） */
+    const restoreProbe = async (fast) => {
+      await p.mouse.move(cen[midI], dockGeom.y)
+      await p.waitForTimeout(280)
+      if (fast) await p.mouse.move(80, 90)
+      else {
+        await p.mouse.move(cen[midI], dockGeom.y - 60)
+        await p.waitForTimeout(60)
+        await p.mouse.move(80, 90)
+      }
+      await p.waitForTimeout(420)
+      const m = await readT()
+      const pitch = await p.evaluate(
+        (sel) => {
+          const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+          const tr = items[0].closest('[data-dock-track]').getBoundingClientRect()
+          const xs = items.map((el) => tr.left + el.offsetLeft)
+          return [...new Set(xs.slice(1).map((x, i) => Math.round(x - xs[i])))]
+        },
+        DOCK,
+      )
+      return {
+        fast,
+        最大位移: Number(Math.max(...m.map((v) => Math.abs(v.t))).toFixed(2)),
+        最大缩放差: Number(Math.max(...m.map((v) => Math.abs(v.s - 1))).toFixed(3)),
+        相邻中心距: pitch,
+      }
+    }
+    const outSlow = await restoreProbe(false)
+    const outFast = await restoreProbe(true)
+    const restoreOk = (r) => r.最大位移 <= 1 && r.最大缩放差 <= 0.02 && r.相邻中心距.length === 1 && Math.abs(r.相邻中心距[0] - 45) <= 2
+    waveRound = { outSlow, outFast }
+    check(
+      '⭐ **离开后完全还原**（正常移出 + **快速一步扫出**）：所有图标位移 0(±1px)、scale 1.0(±0.02)、相邻中心距回到 边长+DOCK_GAP(5)',
+      restoreOk(outSlow) && restoreOk(outFast),
+      JSON.stringify(waveRound),
+    )
+  } else {
+    check('波浪四组（外圈不动 / 方向不对称 / 停手对称 / 不抖 / 进入让路 / 离开还原）', false, 'dockGeom 拿不到')
+  }
 
   /* ⑤ 恒等映射在**滚动之后**仍成立（滚动后错格是最容易出的场景，单独一条）。
      先把手动长度压小让 `maxOffset > 0`，滚一段，再取落点量 argmax。 */
