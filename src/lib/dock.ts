@@ -181,22 +181,30 @@ export function wrapPerLine(count: number, lines: number): number {
  * ⚠️ 别换成 `margin`：内边距同时缩小了"用于居中的空闲空间"，这才是它"正好抵消"的原因。
  */
 export function wrapSideGap(btn: number, vertical: boolean): number {
-  const fixed = btn + DOCK_GAP
-  /* 竖排：固定按钮在终点 → 补起点（正）；横排：固定按钮在起点 → 补终点（负） */
-  return vertical ? fixed : -fixed
+  /* ⚠️ 2026-10-06（站主：「最左边的全部应用图标也改到顶部栏里面去吧」）：
+     任务栏里**已经没有任何固定按钮**（启动台搬进菜单栏、全屏与位置早在 P2 就搬走了），
+     所以"两侧固定区不等"这个**根因消失了** —— 再补内边距反而会把图标块推偏
+     （实测：横排时补了 45px，图标块中线偏 −22px，多行时最后一行也偏 −22px，两条断言当场红）。
+     这里保留函数与签名（调用方不用改），但**返回 0**：图标块由 `margin: auto` 自己居中即可。
+     ⚠️ 以后若又往任务栏里加固定按钮，先想清楚它在哪一侧，再决定要不要恢复补偿。 */
+  void btn
+  void vertical
+  return 0
 }
-/** 折行的长度下限：至少要装得下两端三个固定按钮 + 一个图标 */
+/** 折行的长度下限：至少要装得下**两个图标** + 内边距（原来还要给两端三个固定按钮留位，
+ *  ⚠️ 2026-10-06 起任务栏没有固定按钮了，所以这个下限跟着降 —— 见 `wheelChrome` 的注释）。 */
 export function wrapMinLength(btn: number): number {
-  return btn * 4 + DOCK_GAP * 3 + (DOCK_PAD + DOCK_BORDER) * 2
+  return btn * 2 + DOCK_GAP + (DOCK_PAD + DOCK_BORDER) * 2
 }
 
 /* ---- wheel（图标区，macOS 观感 + 回弹） ---- */
 /** 图标区里"固定按钮之外"那一截的长度。
- *  ⚠️ 2026-10-06（macOS P2）：**任务栏只剩一颗固定按钮**（左端的「所有项目」≈ 启动台）——
- *  「全屏 ⛶」与「任务栏位置」已经挪进顶部菜单栏（macOS 的 Dock 两端只有启动台和废纸篓，
- *  没有这类系统按钮）。所以这里从"3 颗固定按钮"改成"1 颗 + 两处间距"，长度下限也跟着降。 */
-export function wheelChrome(btn: number): number {
-  return btn + DOCK_GAP * 2 + (DOCK_PAD + DOCK_BORDER) * 2
+ *  ⚠️ 2026-10-06：任务栏里**已无固定按钮**（「全屏 ⛶」「任务栏位置」在 macOS P2 搬进菜单栏；
+ *  「所有项目」≈ 启动台随后也搬了过去）→ 固定开销**只剩内边距**。
+ *  `Dock.tsx` 的 `chromeLen` 直接用它算显式长度（单一真源，别再在组件里写一份字面量）。 */
+export function wheelChrome(_btn: number): number {
+  void _btn
+  return (DOCK_PAD + DOCK_BORDER) * 2
 }
 /** 图标区可视长度的下限：至少 3 个图标位（少了中心放大出来的图标会被裁一半） */
 export function wheelViewMin(btn: number): number {

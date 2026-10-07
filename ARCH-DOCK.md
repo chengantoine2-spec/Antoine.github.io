@@ -402,3 +402,35 @@
 verify 152/153（唯一红 = 浏览器出口 IP 的 GitHub 匿名配额 403，环境性）
 verify:dst 21/21 ✓
 ```
+
+## 2026-10-06（第 6 轮）「所有项目」搬进顶部菜单栏
+
+站主：「**最左边的全部应用图标也改到顶部栏里面去吧**」。
+
+### 改了什么
+- **Dock.tsx**：删掉固定按钮「所有项目」、**上一轮为配平它而加的等宽 aria-hidden 占位**、
+  以及那套 menuOpen state / 外部点击与 Esc 收起的 effect / closeMenu / StartMenu 挂载。
+  → **任务栏里现在一个固定元素都没有**（图标区自己就是整条栏的内容，居中天然成立）。
+- **MenuBar.tsx**：启动台放在**最左**（data-menubar-launcher，aria-label **仍是「所有项目」**），
+  同 StartMenu、同收起规则；品牌（系统）菜单**改成文字**，免得两颗九宫格挨着分不清。
+- **StartMenu.tsx** 新增可选 placementClass：入口从任务栏搬到菜单栏之后，
+  再按"任务栏位置"摆面板会**跑到视口外**（实测 click 超时）——菜单栏传 top-full left-0 mt-1。
+- **lib/dock.ts** 两处补偿**归零**（根因消失）：
+  - wrapSideGap() → **返回 0**：原来给"单侧固定按钮"补 45px，按钮搬走后这 45px 反而把图标块推偏
+    **−22px**（多行时最后一行也偏 −22px）——两条折行居中断言当场红，这就是它的证据；
+  - wheelChrome() → **只剩内边距**；wrapMinLength() 从"4 个图标位"降到"2 个图标位"。
+    Dock.tsx 的 chromeLen 改为直接调用 wheelChrome()（单一真源，别在组件里写字面量）。
+
+### 实测
+```
+组中心 vs 栏中心      diff 0 / 1 / 0 / −1（无悬停 + 悬停首/中/末），左右留白各 7
+菜单栏启动台          [data-menubar] 的第一个子元素就是它；点开 → 面板 12 个应用；点应用后菜单收起
+折行 vs 轮盘(200)     barW 200 = 200；visW 186 ≈ 186（占位删除后两边基本相等，判据已收紧回 visW）
+verify                152/153（唯一红 = 环境性博客取数）
+```
+
+### 顺手记两条坑
+1. **面板定位要跟着入口走**：StartMenu 的 PLACEMENT 是按任务栏位置写的，入口搬到菜单栏后
+   面板会挂到视口外（Playwright 报 "element is outside of the viewport"，点 30s 超时）。
+2. **拖动类断言的"距离"别写死**：可视区变宽后 maxOffset 变小，写死 120px 会拖到橡皮筋区，
+   "跟手"和"不吸附"两条一起误红。改成 min(120, maxOffset − 10) 自适应。

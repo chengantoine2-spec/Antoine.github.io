@@ -1250,7 +1250,7 @@ async function run() {
      会被全局选择器一起选中（'.width-handle[data-side="left"]' 就踩过） */
   await closeAllWindows()
   await p.waitForTimeout(200)
-  await p.click(`${DOCK} button[aria-label="所有项目"]`)
+  await p.click('[data-menubar] button[aria-label="所有项目"]')
   await p.waitForTimeout(250)
   await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("终端")')
   await p.waitForTimeout(1200)
@@ -1277,7 +1277,7 @@ async function run() {
      两个窗口一起开着时全局选择器会一次选中 4 个 */
   await closeAllWindows()
   await p.waitForTimeout(200)
-  await p.click(`${DOCK} button[aria-label="所有项目"]`)
+  await p.click('[data-menubar] button[aria-label="所有项目"]')
   await p.waitForTimeout(250)
   await p.click('[role="dialog"][aria-label="所有项目"] button:has-text("饥荒 Wiki")')
   await p.waitForTimeout(900)
@@ -2406,18 +2406,23 @@ async function run() {
     track0.maxOffset > track0.step,
     JSON.stringify({ maxOffset: track0.maxOffset, step: track0.step, viewW: track0.viewW, items: track0.items }),
   )
-  /* 往**左**拖 120px（内容跟着走 ⇒ tx 变 −120）：这条方向不越界，才测得出"跟手" */
+  /* 往**左**拖（内容跟着走 ⇒ tx 变负）：这条方向不越界，才测得出"跟手"。
+     ⚠️ 2026-10-06 修正：**拖动距离改成按 `maxOffset` 自适应** —— 任务栏里那颗固定按钮搬走之后
+     可视区变宽、`maxOffset` 从 ~120 掉到 ~84，原来写死的 120px 会拖到尽头触发橡皮筋
+     （实测 tx 只走到 −101，松手还回弹到 −84 → 两条断言一起误红）。判据仍是"**跟手**"与"**不吸附**"，
+     只是不再假设任务栏一定有那么宽。 */
+  const dragBy = Math.min(120, Math.max(40, (track0.maxOffset ?? 0) - 10))
   await p.mouse.move(wheelCenter.x, wheelCenter.y)
   await p.mouse.down()
-  for (let i = 1; i <= 12; i += 1) await p.mouse.move(wheelCenter.x - i * 10, wheelCenter.y)
+  for (let i = 1; i <= 12; i += 1) await p.mouse.move(wheelCenter.x - (dragBy * i) / 12, wheelCenter.y)
   const trackDrag = await trackState()
   await p.mouse.up()
   await p.waitForTimeout(400)
   const trackSnap = await trackState()
   check(
-    '拖拽浏览：按住沿轴拖 120px，内容跟着指针走（tx 正好差 −120）',
-    Math.abs(trackDrag.tx - track0.tx - -120) <= 4,
-    JSON.stringify({ before: track0.tx, during: trackDrag.tx, maxOffset: track0.maxOffset }),
+    `拖拽浏览：按住沿轴拖 ${Math.round(dragBy)}px（按可视余量自适应），内容跟着指针走（tx 正好差那么多）`,
+    Math.abs(trackDrag.tx - track0.tx + dragBy) <= 4,
+    JSON.stringify({ before: track0.tx, during: trackDrag.tx, 拖动距离: Math.round(dragBy), maxOffset: track0.maxOffset }),
   )
   check(
     '松手**不吸附到格子**（macOS 的 Dock 是滚动视图：停在哪儿就是哪儿，位置相对拖动前是 120px 的整倍数与否都不管）',
@@ -2609,42 +2614,34 @@ async function run() {
     JSON.stringify({ lifted, 前: orderBefore.slice(0, 6), 后: orderAfterMove.slice(0, 6) }),
   )
 
-  /* 14d 任务栏的固定按钮：2026-10-06（macOS P2）起**只剩左端一颗「所有项目」**（≈ 启动台）——
-     「全屏 ⛶」与「任务栏位置」已经挪进顶部菜单栏（macOS 的 Dock 两端只有启动台与废纸篓，
-     不该长着系统按钮）。这里只断言剩下那一颗，两颗挪走的按钮见第 15 节。 */
+  /* 14d 任务栏的固定按钮：2026-10-06 **一颗都不剩了** ——
+     「全屏 ⛶」与「任务栏位置」在 macOS P2 挪进顶部菜单栏；
+     随后站主又让「**所有项目**（≈ 启动台）也搬进菜单栏最左」（原话：「最左边的全部应用图标也改到顶部栏里面去吧」）。
+     所以这条断言**反转**成："任务栏里一个固定按钮都没有 + 启动台在菜单栏最左且点得到"。
+     ⚠️ 原来它断言的是"任务栏只剩左端一颗「所有项目」"——那是上一版的口径，**不是删断言，是换口径**。 */
   const fixedProbe = await p.evaluate((sel) => {
     const bar = document.querySelector(sel)
-    const track = bar?.querySelector('[data-dock-track]')
-    const barBox = bar.getBoundingClientRect()
-    const find = (s) => bar.querySelector(s)
-    const btns = { menu: find('button[aria-label="所有项目"]') }
-    const out = {}
-    for (const [k, b] of Object.entries(btns)) {
-      if (!b) {
-        out[k] = null
-        continue
-      }
-      const r = b.getBoundingClientRect()
-      const cx = r.x + r.width / 2
-      const cy = r.y + r.height / 2
-      const hit = document.elementFromPoint(cx, cy)
-      out[k] = {
-        inBar: r.x >= barBox.x - 1 && r.right <= barBox.right + 1,
-        inTrack: !!track && track.contains(b),
-        clickable: !!hit && (b === hit || b.contains(hit)),
-      }
+    const menu = document.querySelector('[data-menubar]')
+    const launch = menu?.querySelector('button[aria-label="所有项目"]')
+    const lb = launch?.getBoundingClientRect()
+    const hit = lb ? document.elementFromPoint(lb.x + lb.width / 2, lb.y + lb.height / 2) : null
+    return {
+      dockHasLauncher: !!bar?.querySelector('button[aria-label="所有项目"]'),
+      dockHasFullscreen: !!bar?.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
+      dockHasPosition: !!bar?.querySelector('button[aria-label="任务栏位置"]'),
+      menubarLauncher: !!launch,
+      menubarFirst: menu ? menu.firstElementChild === launch : false,
+      clickable: !!hit && !!launch && (launch === hit || launch.contains(hit)),
     }
-    /* 两颗已经挪走的按钮：任务栏里**不应该**再有它们 */
-    out.goneFromDock = !find('button[aria-label="全屏"]') && !find('button[aria-label="任务栏位置"]')
-    return out
   }, DOCK)
   check(
-    '任务栏只剩左端「所有项目」一颗固定按钮：在栏内、不在滚动轨道里、点得到；全屏与位置已不在栏里',
-    !!fixedProbe.menu &&
-      fixedProbe.menu.inBar &&
-      !fixedProbe.menu.inTrack &&
-      fixedProbe.menu.clickable &&
-      fixedProbe.goneFromDock,
+    '任务栏**不再有任何固定按钮**（启动台 / 全屏 / 位置都搬走了）；启动台改在**菜单栏最左**且点得到',
+    !fixedProbe.dockHasLauncher &&
+      !fixedProbe.dockHasFullscreen &&
+      !fixedProbe.dockHasPosition &&
+      fixedProbe.menubarLauncher &&
+      fixedProbe.menubarFirst &&
+      fixedProbe.clickable,
     JSON.stringify(fixedProbe),
   )
 
@@ -2875,11 +2872,8 @@ async function run() {
     const box = scroller.getBoundingClientRect()
     const barBox = bar.getBoundingClientRect()
     const inner = scroller.firstElementChild
-    const fixed = [
-      bar.querySelector('button[aria-label="所有项目"]'),
-      bar.querySelector('button[aria-label="全屏"], button[aria-label="退出全屏"]'),
-      bar.querySelector('button[aria-label="任务栏位置"]'),
-    ].filter(Boolean)
+    /* ⚠️ 2026-10-06：任务栏**已无固定按钮**（启动台也搬去菜单栏了），所以这里是空列表。 */
+    const fixed = [].filter(Boolean)
     const firstAtStart = icons[0].getBoundingClientRect().left - box.left
     scroller.scrollLeft = 99999
     const maxScroll = Math.round(scroller.scrollLeft)
@@ -2999,7 +2993,7 @@ async function run() {
           never: btns.map((b) => b.getAttribute('aria-label')).filter((l) => !seen.has(l)),
         }
       },
-      { sel: DOCK, fixed: ['所有项目'] },
+      { sel: DOCK, fixed: [] },
     )
   /* 切模式走**路由**打开设置：轮盘里图标会循环，短任务栏时"设置"那个图标可能正好在可视圈外，
      点它会扑空（clip-path 挡住命中测试，实测踩过） */
@@ -3031,12 +3025,17 @@ async function run() {
   const wrap200 = await dockProbe()
   check(
     '切到「折行」不再改变任务栏尺寸（同一存档 length=200：以前轮盘 274 / 折行 200，突然缩短 74px）',
-    /* ⚠️ 2026-10-06 判据从 `visW` 改成 **`barW`**：站主报「位置没有对齐哦，左右方向」后，
-       图标区在**固定按钮的对侧加了一个等宽 `aria-hidden` 占位**（布局层对称，让图标组落在整条栏中心），
-       所以**同一个 length 下轮盘的可视宽度比折行小 45px（= 按钮宽 + 间距）是设计如此**；
-       而这条断言的名字与意图是"**任务栏尺寸**不许因为切模式而变" —— 那看 `barW`：两者仍然相等 ✓。
-       折行是"完全旧行为一个字不改"，它没有那个占位，所以两边 visW 不再相等是**预期**。 */
-    !!wheel200 && !!wrap200 && wheel200.mode === 'wheel' && wrap200.mode === 'wrap' && wheel200.barW === wrap200.barW,
+    /* ⚠️ 2026-10-06 **口径又变了一次**（站主：「最左边的全部应用图标也改到顶部栏里面去吧」）：
+       任务栏里那颗「所有项目」固定按钮搬去了菜单栏 → 上一版为配平它而加的**等宽占位也删掉了**，
+       于是"同一个 length 下轮盘比折行少 45px"这件事**不复存在**：两边可视宽度应当**基本相等**。
+       判据恢复成 **`barW` 相等 + `visW` 相差 ≤4px**（留 4px 给取整/滚动条之类）。
+       （上一版只比 `barW` 是因为当时有那个占位 —— 现在两个都要比，**没有删断言，是收紧**。） */
+    !!wheel200 &&
+      !!wrap200 &&
+      wheel200.mode === 'wheel' &&
+      wrap200.mode === 'wrap' &&
+      wheel200.barW === wrap200.barW &&
+      Math.abs((wheel200.visW ?? 0) - (wrap200.visW ?? 0)) <= 4,
     JSON.stringify({ wheel: { barW: wheel200?.barW, visW: wheel200?.visW }, wrap: { barW: wrap200?.barW, visW: wrap200?.visW } }),
   )
   check(
@@ -3057,11 +3056,12 @@ async function run() {
   const wrap200b = await dockProbe()
   check(
     '来回切一次（wheel → wrap → wheel → wrap）结论不变：尺寸一致、按钮数一致、仍然一个都不少',
-    /* ⚠️ 同前一条：判据用 `barW`（任务栏尺寸），**不再要求 `visW` 相等** ——
-       轮盘那 45px 的差是"固定按钮对侧的等宽占位"带来的（站主要图标组在整条栏里居中），设计如此。 */
+    /* ⚠️ 同前一条：**口径收紧回 `barW` + `visW` 都要对**（固定按钮与占位都已不在任务栏里，
+       两边可视宽度应当基本相等）。 */
     !!wheel200b &&
       !!wrap200b &&
       wheel200b.barW === wrap200b.barW &&
+      Math.abs((wheel200b.visW ?? 0) - (wrap200b.visW ?? 0)) <= 4 &&
       wrap200b.count === wrap200b.dockApps &&
       wrap200b.scaled.length === 0 &&
       wrap200b.never.length === 0,
@@ -3120,7 +3120,7 @@ async function run() {
           dockW: Math.round(dr.width),
         }
       },
-      { sel: DOCK, fixed: ['所有项目'] },
+      { sel: DOCK, fixed: [] },
     )
   const setDockGeom = async (patch) => {
     await p.evaluate((patch) => {
@@ -3172,7 +3172,7 @@ async function run() {
       const dr = dock.getBoundingClientRect()
       return { maxScrollLeft: scroller.scrollLeft, lastRightMinusDockRight: +(last.right - dr.right).toFixed(1) }
     },
-    { sel: DOCK, fixed: ['所有项目', '全屏', '退出全屏', '任务栏位置'] },
+    { sel: DOCK, fixed: [] },
   )
   check(
     '折行装不下时：起点不被推到滚动原点之外（第一个图标完整可见），且能滚到最后一个',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getApp, visibleApps } from '../../lib/apps'
@@ -32,9 +32,7 @@ import {
   wrapSideGap,
 } from '../../lib/dock'
 import type { AppId } from '../../types/desktop'
-import { MenuGlyph } from '../icons'
 import { AppIcon } from './AppIcon'
-import { StartMenu } from './StartMenu'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
@@ -142,7 +140,6 @@ export function Dock() {
   const { windows, dispatch } = useWindows()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const [menuOpen, setMenuOpen] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
   /* 点图标时的"弹一下"（macOS 的启动反馈）：只挂 300ms 的类名，纯离散事件，不进逐帧路径 */
   const [bouncing, setBouncing] = useState<AppId | null>(null)
@@ -275,47 +272,17 @@ export function Dock() {
   const chromeLen = wheelChrome(btn)
   const viewMin = wheelViewMin(btn)
   const autoView = Math.max(viewMin, itemCount * step - GAP)
-  /* ⚠️ 固定按钮（「所有项目」）只在一侧，而它**参与 flex 居中** → 图标组整体被顶偏
-     **22px = 按钮宽 44 的一半**（站主 2026-10-06：「位置没有对齐哦，左右方向」；实测组中心 662 / 栏中心 640）。
-     对策是**布局层对称**：在按钮**对侧加一个等宽的无障碍隐藏占位**（见下面 JSX），
-     图标组自然落在**整条任务栏**的中心。显式长度时把占位一起扣掉，总宽不变。
-     ⚠️ **不许改用绝对定位**：上一版那么改过（偏差确实 0），但按钮脱离布局后被图标区盖住 →
-     `page.click` 超时、**整套 verify 中止**（中止比没对齐严重得多，已回退）。 */
-  const chromePad = btn + GAP
-  const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen - chromePad)
+  /* ⚠️ 2026-10-06（站主：「最左边的全部应用图标也改到顶部栏里面去吧」）：任务栏**不再有固定按钮**，
+     所以这里只剩"内边距"这点固定开销；原来为平衡单侧按钮而加的 `chromePad`（等宽占位）也一并删除。 */
+  const viewLen = length === null ? autoView : Math.max(viewMin, length - chromeLen)
   /* ⚠️ 这里**不再有**"交叉轴溢出余量"（原 `--dock-spill` + 负外边距那套）：站主要的是
      "放大的图标从任务栏边**凸出去**"（macOS 那种夸张感），所以图标区交叉轴不裁（见 globals.css
      的 `.dock__view--h/--v`：`clip-path` 只裁主轴），2× 的图标自然凸在栏外，不需要预留空间。
      任务栏厚度照旧 = 1× 图标 + 内边距。 */
 
-  const closeMenu = useCallback(() => setMenuOpen(false), [])
-
-  /* 打开任何窗口就收起菜单 */
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [pathname])
-
-  /* 面板点开后就保持展开：只有按 Esc、点别处、或换页才收起 */
-  useEffect(() => {
-    if (!menuOpen) return
-
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node
-      if (menuOpen && !bar.current?.contains(target)) setMenuOpen(false)
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return
-      setMenuOpen(false)
-    }
-
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [menuOpen])
+  /* ⚠️ 2026-10-06（站主：「最左边的全部应用图标也改到顶部栏里面去吧」）：
+     原来这里有一套「所有项目」启动菜单的 state / 外部点击与 Esc 收起的 effect / `closeMenu`，
+     现在整块**搬进了 `MenuBar.tsx`**（同 `StartMenu`、同 `aria-label="所有项目"`），任务栏不再有固定按钮。 */
 
   function openApp(id: AppId) {
     const app = getApp(id)
@@ -985,25 +952,6 @@ export function Dock() {
     '--dock-icon-fill': `${DOCK_ICON_FILL * 100}%`,
   } as unknown as CSSProperties
 
-  const menuButton = (
-    <button
-      type="button"
-      style={btnStyle}
-      title="所有项目"
-      aria-label="所有项目"
-      aria-expanded={menuOpen}
-      onClick={() => {
-        setMenuOpen((v) => !v)
-      }}
-        className={`grid shrink-0 place-items-center rounded hover:bg-hover ${
-        menuOpen ? 'bg-accent text-accent-ink' : 'text-chrome-ink'
-      }`}
-    >
-      {/* 九宫格的画在 components/icons/glyphs/MenuGlyph.tsx */}
-      <MenuGlyph className="h-1/2 w-1/2" />
-    </button>
-  )
-
   /* 一个应用图标按钮：两种模式共用。
      ⚠️ `data-dock-copy` **恒为 "1"**：这属性是"渲染两份循环列表"那个年代留下的，现在只剩一份，
      但 `verify.mjs` 里有近十处选择器用它（`[data-dock-item][data-dock-copy="1"]`），
@@ -1099,14 +1047,8 @@ export function Dock() {
         />
       ))}
 
-      {/* 竖排时固定按钮在**末端**，所以占位补在**起端**；横排反过来（见下面那颗）。
-          `aria-hidden` + 无内容 + 不可聚焦：它只是几何配重，不许进无障碍树（否则会污染无障碍名断言）。
-          ⚠️ **只在轮盘模式渲染** —— 折行模式是"完全旧行为，一个字不改"。 */}
-      {mode === 'wheel' && vertical ? (
-        <span aria-hidden="true" className="shrink-0" style={{ height: btn }} />
-      ) : null}
-
-      {vertical ? null : menuButton}
+      {/* ⚠️ 2026-10-06：这里原来有一颗固定按钮「所有项目」+ 对侧的等宽占位 ——
+          按钮搬进顶部菜单栏（`MenuBar.tsx` 最左），占位随之删除（不再有单侧元素要配平）。 */}
 
       {mode === 'wheel' ? (
         /* ── 图标区（默认）：macOS 的观感与行为（2026-10-06「一切以 macOS 为准」）──
@@ -1180,17 +1122,13 @@ export function Dock() {
         </div>
       )}
 
-      {vertical ? menuButton : null}
 
-      {/* 横排时固定按钮在**起端**，占位补在**末端** —— 让「按钮 + 图标组 + 占位」整体对称，
-          图标组才会落在整条任务栏的中心（原来偏右 22px = 按钮宽的一半）。 */}
-      {mode === 'wheel' && !vertical ? (
-        <span aria-hidden="true" className="shrink-0" style={{ width: btn }} />
-      ) : null}
 
-      {/* ⚠️ 2026-10-06（macOS P2）：这里**原本**还有「全屏 ⛶」与「任务栏位置」两颗固定按钮，
-          现在都挪进顶部菜单栏了（macOS 的 Dock 两端只有启动台与废纸篓，没有这类系统按钮）。
-          任务栏这一侧只剩左端的「所有项目」（≈ 启动台）。别把这两颗加回来。 */}
+      {/* ⚠️ 2026-10-06：任务栏里**已经没有固定按钮了**。
+          先是「全屏 ⛶」与「任务栏位置」两颗在 macOS P2 挪进顶部菜单栏；
+          然后站主又让**最左那颗「所有项目」（≈ 启动台）也搬进菜单栏最左**。
+          所以现在这里一个固定元素都没有 —— 图标区自己就是整条栏的内容（居中天然成立）。
+          **别把它们加回来**：要加系统级按钮请加到 `MenuBar.tsx`。 */}
 
       {/* 悬停名称浮层：放在滚动容器外，才不会被裁掉 */}
       {hover ? (
@@ -1224,8 +1162,6 @@ export function Dock() {
             document.body,
           )
         : null}
-
-      <StartMenu open={menuOpen} position={position} onClose={closeMenu} />
     </nav>
   )
 }

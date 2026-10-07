@@ -15,14 +15,18 @@ const PLACEMENT: Record<DockPosition, string> = {
 
 interface StartMenuProps {
   open: boolean
-  /** 面板从任务栏的反方向弹出 */
+  /** 面板从任务栏的反方向弹出（**从任务栏打开时用**） */
   position: DockPosition
   onClose: () => void
+  /** ⚠️ 2026-10-06：入口搬到**顶部菜单栏**之后，按任务栏位置摆就不对了（面板会跑到视口外）。
+      菜单栏来的调用传这个类（例如 `top-full left-0 mt-1`），覆盖 `PLACEMENT[position]`。 */
+  placementClass?: string
 }
 
 /** 所有项目总览：桌面图标取消后，这里是查看全部入口的地方。
-    每行左边是**功能图标**、右边是**这扇窗分到的那棵菜**（菜图来自 design/veggies）。 */
-export function StartMenu({ open, position, onClose }: StartMenuProps) {
+    每行左边是**功能图标**、右边是**这扇窗分到的那棵菜**（菜图来自 design/veggies）。
+    ⚠️ 2026-10-06：入口从任务栏最左搬到了**顶部菜单栏最左**（站主点名），所以定位支持 `placementClass` 覆盖。 */
+export function StartMenu({ open, position, onClose, placementClass }: StartMenuProps) {
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export function StartMenu({ open, position, onClose }: StartMenuProps) {
         role="dialog"
         aria-label="所有项目"
         className={`absolute z-50 w-72 rounded-dock border border-edge bg-surface p-3 shadow-2xl ${
-          PLACEMENT[position]
+          placementClass ?? PLACEMENT[position]
         }`}
       >
         <p className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-dim">

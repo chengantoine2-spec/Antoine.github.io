@@ -11,6 +11,7 @@ import { MenuGlyph, PositionGlyph } from '../icons'
 import { CelestialClock } from './CelestialClock'
 import { DockPositionMenu } from './DockPositionMenu'
 import { FullscreenButton } from './FullscreenButton'
+import { StartMenu } from './StartMenu'
 
 /**
  * macOS 顶部菜单栏（2026-10-06「一切以 macOS 为准」P2）。
@@ -52,6 +53,34 @@ export function MenuBar({ onTile }: MenuBarProps) {
   const bar = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState<MenuId | null>(null)
   const [posOpen, setPosOpen] = useState(false)
+  /* 「所有项目」（≈ 启动台）—— 2026-10-06 站主：「最左边的全部应用图标也改到顶部栏里面去吧」。
+     整块从 `Dock.tsx` 搬来：**同一颗按钮、同一个 `StartMenu`、同一个 `aria-label="所有项目"`**
+     （两个验证脚本都按它找入口，名字不许改）。放在菜单栏**最左**（macOS 的启动台也在最左）。 */
+  const [allOpen, setAllOpen] = useState(false)
+
+  /* 启动台菜单的收起规则（照 Dock 原来那套）：按 Esc、点别处、或换了页面就收。
+     ⚠️ `StartMenu` 是渲染在**菜单栏这个 div 内部**的，所以 `bar.contains(target)` 能同时覆盖
+     "点在按钮上"和"点在下拉里"两种情况 —— 别把它挪到 `bar` 外面去。 */
+  useEffect(() => {
+    if (!allOpen) return
+    function onPointerDown(e: PointerEvent) {
+      if (!bar.current?.contains(e.target as Node)) setAllOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAllOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [allOpen])
+
+  /* 打开任何窗口（换页）就收起启动台 */
+  useEffect(() => {
+    setAllOpen(false)
+  }, [pathname])
 
   /* ── 全屏里的菜单栏自动隐藏（macOS：鼠标碰顶部那条热区才浮现）──────────────────
      站主 2026-10-06：「想要"鼠标碰顶部就浮现菜单栏"那种细节」。
@@ -234,13 +263,12 @@ export function MenuBar({ onTile }: MenuBarProps) {
         onClick={() => {
           setOpen((cur) => (cur === id ? null : id))
           setPosOpen(false)
+          setAllOpen(false)
         }}
       >
-        {id === 'brand' ? (
-          <MenuGlyph className="h-3.5 w-3.5" />
-        ) : (
-          <span className="menubar__app">{menus[id].title}</span>
-        )}
+        {/* ⚠️ 2026-10-06：品牌（系统）菜单**不再用九宫格字形** —— 最左那颗字形按钮现在是「所有项目」，
+            两颗一样的九宫格挨着会分不清。这里跟其它菜单一样走文字。`aria-label` 保持 `menus.brand.title`。 */}
+        <span className="menubar__app">{menus[id].title}</span>
       </button>
       {open === id ? dropdown(id) : null}
     </div>
@@ -270,6 +298,33 @@ export function MenuBar({ onTile }: MenuBarProps) {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) sleep()
         }}
       >
+      {/* ⚠️ 2026-10-06：**「所有项目」在最左**（`aria-label` 保持「所有项目」，两个验证脚本靠它找入口）。
+          它是**菜单栏里唯一的字形按钮**：原来的系统菜单（品牌菜单）改成文字菜单，免得两颗九宫格挨着分不清。 */}
+      <button
+        type="button"
+        className="menubar__btn"
+        data-menubar-launcher=""
+        title="所有项目"
+        aria-label="所有项目"
+        aria-haspopup="dialog"
+        aria-expanded={allOpen}
+        onClick={() => {
+          setAllOpen((v) => !v)
+          setOpen(null)
+          setPosOpen(false)
+        }}
+      >
+        <MenuGlyph className="h-3.5 w-3.5" />
+      </button>
+      <StartMenu
+        open={allOpen}
+        position={position}
+        /* ⚠️ 从菜单栏弹，**不能**再按任务栏位置摆（那样面板会跑到视口外，实测点击超时）——
+           贴着菜单栏左端往下挂。 */
+        placementClass="top-full left-0 mt-1"
+        onClose={() => setAllOpen(false)}
+      />
+
       {menuButton('brand')}
 
       {/* 聚焦窗口的应用名：macOS 里这一段是加粗的，且随聚焦窗口实时变 */}
