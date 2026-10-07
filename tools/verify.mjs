@@ -2614,30 +2614,56 @@ async function run() {
         clipR.交叉轴在视口内,
       JSON.stringify({ 最左: clipL, 最右: clipR }),
     )
-    /* (10) ⭐ **扩张后松手复原、存档未脏**（扩张只写 DOM，绝不写回 `desktop.dock`） */
+    /* (10) ⭐ **扩张后松手复原、存档未脏**（扩张只写 DOM，绝不写回 `desktop.dock`）。
+       ⚠️ 2026-10-07（第 13 轮）**改的是采样时机，不是容差**：原来读完 360ms 就采基准值，
+       而 `fade` 时间常数是 90ms → 360ms 只有 4τ、**残余 1.8%**，乘以扩张量（实测 64.8px）≈ **1.17px**
+       正好把"复原后"顶出 ±1 容差（实测 `悬停前 549.1` 其实是 `548 + 1.1 残余`，**不是舍入**：
+       内联写的就是布局值本身）。现在改成**等宽度稳定**（连续两次读数一致，最多 ~1.8s）再采，
+       并且**再加一条更硬的判据**：复原后的宽度必须**等于布局值**（临时摘掉内联宽高量一次）**≤0.5px** ——
+       这样"复原不干净"反而更容易被抓，而不是被容差藏起来。 */
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(360)
     const viewW = () =>
       p.evaluate(
-        (sel) => Number(document.querySelector(sel + ' [data-dock-view]').getBoundingClientRect().width.toFixed(1)),
+        (sel) => Number(document.querySelector(sel + ' [data-dock-view]').getBoundingClientRect().width.toFixed(2)),
         DOCK,
       )
-    const lenBase = await viewW()
+    /* 等宽度稳定：连续两次读数差 <0.05px 就认为收完了 */
+    const waitStableW = async (maxMs = 1800) => {
+      let last = await viewW()
+      for (let i = 0; i < Math.ceil(maxMs / 80); i += 1) {
+        await p.waitForTimeout(80)
+        const w = await viewW()
+        if (Math.abs(w - last) < 0.05) return w
+        last = w
+      }
+      return last
+    }
+    const lenBase = await waitStableW()
     const storeBefore = await p.evaluate(() => localStorage.getItem('desktop.dock'))
     await p.mouse.move(cen[Math.floor(cen.length / 2)], dockGeom.y, { steps: 3 })
-    await p.waitForTimeout(380)
+    await p.waitForTimeout(420)
     const lenHover = await viewW()
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(460)
-    const lenAfter = await viewW()
+    const lenAfter = await waitStableW()
     const storeAfter = await p.evaluate(() => localStorage.getItem('desktop.dock'))
+    /* 布局值：临时摘掉内联宽高，让布局自己算一次 */
+    const layoutW = await p.evaluate((sel) => {
+      const el = document.querySelector(sel + ' [data-dock-view]')
+      const had = el.style.width
+      el.style.removeProperty('width')
+      const w = Number(el.getBoundingClientRect().width.toFixed(2))
+      if (had) el.style.width = had
+      return w
+    }, DOCK)
     check(
-      '⭐ **扩张后松手复原**：悬停时图标区确实扩张（>2px）→ 松手后**像素级复原（±1px）**，且 `desktop.dock` **未被写脏**（扩张只走 DOM）',
-      lenHover > lenBase + 2 && Math.abs(lenAfter - lenBase) <= 1 && storeAfter === storeBefore,
+      '⭐ **扩张后松手复原**：悬停时图标区确实扩张（>2px）→ 松手后**像素级复原**（与布局值差 ≤0.5px，另留 ±1px 旧判据），且 `desktop.dock` **未被写脏**（扩张只走 DOM）',
+      lenHover > lenBase + 2 && Math.abs(lenAfter - lenBase) <= 1 && Math.abs(lenAfter - layoutW) <= 0.5 && storeAfter === storeBefore,
       JSON.stringify({
         悬停前: lenBase,
         悬停中: lenHover,
         复原后: lenAfter,
+        布局值: layoutW,
+        与布局差: Number(Math.abs(lenAfter - layoutW).toFixed(2)),
         扩了: Number((lenHover - lenBase).toFixed(1)),
         存档未变: storeAfter === storeBefore,
       }),

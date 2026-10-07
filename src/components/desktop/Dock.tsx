@@ -617,7 +617,14 @@ export function Dock() {
       }
     } else if (waveLen.current !== null) {
       waveLen.current = null
-      if (vertical) view.style.height = `${viewLen}px`
+      /* ⭐ 2026-10-07（第 13 轮）复原时**优先"不写数字"**：`length === null`（自动宽度）时把内联宽高
+         **整个移除**，让布局自己给出那个值 —— 这样"复原"是**严格等于布局值**，不存在任何舍入/漂移；
+         写 `${viewLen}px` 也等于布局值，但那是"我们算的"，一旦算法与布局有半像素差就会残留。
+         ⚠️ `length` 显式给定时**必须写**（视图要被夹到 `length − 内边距`），这时仍旧写 `viewLen`。 */
+      if (length === null) {
+        if (vertical) view.style.removeProperty('height')
+        else view.style.removeProperty('width')
+      } else if (vertical) view.style.height = `${viewLen}px`
       else view.style.width = `${viewLen}px`
     }
   }
@@ -707,10 +714,15 @@ export function Dock() {
     const el = viewEl.current
     if (!el) return
     waveLen.current = null
-    if (vertical) { el.style.height = `${viewLen}px`; el.style.width = '' }
+    /* ⭐ 同 `paint()` 的复原分支：**自动宽度时干脆不写**（移除内联宽高，交给布局），
+       只在 `length` 显式给定时才写数字 —— 这样"基准值"与"复原值"永远是同一个来源。 */
+    if (length === null) {
+      if (vertical) el.style.removeProperty('height')
+      else el.style.removeProperty('width')
+    } else if (vertical) { el.style.height = `${viewLen}px`; el.style.width = '' }
     else { el.style.width = `${viewLen}px`; el.style.height = '' }
     if (pointer.current.target > 0 || pointer.current.fade > 0.002) scheduleTick()
-  }, [viewLen, vertical, mode])
+  }, [viewLen, vertical, mode, length])
 
   /* ⚠️ 这里原来挂着一个 `useEffect([hover])`：因为重渲染会把扩张打回去，所以靠它"补一帧"再撑开。
      2026-10-07 长度改为命令式接管后，**重渲染再也不碰宽度**，这个补帧**不再需要**（留着只会多跑一帧 rAF，
