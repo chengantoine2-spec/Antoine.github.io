@@ -71,3 +71,9 @@
 ⚠️ **断言还欠一条**：本轮 `tools/verify.mjs` 上有**别的执行者的未提交改动**，按纪律没往上叠 ——
 "四套能选中且背景两两不同"这条暂时只有一次性探针取证（`hitAll / gradientAll / distinct` 全 true，探针已删），
 **待 verify.mjs 空出来后补成常驻断言**。
+
+### 补记 2026-10-06：临时口径已收口
+上面那条"类型临时口径"**已经完成**：`aurora` / `sunset` / `mist` / `violet` **已并入**
+`src/types/desktop.ts` 的 `WallpaperId` 联合类型，`lib/theme.ts` 里的 `extraWallpaper()` helper
+与 `ExtraWallpaperId` **已删** —— 现在壁纸清单靠联合类型这一条真源，`isWallpaperId` 也回归查清单。
+⚠️ 以后再加壁纸，**先改联合类型**（那不再需要特别授权，它已经是常规入口）。

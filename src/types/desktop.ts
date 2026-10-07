@@ -4,8 +4,22 @@ export type ThemeId = 'light' | 'dark'
    lib/theme.ts 的 normalizeTheme()：caramel / linen -> light、night -> dark。
    tokens.css 里也留着老键名的别名选择器兜底 —— 两边都别删。 */
 
-/** 桌面背景：主题渐变 / 三种纯 CSS 纹理 / 图片 */
-export type WallpaperId = 'gradient' | 'grid' | 'noise' | 'stripe' | 'image'
+/** 桌面背景：主题渐变 / 三种纯 CSS 纹理 / **四套 macOS 味道的渐变**（2026-10-06 并入）/ 图片
+ *
+ *  ⚠️ 加一套壁纸要**三处一起改**（少一处就是"设置了没反应"，详见 `ARCH-THEME.md`）：
+ *  ① 这里加进联合；② `tokens.css` 两套主题各补一个 `--wall-*`；
+ *  ③ `globals.css` 加 `.desktop__wall--*`（**在 `@layer` 之外**，见坑 1）+ `lib/theme.ts` 的清单加一行。
+ *  ⚠️ **已有值一个都不许删**：老存档 `desktop.wallpaper` 里存的就是它们。 */
+export type WallpaperId =
+  | 'gradient'
+  | 'grid'
+  | 'noise'
+  | 'stripe'
+  | 'aurora'
+  | 'sunset'
+  | 'mist'
+  | 'violet'
+  | 'image'
 
 /** 图片背景的填充方式 */
 export type WallpaperFit = 'cover' | 'contain' | 'repeat'
