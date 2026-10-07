@@ -6,9 +6,11 @@ export const DOCK_THICKNESS = 54
 export const DOCK_MIN_THICKNESS = 48
 
 /* 任务栏内部几何：Dock 组件与下面的厚度下限共用，改一处即可。
-   ⚠️ GAP = **8px** 是 macOS 的 Dock 图标间距（原先 4px）——2026-10-06「一切以 macOS 为准」。
+   ⚠️ GAP 沿革：4 → **8**（2026-10-06「一切以 macOS 为准」）→ **5**（紧凑化那轮：4 时相邻按钮热区
+   只差 4px、容易点偏，所以放宽到 5）→ **4**（2026-10-07 站主口径「继续缩小图标之间的间隙」）。
+   ⚠️ 再往 3 收紧之前，必须先用「点得中某个 app 图标」那类断言复验点击仍然准，否则退回 5。
    它是 `dockStep()` 的一半，所以改它会连带放大/吸附/长度下限的几何，别单独在组件里写死别的间距。 */
-export const DOCK_GAP = 5
+export const DOCK_GAP = 4
 export const DOCK_PAD = 6
 export const DOCK_BORDER = 1
 
