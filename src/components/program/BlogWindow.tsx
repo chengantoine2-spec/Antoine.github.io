@@ -39,6 +39,18 @@ function formatChars(count: number): string {
 export function BlogWindow() {
   const navigate = useNavigate()
   const { feed, loading, refresh } = useBlogFeed()
+  /* 失败态的重试按钮（站主 2026-10-07 点名）：项目红线是"不许给点了没反应的按钮"，
+     所以这里的 onClick 走的是 `refresh()` —— 它是 `loadPosts({ force: true })`，
+     **绕过 10 分钟 TTL 缓存真的重新打一次 GitHub**；加载中禁用并显示「重试中…」。 */
+  const [retrying, setRetrying] = useState(false)
+  const retry = async () => {
+    setRetrying(true)
+    try {
+      await refresh()
+    } finally {
+      setRetrying(false)
+    }
+  }
   const rails = useColumnRails(BLOG_RAILS)
   const [category, setCategory] = useState<CategoryId | 'other'>('all')
   const [tag, setTag] = useState<string | null>(null)
@@ -280,9 +292,18 @@ export function BlogWindow() {
           </div>
 
           {feed?.notice ? (
-            <p className="rounded border border-edge bg-surface-2 px-3 py-2 text-xs text-dim">
-              {feed.notice}
-            </p>
+            <div className="flex items-start gap-2 rounded border border-edge bg-surface-2 px-3 py-2 text-xs text-dim">
+              <span className="flex-1">{feed.notice}</span>
+              <button
+                type="button"
+                data-blog-retry="1"
+                onClick={retry}
+                disabled={retrying}
+                className="shrink-0 rounded border border-edge px-2 py-1 text-xs text-ink hover:bg-hover disabled:opacity-50"
+              >
+                {retrying ? '重试中…' : '重试'}
+              </button>
+            </div>
           ) : null}
 
           {loading && posts.length === 0 ? (

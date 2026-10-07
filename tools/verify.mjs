@@ -549,6 +549,31 @@ async function run() {
     blogPostCount > 0,
     `${blogPostCount} 篇`,
   )
+  /* 失败态的可点重试按钮（站主 2026-10-07 点名）：红线是"不许给点了没反应的按钮"，
+     所以这里要证明**点完真的重新打了一次 GitHub**（数 api.github.com 的请求），
+     不是只证明"页面上有个按钮"。⚠️ 按钮只在失败/限流态渲染，两种情形分开断言：
+     有按钮 → 必须触发 ≥1 次新请求；没按钮（数据正常）→ 那就必须真的有文章。 */
+  const retryProbe = await (async () => {
+    const button = p.locator('[data-blog-retry]')
+    if ((await button.count()) === 0) return { state: 'no-notice' }
+    let requests = 0
+    const countRequest = (request) => {
+      if (request.url().includes('api.github.com')) requests += 1
+    }
+    p.on('request', countRequest)
+    const label0 = ((await button.textContent()) ?? '').trim()
+    await button.click()
+    await p.waitForTimeout(400)
+    const label1 = ((await button.textContent()) ?? '').trim()
+    await p.waitForTimeout(2600)
+    p.off('request', countRequest)
+    return { state: 'clicked', requests, label0, label1 }
+  })()
+  check(
+    '失败态的重试按钮真能用：点了会重新打一次 GitHub 接口（不是"点了没反应"）',
+    retryProbe.state === 'no-notice' ? blogPostCount > 0 : retryProbe.requests > 0,
+    JSON.stringify(retryProbe),
+  )
 
   // 11 博客窗口（数据来自 GitHub Issues；限流时显示缓存或提示，都算通过）
   /* ⚠️ 整段罩一层 try/catch（2026-10-06 最高优先修复）：本节有十几处 p.evaluate / p.click
@@ -4086,6 +4111,57 @@ async function run() {
   await p.waitForTimeout(300)
 
   // 16 页面无运行时错误
+  /* 16 PWA 最小可用（2026-10-06）。只加这一条，覆盖：① 页面里有 manifest 链接且**真能取到**（HTTP 200）；
+     ② `start_url` / `scope` 是**相对路径**（`"."`）—— 本项目部署在子路径 `/Antoine.github.io/` 下，
+     写死 `/` 会 404；相对值是静态 manifest 唯一能"自带正确前缀"的写法（manifest 自己的 URL 就在子路径里）；
+     ③ `name` 与站名一致 + `display: standalone` + 图标 ≥2 + iOS 那三条 meta / theme-color 在。
+     ⚠️ 开发环境**不注册** SW（见 `main.tsx` 的 `import.meta.env.PROD` 闸），所以这里不断言 SW 已注册。 */
+  const pwa = await p.evaluate(async () => {
+    const link = document.querySelector('link[rel="manifest"]')
+    const href = link?.getAttribute('href') ?? ''
+    let url = ''
+    try {
+      url = link ? new URL(href, location.href).href : ''
+    } catch {
+      url = ''
+    }
+    let status = 0
+    let json = null
+    if (url) {
+      try {
+        const res = await fetch(url)
+        status = res.status
+        if (res.ok) json = await res.json()
+      } catch {
+        status = 0
+      }
+    }
+    return {
+      href,
+      status,
+      name: json?.name ?? '',
+      start: json?.start_url ?? '',
+      scope: json?.scope ?? '',
+      display: json?.display ?? '',
+      icons: Array.isArray(json?.icons) ? json.icons.length : 0,
+      appleCapable:
+        document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.getAttribute('content') ?? '',
+      themeColor: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? '',
+    }
+  })
+  check(
+    'PWA 最小可用：manifest 拿得到（200）、start_url/scope 走相对路径（子路径部署安全）、name 与站名一致',
+    pwa.status === 200 &&
+      pwa.start === '.' &&
+      pwa.scope === '.' &&
+      pwa.name === '芹菜耕地' &&
+      pwa.display === 'standalone' &&
+      pwa.icons >= 2 &&
+      pwa.appleCapable === 'yes' &&
+      /^#|^rgb/.test(pwa.themeColor),
+    JSON.stringify(pwa),
+  )
+
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()
