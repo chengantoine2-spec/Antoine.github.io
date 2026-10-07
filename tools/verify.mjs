@@ -2635,6 +2635,102 @@ async function run() {
         存档未变: storeAfter === storeBefore,
       }),
     )
+    /* (11) ⭐ **跨图标时任务栏宽度不"呼吸"**（站主 2026-10-07：「在图标之间移动的时候**还是有抖动**」）。
+       根因（实测）：扩张量原来取**当帧实际伸出量** —— 指针正对某颗时要 ~20px/side、在两格之间时两侧
+       只有 ~1.6× 只需 ~12px/side → 宽度在 **568↔579** 之间振荡（帧间最大 **6.37px**、回落 7 次），
+       而任务栏是**居中**的 ⇒ **整排左右跳 3.19px**。改成**容量保持（peak-hold）**：悬停期间取
+       "见过的最大值"，宽度恒定，离开时随 `amp` 平滑收回。
+       判据：连续跨 3 个图标，逐帧采样图标区宽度与 `view.left`。 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(340)
+    const sweepFrom = Math.min(2, Math.max(0, cen.length - 8))
+    await p.mouse.move(cen[sweepFrom], dockGeom.y, { steps: 4 })
+    await p.waitForTimeout(420)
+    await p.evaluate((sel) => {
+      const view = document.querySelector(sel + ' [data-dock-view]')
+      window.__w = []
+      const loop = () => {
+        const r = view.getBoundingClientRect()
+        window.__w.push([Number(r.width.toFixed(2)), Number(r.left.toFixed(2))])
+        window.__wr = requestAnimationFrame(loop)
+      }
+      window.__wr = requestAnimationFrame(loop)
+    }, DOCK)
+    for (let i = sweepFrom; i < sweepFrom + 3; i += 1) {
+      for (let k = 1; k <= 5; k += 1) {
+        await p.mouse.move(cen[i] + Math.round(((cen[i + 1] - cen[i]) * k) / 5), dockGeom.y)
+        await p.waitForTimeout(28)
+      }
+    }
+    const wSamples = await p.evaluate(() => {
+      cancelAnimationFrame(window.__wr)
+      return window.__w
+    })
+    const spreadOf = (a) => a.slice(1).reduce((m, v, k) => Math.max(m, Math.abs(v - a[k])), 0)
+    const wS = wSamples.map((s) => s[0])
+    const lS = wSamples.map((s) => s[1])
+    const wDrops = wS.filter((w, k) => k > 0 && w - wS[k - 1] < -2).length
+    check(
+      '⭐ **跨图标时任务栏宽度不"呼吸"**（peak-hold）：连续跨 3 个图标时宽度帧间变化 ≤1px、**无 >2px 的回落**、`view.left` 帧间 ≤1px —— 原来扩张量用"当帧实际伸出量"（正对图标 ~20px/side、两格之间 ~12px/side）会让宽度在 568↔579 振荡，居中布局下整排左右跳 3.19px，正是站主报的"在图标之间移动时抖动"',
+      wSamples.length > 20 && spreadOf(wS) <= 1 && wDrops === 0 && spreadOf(lS) <= 1,
+      JSON.stringify({
+        帧数: wS.length,
+        宽度帧间最大: Number(spreadOf(wS).toFixed(2)),
+        回落次数: wDrops,
+        view左缘帧间最大: Number(spreadOf(lS).toFixed(2)),
+        宽度范围: [Math.min(...wS), Math.max(...wS)],
+      }),
+    )
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(340)
+    /* (12) ⭐ **生长中途离开 = 停止变大并缩小**（站主 2026-10-07：「我要移动到图标上，就动画变大，
+       **在动画过程中移动到其他图标，就会停止变大，然后变小**」）。
+       做法：从栏外**一步落到**图标 4（触发进场生长：`fade` ~90ms 内 0→1），约 40ms 后（长到 ~1.3~1.5）
+       立刻移到图标 5 → 判据：图标 4 的 scale **最大不超过"离开瞬间 + 0.02"**（**没把生长补完**）、
+       且随后**确实缩小**（至少降 0.05）。 */
+    const growIdx = Math.min(4, cen.length - 2)
+    await p.mouse.move(cen[0], 120)
+    await p.waitForTimeout(420)
+    await p.evaluate(() => {
+      const items = [...document.querySelectorAll('nav[aria-label="任务栏"] [data-dock-item][data-dock-copy="1"]')]
+      const el = items[4]
+      window.__g = []
+      const loop = () => {
+        const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+        window.__g.push([Math.round(performance.now()), m ? Number(m[1]) : 1])
+        window.__gr = requestAnimationFrame(loop)
+      }
+      window.__gr = requestAnimationFrame(loop)
+    })
+    await p.mouse.move(cen[growIdx], dockGeom.y)
+    await p.waitForTimeout(40)
+    const atLeave = await p.evaluate(() => {
+      const el = document.querySelectorAll('nav[aria-label="任务栏"] [data-dock-item][data-dock-copy="1"]')[4]
+      const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+      return m ? Number(m[1]) : 1
+    })
+    await p.mouse.move(cen[growIdx + 1], dockGeom.y)
+    await p.waitForTimeout(420)
+    const gSamples = await p.evaluate(() => {
+      cancelAnimationFrame(window.__gr)
+      return window.__g
+    })
+    const gScales = gSamples.map((s) => s[1])
+    const gTail = gScales.filter((v) => v < atLeave - 0.005)
+    const gMax = Math.max(...(gTail.length ? gTail : gScales))
+    const gMin = gTail.length ? Math.min(...gTail) : atLeave
+    check(
+      '⭐ **生长中途离开 = 停止变大并缩小**：进场生长到 ~1.4 时移到下一颗 → 原来那颗的最大 scale **不超过"离开瞬间 + 0.02"**（没把生长补完）、且随后确实缩小（≥0.05）',
+      atLeave >= 1.1 && gMax <= atLeave + 0.02 && gMin <= atLeave - 0.05,
+      JSON.stringify({
+        离开瞬间: atLeave,
+        离开后最大: Number(gMax.toFixed(3)),
+        离开后最小: Number(gMin.toFixed(3)),
+        生长段样本: gScales.slice(0, 18),
+      }),
+    )
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(340)
   } else {
     check('波浪四组（外圈不动 / 方向不对称 / 停手对称 / 不抖 / 进入让路 / 离开还原）', false, 'dockGeom 拿不到')
   }

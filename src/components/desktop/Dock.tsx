@@ -167,6 +167,9 @@ export function Dock() {
   /** 波浪把整排推宽时，图标区**临时**撑开的长度（null = 没撑，用 React 给的 `viewLen`）。
    *  只写 DOM 的内联宽高，**绝不写回 `desktop.dock`** —— 指针离开必须像素级复原（见 `paint` 的 ④）。 */
   const waveLen = useRef<number | null>(null)
+  /** 悬停期间的**扩张容量上限**（peak-hold，见 `paint()` 里那段注释）：取整次悬停期间见过的最大伸出量，
+   *  不随指针在图标之间移动回落 —— 否则居中布局下整排会随宽度"呼吸"而左右平移（实测 3.19px 抖动）。 */
+  const waveHold = useRef(0)
   /** 松手回弹的弹簧动画句柄（用 rAF 自己积分，见 settle：不引动画依赖） */
   const springRaf = useRef(0)
   const gesture = useRef<{
@@ -582,7 +585,20 @@ export function Dock() {
         leftNeed = Math.max(leftNeed, grow - Math.min(0, sh))
         rightNeed = Math.max(rightNeed, grow + Math.max(0, sh))
       })
-      extra = Math.max(leftNeed, rightNeed)
+      /* ⭐ 2026-10-07（第 11 轮）**容量保持（peak-hold）**：扩张量取"这一次悬停期间见过的最大值"，
+         **不随指针在图标之间移动而回落**。为什么必须这样：原来用的是**当帧实际伸出量** ——
+         指针正对某个图标时峰值 2× 需要 ~20px/side，指针在两格之间时两侧都只有 ~1.6× 只需 ~12px/side
+         → 扩张量在 568↔579px 之间"呼吸"（实测帧间最大 6.37px），而任务栏是**居中**的，
+         **宽度一变整排就左右平移**（实测整排左缘跳 3.19px）——那正是站主报的
+         「在图标之间移动的时候还是有抖动」。保持住上限之后，悬停期间宽度恒定，整排不会再平移。
+         ⚠️ 离开时 `active` 变假 → 保持值清零，配合 `amp` 平滑收回（末态严格复原 `viewLen`）。 */
+      waveHold.current = Math.max(waveHold.current, leftNeed, rightNeed)
+      /* ⚠️ **必须乘 `amp`（= `fade`）**：扩张要跟着图标**一起收**。只判 `active` 的话宽度会一直撑到
+         `fade ≤ 0.002`（≈6τ，实测 400~480ms）才复原，比图标收缩慢一大截 —— 套件里
+         "松手后像素级复原（等 460ms）"那条会红。乘上 `amp` 之后宽度与图标同帧收回、末态严格归零。 */
+      extra = waveHold.current * amp
+    } else {
+      waveHold.current = 0
     }
     const vpW = window.innerWidth
     const vpH = window.innerHeight
@@ -617,9 +633,13 @@ export function Dock() {
     const now = performance.now()
     const dt = pt.last ? Math.min(0.05, Math.max(0.001, (now - pt.last) / 1000)) : 0.016
     pt.last = now
-    /* 强度（进/出任务栏）是**离散**变化（从"不在栏上"到"在栏上"）→ 保留 ~90ms 平滑。 */
+    /* 强度（进/出任务栏）是**离散**变化（从"不在栏上"到"在栏上"）→ 保留 ~90ms 平滑。
+       ⚠️ 阈值必须与下面判 `active` 用的那条（`fade > 0.002`）**一致**：原来是 `< 0.004`，
+       于是 `0.002 < fade < 0.004` 时循环已经 `settled` 停下、而 `active` 仍为真 →
+       **扩张宽度永远不会被复原**（"松手后像素级复原"那条断言因此红；以前是靠"React 重渲染会把
+       宽度写回"这个 bug 掩盖着，2026-10-07 长度改成命令式接管后它就露出来了）。 */
     pt.fade += (pt.target - pt.fade) * Math.min(1, dt / 0.09)
-    const fadeSettled = Math.abs(pt.target - pt.fade) < 0.004
+    const fadeSettled = Math.abs(pt.target - pt.fade) < 0.002
     if (fadeSettled) pt.fade = pt.target
     /* ⚠️⚠️ 2026-10-06（站主：「在图标之间移动的时候感觉还不够顺滑，左右滑动鼠标有瞬间移动的感觉」）：
        **`hot`（波峰位置）不许再做时间平滑** —— 它的目标 `hotTarget` 本来就是"在相邻两个图标的
@@ -674,13 +694,27 @@ export function Dock() {
     scheduleTick()
   }
 
-  /* 悬停浮层（`hover`）是 React state：**每换一个图标都会重渲染**，而重渲染会把 `.dock__view` 的
-     内联宽高按 `viewLen` 写回去 → 抹掉 `paint()` 里"随波浪扩张"那点宽度（稳态下我们又不再补帧，
-     扩张就丢了、最左/最右的图标又被裁）。所以在**每次重渲染之后补一帧**，让 paint 重新撑开。
-     只挂 `hover`（离散事件，不是每帧）。⚠️ 别改成依赖 `pointer.current`（ref 变了不会触发 effect）。 */
+  /* 图标区的**基准长度**由这里写（`viewLen` 变化时；扩张由 `paint()` 负责）。
+     ⚠️ 见 `wheelViewStyle` 那段注释：长度一旦放进 React 的 style，每次换图标的重渲染都会把扩张打回原值
+     → 整排跳 3.19px。所以长度改成命令式接管。
+     ⚠️ **尺寸变了就必须写一次**（`length` 从"自动"改成 200 这类离散变化），并把旧的扩张值作废
+     （`waveLen = null`）让 `paint()` 按新基准重算 —— 不能因为"扩张中"就跳过：那样 `viewLen` 变了
+     基准宽却不更新（实测残留 480px 而不是 186px，套件里"来回切模式尺寸一致"当场红）。
+     ⚠️ **依赖里必须有 `mode`**：折行/轮盘切换会重新渲染这块 DOM（折行那套会动同一个节点），
+     切回轮盘时 `viewLen` 没变、effect 不重跑 → 基准宽就停留在折行留下的值（实测 480 vs 186）。
+     悬停中改尺寸时补一帧，把扩张按新基准重新撑出来。 */
   useEffect(() => {
+    const el = viewEl.current
+    if (!el) return
+    waveLen.current = null
+    if (vertical) { el.style.height = `${viewLen}px`; el.style.width = '' }
+    else { el.style.width = `${viewLen}px`; el.style.height = '' }
     if (pointer.current.target > 0 || pointer.current.fade > 0.002) scheduleTick()
-  }, [hover])
+  }, [viewLen, vertical, mode])
+
+  /* ⚠️ 这里原来挂着一个 `useEffect([hover])`：因为重渲染会把扩张打回去，所以靠它"补一帧"再撑开。
+     2026-10-07 长度改为命令式接管后，**重渲染再也不碰宽度**，这个补帧**不再需要**（留着只会多跑一帧 rAF，
+     而且会掩盖"长度是否真的由命令式接管"这件事）。若哪天有人把长度加回 React 的 style，它会重新出现。 */
 
   /* 松手 / 滚轮之后**回弹到界内**（macOS 滚动视图的行为）：
      - 越界了 → 弹簧弹回端点（`SPRING_STIFFNESS/DAMPING` 就是 playground-macos DockItem 那组 1700/90，
@@ -893,7 +927,14 @@ export function Dock() {
             /* ⚠️ 权重**按位移**给（不是纯按时间）：时间型 EMA 在 `dtEv≈4~16ms` 时每次事件只吃
                3%~13%，要几十个事件才建立起来 —— 实测那样偏置只有设计值的 1/4，"方向感"几乎看不见。
                按位移加权 → 快滑 2~3 个事件就到位，慢滑仍然平缓。 */
-            const alpha = Math.min(0.5, Math.max(0.06, Math.abs(dHot) / 0.5))
+            /* ⚠️ 权重**按位移**给（不是纯按时间）：时间型 EMA 在 `dtEv≈4~16ms` 时每次事件只吃
+             3%~13%，要几十个事件才建立起来 —— 实测那样偏置只有设计值的 1/4，"方向感"几乎看不见。
+             按位移加权 → 快滑 2~3 个事件就到位，慢滑仍然平缓。
+             ⚠️ 2026-10-07（第 11 轮）上限 **0.5 → 0.2**：单次噪声事件原来能推动 `vEma` 一半，
+             实测邻居 scale 出现 **1.008 → 1.005** 这种小幅回落（"不许抖"断言方向翻转 2 次、红）。
+             压到 0.2 后一次事件最多吃 1/5，配合 `ASYM_DEAD` 加大（0.35 → 0.8）把残余噪声直接归零 ——
+             真机 125Hz 下仍然 ~8 个事件（≈60ms）就建立方向感，肉眼无差别。 */
+          const alpha = Math.min(0.2, Math.max(0.04, Math.abs(dHot) / 0.5))
             pt2.vEma += (vRaw - pt2.vEma) * alpha
             if (Math.abs(pt2.vEma) < ASYM_DEAD) pt2.vEma = 0
           }
@@ -1145,7 +1186,12 @@ export function Dock() {
   const wheelViewStyle = {
     /* length 定了就吃掉剩余空间，没定就按内容（= 装下所有图标） */
     flex: length === null ? '0 0 auto' : '1 1 auto',
-    ...(vertical ? { height: viewLen } : { width: viewLen }),
+    /* ⚠️ **长度不放进 React 的 style**（2026-10-07，第 11 轮）：悬停浮层 `hover` 是 React state，
+       每换一个图标都会重渲染；长度若写在 style 里，重渲染就把 `paint()` 里"随波浪扩张"那段宽度
+       打回基准、下一帧再由 effect/rAF 扩回去 → 实测宽度锯齿 `579 → 568 → 577`（帧间 6.37px）、
+       而任务栏居中 ⇒ **整排左右跳 3.19px**，正是站主报的「在图标之间移动时还有抖动」。
+       现在长度**完全由命令式接管**：基准值见下面的 `useEffect([viewLen, vertical])`，
+       扩张值由 `paint()` 写（`waveLen` 非空时不覆盖）。别再把它加回这个 style 对象。 */
     '--dock-icon-fill': `${DOCK_ICON_FILL * 100}%`,
   } as unknown as CSSProperties
 
