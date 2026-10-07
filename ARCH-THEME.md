@@ -54,3 +54,20 @@
   符号自身的白描边（信封口 / `>_` / 立方体棱）**保留**。
 - 证据截图（`preview/` 已被 .gitignore 忽略，不进提交）：`icons-new.png` / `icons-new-gray.png`（全 12 枚四档）、
   `pair-28.png` / `pair-28-gray.png`（blog vs contact vs tarot 的 28px 专项对照）。
+
+## 四套 macOS 味道的渐变壁纸（站主 2026-10-06）
+
+`极光 aurora` / `晚霞 sunset` / `海雾 mist` / `紫夜 violet` —— **纯 CSS 多层渐变、零素材**（不碰 Apple 原版壁纸，版权红线）。
+
+**加一套壁纸要三处一起改**（少一处就会出现"设置了没反应"）：
+1. `src/styles/tokens.css`：**两套主题各补一个** `--wall-<id>`（浅色版 + 深色版，深色别死黑、浅色别糊成一片白）；
+2. `src/styles/globals.css`：加一条 `.desktop__wall--<id> { background-image: var(--wall-<id>) }`（**必须在 `@layer` 之外**，见坑 1）；
+3. `src/lib/theme.ts`：`WALLPAPERS` 清单加一行（`name` 是设置里按钮的可访问名，验证脚本按它点）。
+
+⚠️ **类型上的临时口径**：`WallpaperId` 这个联合定义在 `src/types/desktop.ts`（登记表三件之一，本轮未授权改动），
+所以 `lib/theme.ts` 用 `extraWallpaper()` 把新 id 断言成 `WallpaperId` —— **运行时完全等价**（壁纸就是拼 `desktop__wall--<id>` 类名）。
+**等那张登记表解冻**要把这四个值并进联合并删掉 helper。
+
+⚠️ **断言还欠一条**：本轮 `tools/verify.mjs` 上有**别的执行者的未提交改动**，按纪律没往上叠 ——
+"四套能选中且背景两两不同"这条暂时只有一次性探针取证（`hitAll / gradientAll / distinct` 全 true，探针已删），
+**待 verify.mjs 空出来后补成常驻断言**。

@@ -16,11 +16,24 @@ export const THEMES: Array<{ id: ThemeId; name: string; hint: string }> = [
 ]
 
 /** 桌面背景清单；纹理全部是纯 CSS，不加载任何素材 */
+/* ⚠️ **临时类型口径（2026-10-06）**：新增的 macOS 渐变壁纸 id 暂时只在本文件里扩展。
+   `WallpaperId` 这个联合定义在 `src/types/desktop.ts`（登记表三件之一，本轮不许动），
+   所以这里用 `extraWallpaper()` 把新 id 断言成 `WallpaperId` —— **运行时完全等价**
+   （壁纸就是拼一个 `desktop__wall--${id}` 类名），只是让编译器放行。
+   **等那张登记表解冻**：把 'aurora' | 'sunset' | 'mist' | 'violet' 并进 `WallpaperId` 的联合，
+   然后删掉这个 helper 与文件末尾的那行 import 注释。 */
+export type ExtraWallpaperId = 'aurora' | 'sunset' | 'mist' | 'violet'
+const extraWallpaper = (id: ExtraWallpaperId) => id as unknown as WallpaperId
+
 export const WALLPAPERS: Array<{ id: WallpaperId; name: string; hint: string }> = [
   { id: 'gradient', name: '主题渐变', hint: '跟随主题 · 默认' },
   { id: 'grid', name: '网格纹理', hint: '纯 CSS' },
   { id: 'noise', name: '噪点纹理', hint: '纯 CSS' },
   { id: 'stripe', name: '斜纹纹理', hint: '纯 CSS' },
+  { id: extraWallpaper('aurora'), name: '极光', hint: 'macOS 味道 · 青紫光晕' },
+  { id: extraWallpaper('sunset'), name: '晚霞', hint: 'macOS 味道 · 暖橘粉' },
+  { id: extraWallpaper('mist'), name: '海雾', hint: 'macOS 味道 · 冷蓝雾' },
+  { id: extraWallpaper('violet'), name: '紫夜', hint: 'macOS 味道 · 靛紫' },
   { id: 'image', name: '图片', hint: 'desktop.jpg' },
 ]
 

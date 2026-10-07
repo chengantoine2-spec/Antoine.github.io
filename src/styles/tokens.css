@@ -23,6 +23,21 @@
   /* 桌面背景：自生成的冷蓝渐变（macOS 那种"抽象光晕"感）。
      ⚠️ 不用 Apple 原版壁纸 —— 那是 Apple 版权物（MACOS-BRIEF 第 5 节红线）。 */
   --c-wallpaper: linear-gradient(160deg, #e9eff8 0%, #cfdbee 34%, #a9bddd 66%, #7d95bf 100%);
+  /* ── 站主 2026-10-06 追加的四套 macOS 味道渐变壁纸（**纯 CSS、零素材**，浅色版）──
+     ⚠️ 加新壁纸要**三处一起**：这里两套主题各补一个 `--wall-*` + `globals.css` 加一条
+     `.desktop__wall--*` 规则 + `lib/theme.ts` 的 WALLPAPERS 加一行（详见 ARCH-THEME.md）。 */
+  --wall-aurora: radial-gradient(120% 90% at 18% 8%, #a8e6d5 0%, transparent 60%),
+    radial-gradient(110% 80% at 82% 18%, #c9b6f2 0%, transparent 62%),
+    linear-gradient(160deg, #eef4fb 0%, #cfe0f5 45%, #b9c8e8 100%);
+  --wall-sunset: radial-gradient(120% 90% at 80% 12%, #ffd9a8 0%, transparent 62%),
+    radial-gradient(120% 90% at 16% 26%, #ffc0cb 0%, transparent 58%),
+    linear-gradient(165deg, #fdf1e6 0%, #f3d3c0 48%, #d9a9a6 100%);
+  --wall-mist: radial-gradient(130% 95% at 24% 14%, #d8ecf7 0%, transparent 64%),
+    radial-gradient(120% 85% at 78% 30%, #bcd6ea 0%, transparent 60%),
+    linear-gradient(170deg, #f2f7fb 0%, #d3e3f0 52%, #a9c3d8 100%);
+  --wall-violet: radial-gradient(120% 90% at 70% 10%, #e4dcff 0%, transparent 60%),
+    radial-gradient(120% 90% at 20% 30%, #cfe0ff 0%, transparent 58%),
+    linear-gradient(168deg, #f4f1fb 0%, #d9d3f0 50%, #b3aada 100%);
   /* 菜单栏 / 任务栏底板：macOS 是**半透明白 + 背景模糊**（模糊在组件里用 backdrop-blur） */
   --c-chrome: rgba(255, 255, 255, 0.72);
   --c-chrome-fg: hsl(240, 6%, 12%);
@@ -116,6 +131,19 @@
 :root[data-theme='dark'],
 :root[data-theme='night'] {
   --c-wallpaper: linear-gradient(160deg, #2b3245 0%, #1c2130 46%, #0d0f16 100%);
+  /* 四套 macOS 味道渐变壁纸的**深色版**（同一套壁纸在深色下是"夜色版"，不会白得晃眼） */
+  --wall-aurora: radial-gradient(120% 90% at 18% 8%, #1f6f66 0%, transparent 62%),
+    radial-gradient(110% 80% at 82% 18%, #4a3a80 0%, transparent 64%),
+    linear-gradient(160deg, #0e1418 0%, #101a24 46%, #0a0d14 100%);
+  --wall-sunset: radial-gradient(120% 90% at 80% 12%, #6d3a2a 0%, transparent 64%),
+    radial-gradient(120% 90% at 16% 26%, #552b3c 0%, transparent 60%),
+    linear-gradient(165deg, #140f12 0%, #1d1319 48%, #0c0a0e 100%);
+  --wall-mist: radial-gradient(130% 95% at 24% 14%, #1d3a44 0%, transparent 64%),
+    radial-gradient(120% 85% at 78% 30%, #223c56 0%, transparent 62%),
+    linear-gradient(170deg, #0b1013 0%, #101a22 52%, #080b10 100%);
+  --wall-violet: radial-gradient(120% 90% at 70% 10%, #3a2a63 0%, transparent 62%),
+    radial-gradient(120% 90% at 20% 30%, #24365e 0%, transparent 60%),
+    linear-gradient(168deg, #0d0c14 0%, #16142a 50%, #09080f 100%);
   --c-chrome: rgba(30, 30, 34, 0.72);
   --c-chrome-fg: hsl(240, 10%, 92%);
   /* macOS 深面 hsl(240,3%,11%)（≈ #1b1b1d） */

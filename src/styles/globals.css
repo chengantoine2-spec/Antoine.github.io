@@ -55,6 +55,22 @@
   background-image: var(--c-wallpaper);
 }
 
+/* macOS 味道的柔和渐变壁纸（站主 2026-10-06）：**纯 CSS、零素材**，色值全在 tokens.css，
+   浅 / 深两套主题各一版 —— 所以同一套壁纸在深色下是"夜色版"，不会白得晃眼或黑成一片。
+   ⚠️ 加新壁纸要三处一起：tokens.css 两套主题各补 `--wall-*`、这里加一条规则、`lib/theme.ts` 清单加一行。 */
+.desktop__wall--aurora {
+  background-image: var(--wall-aurora);
+}
+.desktop__wall--sunset {
+  background-image: var(--wall-sunset);
+}
+.desktop__wall--mist {
+  background-image: var(--wall-mist);
+}
+.desktop__wall--violet {
+  background-image: var(--wall-violet);
+}
+
 .desktop__wall--grid {
   background-color: var(--c-surface-2);
   background-image:
