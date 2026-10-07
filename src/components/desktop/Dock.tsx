@@ -518,14 +518,20 @@ export function Dock() {
     const now = performance.now()
     const dt = pt.last ? Math.min(0.05, Math.max(0.001, (now - pt.last) / 1000)) : 0.016
     pt.last = now
+    /* 强度（进/出任务栏）是**离散**变化（从"不在栏上"到"在栏上"）→ 保留 ~90ms 平滑。 */
     pt.fade += (pt.target - pt.fade) * Math.min(1, dt / 0.09)
     const fadeSettled = Math.abs(pt.target - pt.fade) < 0.004
     if (fadeSettled) pt.fade = pt.target
-    const hotSettled = Math.abs(pt.hot - pt.hotTarget) < 0.012
-    if (hotSettled) pt.hot = pt.hotTarget
-    else pt.hot += (pt.hotTarget - pt.hot) * Math.min(1, dt / 0.07)
+    /* ⚠️⚠️ 2026-10-06（站主：「在图标之间移动的时候感觉还不够顺滑，左右滑动鼠标有瞬间移动的感觉」）：
+       **`hot`（波峰位置）不许再做时间平滑** —— 它的目标 `hotTarget` 本来就是"在相邻两个图标的
+       布局中心之间**线性插值**"出来的**连续量**，再套一层 70ms 跟随只会让波峰**落后指针**：
+       实测快速横扫时落后约 1 格，**停手后它还会自己往前追 1 格、peak 从 1.89 长到 2.00（约 180ms）**，
+       而且中途 peak 先降后升（1.89→1.77→1.86…）——"瞬间移动/跳一下"的手感就是这么来的。
+       macOS 的波峰是**锁在光标上**的，所以这里直接赋值（`hot = hotTarget`）。
+       进/出栏那种离散变化仍由上面的 `fade` 负责平滑 —— 两者别混。 */
+    pt.hot = pt.hotTarget
     paint()
-    if (fadeSettled && hotSettled) {
+    if (fadeSettled) {
       raf.current = 0
     } else {
       raf.current = requestAnimationFrame(tick)

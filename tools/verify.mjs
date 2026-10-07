@@ -2220,6 +2220,92 @@ async function run() {
     JSON.stringify(alignRows),
   )
 
+  /* ④2 「跟手」：波峰**锁在指针上**（站主 2026-10-06：「在图标之间移动的时候感觉还不够顺滑，
+     左右滑动鼠标有瞬间移动的感觉」）。
+     **取证（改前）**：`hot`（波峰位置）被套了一层 70ms 平滑，可它的目标 `hotTarget` 本来就是
+     "在相邻图标布局中心之间线性插值"出来的**连续量** → 快速横扫时波峰落后约 1 格，
+     **停手后它还会自己往前追 1 格、peak 从 1.89 长到 2.00（约 180ms）**，中途还先降后升
+     （1.89→1.77→1.86→1.94→1.98→2.00）—— 这就是那股"跳一下"的手感。
+     **改法**：`hot = hotTarget` 直接赋值（macOS 的波峰锁在光标上）；进/出栏那种**离散**变化仍由 `fade` 平滑。
+     **判据**：① 快扫时 argmax 逐个推进（不跳格）；② 停下后 220ms 内 argmax **不许再变**、
+     peak 变化 ≤ 0.03（"追上来"的直接量化：改前是 +1 格 / +0.062）。 */
+  const dockGeom = await p.evaluate(
+    (sel) => {
+      const view = document.querySelector(sel + ' [data-dock-view]')
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      if (!view || items.length < 6) return null
+      const tr = items[0].closest('[data-dock-track]').getBoundingClientRect()
+      const vr = view.getBoundingClientRect()
+      return {
+        y: vr.top + items[0].offsetHeight / 2,
+        centres: items.map((el) => tr.left + el.offsetLeft + el.offsetWidth / 2),
+      }
+    },
+    DOCK,
+  )
+  const readScales = () =>
+    p.evaluate((sel) => {
+      const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
+      const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
+      let argmax = 0
+      scales.forEach((s, i) => {
+        if (s > scales[argmax]) argmax = i
+      })
+      return { argmax, peak: scales[argmax], scales }
+    }, DOCK)
+  /* 先移出任务栏，保证从"没放大"起步 */
+  await p.mouse.move(640, 120)
+  await p.waitForTimeout(140)
+  const sweep = []
+  if (dockGeom) {
+    const lastX = dockGeom.centres[dockGeom.centres.length - 1]
+    for (let x = dockGeom.centres[0]; x <= lastX; x += 10) {
+      await p.mouse.move(x, dockGeom.y)
+      sweep.push(await readScales())
+    }
+  }
+  const sweepArgmax = sweep.map((r) => r.argmax)
+  const atStop = sweep[sweep.length - 1] ?? null
+  await p.waitForTimeout(220)
+  const afterStop = atStop ? await readScales() : null
+  check(
+    '放大**跟手**：快扫时波峰逐个推进（不跳格）、**停下后峰值不再自己追上来**（argmax 不变、peak 变化 ≤0.03）',
+    !!dockGeom &&
+      !!atStop &&
+      !!afterStop &&
+      new Set(sweepArgmax).size >= Math.min(6, dockGeom.centres.length) &&
+      afterStop.argmax === atStop.argmax &&
+      Math.abs(afterStop.peak - atStop.peak) <= 0.03,
+    JSON.stringify({ 快扫argmax: sweepArgmax, 停手: atStop, '220ms后': afterStop }),
+  )
+  /* ⑤ 单步 2px 的 scale 变化上限（防"突然跳一下"）：实测改后 0.16、改前 0.21 → 判据 0.25 */
+  await p.mouse.move(640, 120)
+  await p.waitForTimeout(160)
+  const microSteps = []
+  if (dockGeom) {
+    const midX = dockGeom.centres[Math.floor(dockGeom.centres.length / 2)]
+    await p.mouse.move(midX - 30, dockGeom.y)
+    await p.waitForTimeout(220)
+    for (let dx = 0; dx <= 60; dx += 2) {
+      await p.mouse.move(midX - 30 + dx, dockGeom.y)
+      await p.waitForTimeout(24)
+      microSteps.push(await readScales())
+    }
+  }
+  const maxStepDelta =
+    microSteps.length > 1
+      ? Math.max(
+          ...microSteps
+            .slice(1)
+            .map((r, i) => Math.max(...r.scales.map((s, k) => Math.abs(s - microSteps[i].scales[k])))),
+        )
+      : 9
+  check(
+    '单步移动 2px 时任一图标的 scale 变化 ≤ 0.25（防"突然跳一下"；实测改后 0.16 / 改前 0.21）',
+    microSteps.length > 5 && maxStepDelta <= 0.25,
+    JSON.stringify({ 单步最大变化: Number(maxStepDelta.toFixed(3)), 采样步数: microSteps.length }),
+  )
+
   /* ⑤ 恒等映射在**滚动之后**仍成立（滚动后错格是最容易出的场景，单独一条）。
      先把手动长度压小让 `maxOffset > 0`，滚一段，再取落点量 argmax。 */
   await p.evaluate(() => {
