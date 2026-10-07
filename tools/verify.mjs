@@ -2756,16 +2756,23 @@ async function run() {
         JSON.stringify({ 中间帧数: midFrames, 长满用时ms: final.t, 峰值: Number(final.s.toFixed(3)), 序列: series.map((x) => `${x.t}:${x.s.toFixed(2)}`).slice(0, 12) }),
       )
     }
-    /* (4) **不许抖**：恒速慢扫（2px/步、每步 28ms），盯着**固定一个图标**采样：
-       相邻两次变化 ≤0.06，且方向**不许来回翻转**（≤1 次）。 */
+    /* (4) ⭐ **不许抖（按新口径改写）**。**原断言 → 新断言 + 为什么**：
+       原来量"**恒速慢扫 40px**（会跨过槽位）时固定图标帧间 ≤0.06 / 方向翻转 ≤1" ——
+       那是**连续波浪**时代的判据（那时每 2px 都在改曲线，"别跳"是主线）。
+       站主 2026-10-07 定稿是**离散选中 + 缓动**：**跨槽位必然有一次平滑的 1.0 过渡**
+       （那是设计，不是抖），"跨槽位不许动"已经不对口径。
+       新判据量**真正该不许抖的区间**：**同一颗图标内**（2px 步 / 共 ±10px）指针微动 →
+       **scale 变化 ≤0.005**（这正是站主那句"让位完成后……都不许动"的量化）；
+       跨槽位那段由「动画是渐变、且速度已恢复」覆盖。
+       ⚠️ 不是放宽：0.005 比 0.06 **严 12 倍**，只是量在**正确的区间**上。 */
     await p.mouse.move(640, 120)
     await settleT()
-    await p.mouse.move(cen[midI - 2], dockGeom.y)
-    await p.waitForTimeout(220)
+    await p.mouse.move(cen[midI], dockGeom.y)
+    await settleT()
     const watch = midI
     const series = []
-    for (let k = 0; k < 20; k += 1) {
-      await p.mouse.move(cen[midI - 2] + k * 2, dockGeom.y)
+    for (let k = -5; k <= 5; k += 1) {
+      await p.mouse.move(cen[midI] + k * 2, dockGeom.y)
       await p.waitForTimeout(28)
       series.push((await readT())[watch].s)
     }
@@ -2774,8 +2781,8 @@ async function run() {
     let flips = 0
     for (let i = 1; i < sgn.length; i += 1) if (sgn[i] !== 0 && sgn[i - 1] !== 0 && sgn[i] !== sgn[i - 1]) flips += 1
     check(
-      '**不许抖**：恒速慢扫时固定图标的 scale 相邻两次变化 ≤0.06、方向翻转 ≤1 次（改前的"左右各乘系数"写法会来回翻）',
-      series.length === 20 && Math.max(...dser) <= 0.06 && flips <= 1,
+      '⭐ **不许抖（同颗图标内微动为零）**：在同一颗图标上 ±10px、2px 一步扫过时，该图标 scale 的相邻两次变化 **≤0.005**（**改写自**「恒速慢扫 ≤0.06」：那是连续波浪时代的量法；新模型跨槽位是**设计内的平滑过渡**，故改到"同颗内"量，且**更严 12 倍**）',
+      series.length === 11 && Math.max(...dser) <= 0.005 && flips <= 1,
       JSON.stringify({ 最大帧间差: Number(Math.max(...dser).toFixed(3)), 方向翻转: flips, 序列: series.map((s) => s.toFixed(3)) }),
     )
   /* (5) ⭐ **进入时让路**（2026-10-07 第 14 轮**改写**）。
@@ -2981,9 +2988,19 @@ async function run() {
       let minHotMove = Infinity
       const perStep = []
       for (let k = 1; k <= 3; k += 1) {
-        const live = await liveSnap()
-        const aimX = live.items[midI + k].x
-        await p.mouse.move(aimX, dockGeom.y, { steps: 3 })
+        /* ⚠️ 第 15 轮**探针瞄法**：必须瞄**渲染盒中心**（`getBoundingClientRect`），
+           不能用 `track` 的布局坐标 —— 让位场把整排推开后，布局中心已经不在那颗图标上了，
+           指针会落到**同一颗**（这也是 tooltip 那条红的同一个坑）。 */
+        const aim = await p.evaluate(
+          (arg) => {
+            const items = [...document.querySelectorAll(arg.sel + " [data-dock-item][data-dock-copy='1']")]
+            const r = items[arg.i].getBoundingClientRect()
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+          },
+          { sel: DOCK, i: midI + k },
+        )
+        const aimX = aim.x
+        await p.mouse.move(aimX, aim.y, { steps: 3 })
         await settleT()
         const now = await liveSnap()
         const pos = aimX - now.viewLeft
