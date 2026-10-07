@@ -18,7 +18,6 @@ import {
   ASYM_V_REF,
   MAGNIFY_EXP,
   MAGNIFY_PEAK,
-  PUSH_FACTOR,
   MAGNIFY_RADIUS_SLOTS,
   MOVE_THRESHOLD,
   SPRING_DAMPING,
@@ -500,12 +499,30 @@ export function Dock() {
        紧邻按**峰值增量的一半**让路（进入时看得出"滑开"约 12px；乘 `amp` → 离开时平滑收回、末态严格 0）。
        ⚠️ 大图标会**压住邻居的圆角**（macOS 就是这样），所以这里不追求"互不相交"——
        `verify` 里那条"交叠不超过一半"的放宽断言正是为此，别改成"不许交叠"。 */
+    /* ⚠️ 位移用**连续累计场**，不许退回"取整锚点 + 整段重算"（实测：锚点离散会让单步 2px 的
+       scale 跳 0.483、固定图标帧间 0.101 —— 两条断言当场红，那正是站主报的"跳一下/震动"）。
+       定义（`x` 是**浮点**槽位，逐段线性 → 对 hot 连续）：
+         gapShift(j) = ((s_j − 1) + (s_{j+1} − 1)) · magBtn / 2        // 相邻两格之间让出的缝
+         F(x)        = Σ_{j<⌊x⌋} gapShift(j) + (x − ⌊x⌋) · gapShift(⌊x⌋)
+         shift(i)    = sign(i − hot) · (F(max(i,hot)) − F(min(i,hot)))   // 且 i === round(hot) 时为 0
+       `hot` 取整数时它**退化成原式** ⇒ 相邻两图标的**间隙恒等于 `DOCK_GAP`**（与 scale 无关，逐对相等）
+       —— 这就是站主要的"图标之间的距离一致"。**注意量的是间隙、不是中心距**（中心距 = 两图标半宽
+       之和 + DOCK_GAP，尺寸不同时必然不等）。amp → 0 时 scales → 1 ⇒ gapShift → 0 ⇒ 位移自然归零。 */
+    const gapShift = (j: number) => ((scales[j] ?? 1) - 1 + (scales[j + 1] ?? 1) - 1) * magBtn * 0.5
+    const field = (x: number) => {
+      const k = Math.floor(x)
+      let sum = 0
+      for (let j = 0; j < k; j++) sum += gapShift(j)
+      return sum + (x - k) * gapShift(k)
+    }
     const shifts = items.map((_, i) => {
       if (!active) return 0
-      const d = i - hotEff
-      if (Math.abs(d) < 0.5) return 0
-      if (wave(d) <= 0.001) return 0
-      return (d < 0 ? -1 : 1) * (MAGNIFY_PEAK - 1) * magBtn * 0.5 * PUSH_FACTOR * amp
+      if (i === Math.round(hotEff)) return 0
+      const hi = Math.max(i, hotEff)
+      const lo = Math.min(i, hotEff)
+      const mag = field(hi) - field(lo)
+      if (Math.abs(mag) <= 0.01) return 0
+      return (i < hotEff ? -1 : 1) * mag
     })
     items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */

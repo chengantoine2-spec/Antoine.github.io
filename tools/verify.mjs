@@ -2337,7 +2337,12 @@ async function run() {
   if (dockGeom) {
     const cen = dockGeom.centres
     const midI = Math.floor(cen.length / 2)
-    /* (1) **外圈一律不动**：悬停中间那个 → ≥2 格的图标 scale 1.0(±0.02)、位移 0(±1px)；峰值自身位移 0 */
+    /* (1) **全排均匀让路**（原断言是"≥2 格之外位移恒 0" —— 站主 2026-10-07 改成"所有图标都要左右
+       让路，保持图标之间的距离一致"，所以旧判据把想要的效果当 bug 拦了，**改写不删**）。
+       新判据量的是**间隙** `gap_i`，不是"相邻中心距"：
+         gap_i = (布局步长 + t_{i+1} − t_i) − w·(s_i + s_{i+1})/2        // w = 按钮布局边长
+       累计场位移在 `hot` 取整时使 `gap_i ≡ DOCK_GAP`（与 scale 无关、逐对相等）。
+       ⚠️ 中心距 = 两图标半宽之和 + GAP，**尺寸不同时必然不等**，别按中心距改回去。 */
     await p.mouse.move(640, 120)
     await p.waitForTimeout(320)
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 4 })
@@ -2345,12 +2350,21 @@ async function run() {
     const r1 = await readT()
     const peakI = r1.reduce((b, v, i) => (v.s > r1[b].s ? i : b), 0)
     const outer = r1.map((v, i) => ({ d: Math.abs(i - peakI), ...v })).filter((v) => v.d >= 2)
-    const outerOk = outer.every((v) => Math.abs(v.s - 1) <= 0.02 && Math.abs(v.t) <= 1)
+    const outerScaleOk = outer.every((v) => Math.abs(v.s - 1) <= 0.02)
+    const outerMoved = outer.filter((v) => Math.abs(v.t) > 2).length
     const neighborOk = [peakI - 1, peakI + 1].every((i) => i < 0 || i >= r1.length || (r1[i].s > 1.05 && r1[i].s < 1.45))
+    const stepPx = cen[1] - cen[0]
+    const wBtn = stepPx - 5
+    const gaps = []
+    for (let i = 0; i + 1 < r1.length; i++) {
+      gaps.push(stepPx + (r1[i + 1].t - r1[i].t) - (wBtn * r1[i].s + wBtn * r1[i + 1].s) / 2)
+    }
+    const gapSpread = Math.max(...gaps) - Math.min(...gaps)
+    const gapOk = gaps.every((g) => Math.abs(g - 5) <= 1)
     check(
-      '波浪半径收到 **1 格**：只有「指针正对 + 紧邻左右各一个」在变（紧邻 1.05~1.45），**≥2 格之外 scale 1.0(±0.02) 且位移 0(±1px)**，峰值自身也不位移',
-      outer.length > 2 && outerOk && neighborOk && Math.abs(r1[peakI].t) <= 0.5 && peakI === midI,
-      JSON.stringify({ 峰: peakI, 期望峰: midI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t) }),
+      '全排均匀让路（改写自「≥2 格之外位移恒 0」）：只有「指针正对 + 紧邻左右各一个」缩放（紧邻 1.05~1.45、≥2 格之外 scale 1.0±0.02），但**所有**图标都左右让路，且**逐对间隙恒为 DOCK_GAP(5px)±1**（量间隙不量中心距 —— 中心距含两半宽之和，尺寸不同必然不等）',
+      outer.length > 2 && outerScaleOk && outerMoved >= 2 && neighborOk && gapOk && peakI === midI,
+      JSON.stringify({ 峰: peakI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t), 让路格数: outerMoved, 间隙: gaps.map((g) => Number(g.toFixed(2))), 间隙极差: Number(gapSpread.toFixed(2)) }),
     )
     /* (2) **方向不对称**：快扫左→右时 左邻 < 右邻；右→左时相反（都在**滑动过程中**采样）。
        做法：1 槽一步（45px，落在图标布局中心上）、每步只等 1 帧 —— 那时速度 EMA 已经建立。 */
