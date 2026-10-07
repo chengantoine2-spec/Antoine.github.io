@@ -1632,7 +1632,12 @@ async function run() {
     return cand[0] ?? null
   }, DOCK)
   await p.mouse.move(hoverTarget.x, hoverTarget.y)
-  await p.waitForTimeout(340)
+  /* ⚠️ 2026-10-07（第 14 轮）**等待从 340ms 拉长到 1300ms**：动画被站主要求"慢一点"
+     （`MAGNIFY_TAU = 0.16s`，两级缓动 ⇒ 实测长满 ~0.95s）。这里在 `settleT` 定义之前，
+     拿不到按状态等，所以用固定 1300ms；**不改的话 `wheel0` 采到的是中间态**——
+     实测峰值 1.71（不是 ~1.99）、凸出只有 26.8px（不是 40.9px），
+     "单侧放大"和"凸出 ≥ 增量 75%"两条断言当场红（那是采样问题，不是实现问题）。 */
+  await p.waitForTimeout(1300)
   const wheel0 = await wheelProbe(hoverTarget.x)
   check(
     '任务栏图标区：永远单行（所有图标同一个布局 top），图标区是**可滚动视口**（macOS 的回弹就建在它上面）',
@@ -1718,9 +1723,9 @@ async function run() {
     }
   }, DOCK)
   check(
-    'Dock 图标占按钮边长的 **80%**（原 50% → 72% → 80%：40px 按钮里只有 20px 那版周围一圈空；现在 48px 按钮里约 38px、几乎填满格子）',
-    iconFillProbe.fill.length > 0 && iconFillProbe.fill.every((f) => Math.abs(f - 0.8) <= 0.06),
-    JSON.stringify({ 期望: 0.8, 实测样本: iconFillProbe.sample }),
+    'Dock 图标占按钮边长的 **100%**（原 50% → 72% → 80% → **100%**：站主 2026-10-07 定稿「图标大小改成与按钮框大小一致 48px，96px」→ 图标本体 = 按钮框 = 48px，放大后 96px）',
+    iconFillProbe.fill.length > 0 && iconFillProbe.fill.every((f) => Math.abs(f - 1) <= 0.03),
+    JSON.stringify({ 期望: 1, 实测样本: iconFillProbe.sample }),
   )
 
   /* 14a3 悬停出**名称气泡**（站主 2026-10-06：macOS 那个 "Photos" 式气泡）。
@@ -1866,57 +1871,70 @@ async function run() {
     JSON.stringify({ ...bounce, opened: openedByBounce }),
   )
 
-  /* ⚠️ 2026-10-06 站主的口径**当天改过两次**，这里记清沿革，别再改回去：
+  /* ⚠️ 2026-10-06 站主的口径**当天改过两次**，2026-10-07（第 14 轮）**又改了一次**，这里记清沿革：
      ① 最早是"按离指针的距离给每个图标算 scale"；
-     ② 然后收窄成**三档**（只有正对那个 2×、紧邻只 1.08、更外侧恒 1.0）—— 当时这里量的就是
-        「紧邻 ∈ [1.04,1.14]、更外侧恒 1.0」；
-     ③ **最终口径（现在这条）是 macOS 的"波浪/鱼眼"**：「想要 macOS 那种指针扫过时的"波浪"，
-        越想 macOS 越好，最好一模一样」→ **三档被否**。
-     **改写**：原来那两条（紧邻区间 / 更外侧恒 1.0）描述的是被否掉的模型，换成波浪判据：
-       · **峰值在指针正对那个**（≥1.8×）；
-       · 按离指针的**格数单调不递增**（允许相等 —— 平滑衰减不该有台阶反复）；
-       · **半径收敛**：≥ `MAGNIFY_RADIUS_SLOTS`(5) 格回到 1.0×（±0.02）。
-     "让位不重叠"那条保留，见下面。 */
+     ② 然后收窄成**三档**（只有正对那个 2×、紧邻只 1.08、更外侧恒 1.0）；
+     ③ 2026-10-06 最终口径改成 macOS 的"波浪/鱼眼"（两侧按格数平滑递减）→ **三档被否**；
+     ④ ⭐ **2026-10-07（第 14 轮）站主又推翻了波浪**：「**先光做选中图标放大，和右侧图标放大，其他不变**」
+        → 现在是**单侧三档**：选中那颗 2×、**右侧紧邻** 1.12、**左侧与其余全部 1.0**。
+     **改写**（原断言 → 新断言 + 为什么）：原来是「峰值 ≥1.8 + 按格数单调不递增 + ≥5 格回 1.0」
+     （那是两侧波浪的判据）；现在改成**单侧档位**判据 —— 因为站主明确只要"选中 + 右侧"两个变化，
+     左侧再变大就是**不符合口径**（旧判据会把"左侧 1.0"当成 bug 拦下来，正好反了）。 */
   const hotIdx = wheel0.hotIdx
   const hotScale = (wheel0.slotScales ?? [])[hotIdx] ?? 0
-  const bySlotDistance = (wheel0.slotScales ?? [])
-    .map((s, i) => ({ s, d: Math.abs(i - hotIdx) }))
-    .sort((a, b) => a.d - b.d)
-  const farScales = (wheel0.slotScales ?? []).filter((_, i) => Math.abs(i - hotIdx) >= 5)
-  const farMax = farScales.length ? Math.max(...farScales) : 1
+  const rightScale = (wheel0.slotScales ?? [])[hotIdx + 1] ?? 1
+  const leftScale = (wheel0.slotScales ?? [])[hotIdx - 1] ?? 1
+  const others = (wheel0.slotScales ?? []).filter((_, i) => i !== hotIdx && i !== hotIdx + 1)
+  const othersMax = others.length ? Math.max(...others.map((s) => Math.abs(s - 1))) : 0
   check(
-    '波浪（macOS 鱼眼）：**峰值在指针正对那个 ≥1.8×**、按离指针的格数**单调不递增**、≥5 格回到 1.0×',
+    '⭐ **单侧放大（改写自「波浪（macOS 鱼眼）」）**：**选中那颗 ≥1.8×**、**右侧紧邻 ∈[1.05,1.20]**、**左侧紧邻 ==1.0(±0.02)**、**其余全部 ==1.0(±0.02)** —— 站主 2026-10-07 新口径「先光做选中图标放大，和右侧图标放大，其他不变」',
     hotScale >= 1.8 &&
-      bySlotDistance.every((it, i) => i === 0 || it.s <= bySlotDistance[i - 1].s + 0.02) &&
-      farMax <= 1.02,
+      rightScale >= 1.05 &&
+      rightScale <= 1.2 &&
+      Math.abs(leftScale - 1) <= 0.02 &&
+      othersMax <= 0.02,
     JSON.stringify({
-      指针正对: { 序号: hotIdx, 应用: (wheel0.slotLabels ?? [])[hotIdx], scale: hotScale },
-      按格数: bySlotDistance.map((it) => Number(it.s.toFixed(3))),
-      五格之外最大: Number(farMax.toFixed(3)),
+      选中: { 序号: hotIdx, 应用: (wheel0.slotLabels ?? [])[hotIdx], scale: Number(hotScale.toFixed(3)) },
+      右邻: Number(rightScale.toFixed(3)),
+      左邻: Number(leftScale.toFixed(3)),
+      其余最大偏差: Number(othersMax.toFixed(3)),
+      整排: (wheel0.slotScales ?? []).map((s) => Number(s.toFixed(3))),
     }),
   )
   /* "波"不是"一边倒"：峰的**左右两侧都要降**。只测"整体单调"会漏掉
      "峰偏在一端、另一半是平的"那种假波。 */
-  const leftScales = [1, 2, 3].map((k) => wheel0.slotScales?.[hotIdx - k]).filter((s) => typeof s === 'number')
-  const rightScales = [1, 2, 3].map((k) => wheel0.slotScales?.[hotIdx + k]).filter((s) => typeof s === 'number')
-  const descFromPeak = (arr) =>
-    arr.every((s, i) => (i === 0 ? s <= hotScale + 0.02 : s <= arr[i - 1] + 0.02))
+  /* ⭐ 2026-10-07（第 14 轮）**改写**（原断言 → 新断言 + 为什么）：
+     原来是「波是**两边一起收**：峰的两侧各自单调下降」—— 那是两侧波浪模型的判据；
+     站主新口径是**单侧**（左侧根本不该变大），所以新判据正好相反且更严：
+     **左侧必须一路 1.0（一条平的）**，右侧只允许紧邻那一颗大、第 2 颗起回到 1.0。 */
+  const leftFlat = [1, 2, 3].every((k) => Math.abs((wheel0.slotScales?.[hotIdx - k] ?? 1) - 1) <= 0.02)
+  const rightTail = [2, 3].every((k) => Math.abs((wheel0.slotScales?.[hotIdx + k] ?? 1) - 1) <= 0.02)
   check(
-    '波是**两边一起收**：峰的两侧各自单调下降（不是"峰偏在一端、另一半平的"假波）',
-    leftScales.length >= 2 && rightScales.length >= 2 && descFromPeak(leftScales) && descFromPeak(rightScales),
-    JSON.stringify({ 峰: Number(hotScale.toFixed(3)), 左侧: leftScales, 右侧: rightScales }),
+    '⭐ **单侧：左侧一条平线、右侧只紧邻一颗大**（改写自「波是两边一起收」）：左侧 1/2/3 格都 ==1.0(±0.02)、右侧第 2/3 格也 ==1.0(±0.02) —— 站主新口径只要"选中 + 右侧紧邻"两个变化',
+    leftFlat && rightTail,
+    JSON.stringify({
+      峰: Number(hotScale.toFixed(3)),
+      左侧三格: [1, 2, 3].map((k) => Number((wheel0.slotScales?.[hotIdx - k] ?? 1).toFixed(3))),
+      右侧三格: [1, 2, 3].map((k) => Number((wheel0.slotScales?.[hotIdx + k] ?? 1).toFixed(3))),
+    }),
   )
 
   /* ② **波峰跟着指针走**（站主点名要的证据）：指针移到任务栏上**三个不同位置**
      （偏左 / 中间 / 偏右），每次取整排 scale 数组 → 断言 argmax（峰）的**索引随指针改变**，
      且每次曲线仍满足"从峰向两侧单调不递增 + 4 格回 1.0"。
      ⚠️ 落点用**布局坐标 + 分步移动**：波浪会把图标 translateX 推开，按渲染盒取中点会落到隔壁
-     （上一轮实测 tooltip 显示成"项目"/"饥荒 Wiki"）；波峰图标位移为 0、停在布局位。 */
+     （上一轮实测 tooltip 显示成"项目"/"饥荒 Wiki"）；波峰图标位移为 0、停在布局位。
+     ⭐ 2026-10-07（第 14 轮）**改写**（原判据 → 新判据 + 为什么）：原来要求"峰向**两侧**单调不递增 +
+     4 格回 1.0"（两侧波浪）；新口径是**单侧三档**，所以改成"峰右侧只紧邻一颗大、左侧与远处都 1.0"。 */
   const waveShapeOk = (scales, argmax) => {
     if (!scales || scales.length < 5) return false
     if (scales[argmax] < 1.8) return false
-    for (let i = argmax; i > 0; i -= 1) if (scales[i - 1] > scales[i] + 0.03) return false
-    for (let i = argmax; i < scales.length - 1; i += 1) if (scales[i + 1] > scales[i] + 0.03) return false
+    /* 左侧一条平线（1/2/3 格都 1.0）；右侧紧邻可以大，但第 2 格起回到 1.0 */
+    for (let k = 1; k <= 3 && argmax - k >= 0; k += 1) if (Math.abs(scales[argmax - k] - 1) > 0.02) return false
+    if (argmax + 1 < scales.length && (scales[argmax + 1] < 1.05 || scales[argmax + 1] > 1.2)) return false
+    for (let k = 2; k <= 3 && argmax + k < scales.length; k += 1) {
+      if (Math.abs(scales[argmax + k] - 1) > 0.02) return false
+    }
     return scales.every((s, i) => (Math.abs(i - argmax) >= 4 ? s <= 1.02 : true))
   }
   const peakAt = async (label) => {
@@ -1978,8 +1996,14 @@ async function run() {
       { sel: DOCK, which },
     )
     if (!t) return null
+    /* ⭐ 2026-10-07（第 14 轮）**先归位**：新口径有"冻结大框"（放大图标盒各向 30px），框内换到
+       **紧邻**那颗**不算离开** —— 不先移出去等它收回，上一个工况的峰会留在原地，这条"恒等映射"
+       就会偶发红（实测 `which: 0` 时 argmax 落在 1，看着像 off-by-one 复现，其实是被框留住了）。
+       归位后才是"从没放大起步"。⚠️ 这里用固定等待（`settleT` 的定义在后面）：慢动画 ~1s，取 1200ms。 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(1200)
     await p.mouse.move(t.x, t.y, { steps: 8 })
-    await p.waitForTimeout(430)
+    await p.waitForTimeout(1200)
     const r = await p.evaluate((sel) => {
       const items = [...document.querySelectorAll(sel + ' [data-dock-item][data-dock-copy=\'1\']')]
       const scales = items.map((b) => Number(new DOMMatrixReadOnly(getComputedStyle(b).transform).a.toFixed(3)))
@@ -2023,11 +2047,38 @@ async function run() {
   /* ⚠️ 改写（2026-10-07 第 12 轮）：`DOCK_GAP` **5 → 3**（站主「继续减少图标间距，紧密一些」），
      同时按钮默认尺寸 40 → 48（站主「增大图标」）。判据仍是"相邻中心距 == 图标边长 + DOCK_GAP"，
      但期望值从 `+5` 改成 `+3`；两档长度各量一次。 */
-  const pitchOk = (x) => !!x && Math.abs(x.btn + 2 - Math.round(x.pitch[0])) <= 2
+  const pitchOk = (x) => !!x && Math.abs(x.btn + 3 - Math.round(x.pitch[0])) <= 2
   check(
-    'Dock 图标间距：相邻中心距 == 图标边长 + DOCK_GAP(2)（两档长度各量一次；原判据是 +5，随 GAP 收紧到 3 同步改写）',
+    'Dock 图标间距：相邻中心距 == 图标边长 + DOCK_GAP(3)（两档长度各量一次；原判据是 +5 → +2 → +3，随 GAP 变更同步改写）',
     pitchOk(p1) && pitchOk(p2),
     JSON.stringify({ 第一档: p1, 第二档: p2 }),
+  )
+  /* ⭐ 2026-10-07（第 14 轮）**新增一条**：**图标本体之间的视觉间隙 == `DOCK_GAP`（±0.5px）**。
+     为什么单立：站主本轮把「图标大小改成与按钮框大小一致（48px / 96px）」+「固定间距 3px」一起定，
+     于是**"看着紧不紧" = 图标本体之间的空隙**，它由**两个量共同决定**：`DOCK_GAP` 与 `DOCK_ICON_FILL`。
+     以前填充比 0.72 时，"gap=2" 看着却像 12px 的空隙（本体比按钮小一圈）—— 那正是"看着不紧"的来源。
+     这条钉住二者的一致性：谁改了填充比却没改 gap（或反过来），这里立刻红。 */
+  const glyphGap = await p.evaluate((sel) => {
+    const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+    const boxes = items
+      .map((el) => {
+        const g = el.querySelector('img') ?? el.querySelector('svg')
+        return g ? g.getBoundingClientRect() : null
+      })
+      .filter(Boolean)
+    if (boxes.length < 3) return null
+    const gaps = []
+    for (let i = 0; i + 1 < boxes.length; i += 1) gaps.push(boxes[i + 1].left - boxes[i].right)
+    return { gaps, 本体内宽: boxes[0].width, 按钮框: items[0].offsetWidth }
+  }, DOCK)
+  check(
+    '⭐ **图标本体之间的视觉间隙 == DOCK_GAP(3px)（±0.5px）**（第 14 轮新增）：填充比 1.0 ⇒ 本体与按钮框等大，所以"看着紧不紧"就等于 `DOCK_GAP` —— 改填充比或改 GAP 而不改另一个，这条会红',
+    !!glyphGap && glyphGap.gaps.length > 2 && glyphGap.gaps.every((g) => Math.abs(g - 3) <= 0.5),
+    JSON.stringify(
+      glyphGap
+        ? { 间隙: glyphGap.gaps.map((g) => Number(g.toFixed(2))), 本体内宽: Number(glyphGap.本体内宽.toFixed(1)), 按钮框: glyphGap.按钮框 }
+        : { 取样失败: true },
+    ),
   )
   /* 复原长度，别影响后面的检查 */
   await p.evaluate(() => {
@@ -2263,6 +2314,23 @@ async function run() {
       })
       return { argmax, peak: scales[argmax], scales }
     }, DOCK)
+  /* ⭐ 2026-10-07（第 14 轮）**动画变慢了**（站主「动作慢一点」：`MAGNIFY_TAU = 0.16s`，而且
+     "每个图标自己的缓动"与"整体强度 fade"两级叠加 ⇒ 实测长满约 **0.95s**）→ 下面这一段里所有
+     "等它安定"的固定等待（原来 320~520ms，是按旧的 0.09s 定的）**一律换成按状态等**：
+     连续两次读到的整排 scale 完全一致才算安定（最多 2s）。
+     ⚠️ 定义放在 `readScales` 之后、**第一处使用之前**（上一版放在 `readT` 后面，导致前面的块
+        `Cannot access 'settleT' before initialization` → **套件中途崩**、后面一条都没跑，典型假绿）。
+     ⚠️ 别改回固定小等待 —— 那是"拿速度迁就断言"，动画一慢就随机红；
+     ⚠️ 也别为了迁就断言把动画调快，那样的"慢"是假的。 */
+  const settleT = async (maxMs = 2000) => {
+    let last = JSON.stringify((await readScales()).scales)
+    for (let i = 0; i < Math.ceil(maxMs / 100); i += 1) {
+      await p.waitForTimeout(100)
+      const now = JSON.stringify((await readScales()).scales)
+      if (now === last) return
+      last = now
+    }
+  }
   /* 先移出任务栏，保证从"没放大"起步 */
   await p.mouse.move(640, 120)
   await p.waitForTimeout(140)
@@ -2276,17 +2344,18 @@ async function run() {
   }
   const sweepArgmax = sweep.map((r) => r.argmax)
   const atStop = sweep[sweep.length - 1] ?? null
-  await p.waitForTimeout(220)
+  /* ⭐ 2026-10-07（第 14 轮）**改写**（原 → 新 + 为什么）：原来等固定 220ms / 420ms 就断言"已安定
+     （argmax 不变、peak 变化 ≤0.03、peak ≥1.9）"——那是按旧的 0.09s 时间常数定的；
+     现在站主要求「**动画慢一点**」（`MAGNIFY_TAU = 0.16s`，两级缓动 ⇒ 实测长满 ~0.95s），
+     固定 220ms 只能长到 1.8（实测），断言会把"慢"误判成"没安定"。
+     改成：**等它真的安定**（`settleT`）之后再取两次读数 → 两次必须一致（argmax 不变、peak 变化 ≤0.03）
+     且 peak ≥1.9。**"停手后波峰不许自己追一格"这条语义原样保留**（第 10 轮那个 bug 的护栏）。 */
+  await settleT()
   const afterStop = atStop ? await readScales() : null
-  await p.waitForTimeout(200)
+  await p.waitForTimeout(300)
   const settled2 = atStop ? await readScales() : null
-  /* ⚠️ 2026-10-06（第 8 轮）**判据改写**：现在方向不对称是"按速度偏置波峰"，停手后偏置会
-     **主动衰减归零**（站主明确要求"停手后收敛回对称"）→ 所以停手瞬间 peak 可能只有 1.7（波峰在
-     两格之间），220ms 后收回该图标上、长到 2.0。**这不是"自己追上来"**，是设计里的收敛。
-     新的判据分两段：① **220ms 之后必须已经安定**（argmax 不变、peak 变化 ≤0.03）；
-     ② 安定后 peak **≥1.9**（偏置确实归零、波峰落回图标中心）。 */
   check(
-    '放大**跟手**：快扫时波峰逐个推进（不跳格）、**停下 220ms 后已经安定**（之后 argmax 不变、peak 变化 ≤0.03、且 peak 回落到 ≥1.9）',
+    '放大**跟手**：快扫时波峰逐个推进（不跳格）、**停下并安定后不再变**（argmax 不变、peak 变化 ≤0.03、且 peak ≥1.9）—— 站主 2026-10-07「动画慢一点」后，等待改成"等到安定"而不是固定 220ms',
     !!dockGeom &&
       !!atStop &&
       !!afterStop &&
@@ -2295,18 +2364,23 @@ async function run() {
       settled2.argmax === afterStop.argmax &&
       Math.abs(settled2.peak - afterStop.peak) <= 0.03 &&
       settled2.peak >= 1.9,
-    JSON.stringify({ 快扫argmax: sweepArgmax, 停手: atStop, '220ms后': afterStop, '420ms后': settled2 }),
+    JSON.stringify({ 快扫argmax: sweepArgmax, 停手: atStop, 安定后: afterStop, '再过300ms': settled2 }),
   )
-  /* ⑤ 单步 2px 的 scale 变化上限（防"突然跳一下"）：实测改后 0.16、改前 0.21 → 判据 0.25 */
+  /* ⑤ ⭐ **冻结框内单步 2px 不许有任何变化**（2026-10-07 第 14 轮**改写**）。
+     **原断言 → 新断言 + 为什么**：原来是「单步移动 2px 时任一图标的 scale 变化 ≤0.25」
+     （实测改后 0.16 / 改前 0.21）—— 那是**连续波浪**下"别跳一下"的判据，那时每个 2px 都在改曲线。
+     新口径是**离散选中 + 慢动画**：指针在冻结大框内时**根本不许重算**（站主：「在一个足够大的框范围内，
+     动画做完之后就都不许动」），所以判据收紧成 **==0（±0.005）**；框外的 2px 步进会跨过"换目标"
+     那道坎，那是**设计内的慢过渡**（由下面"动画慢一点"那条盯着），不该按 ≤0.25 去量。 */
   await p.mouse.move(640, 120)
   await p.waitForTimeout(160)
   const microSteps = []
   if (dockGeom) {
     const midX = dockGeom.centres[Math.floor(dockGeom.centres.length / 2)]
-    await p.mouse.move(midX - 30, dockGeom.y)
-    await p.waitForTimeout(220)
-    for (let dx = 0; dx <= 60; dx += 2) {
-      await p.mouse.move(midX - 30 + dx, dockGeom.y)
+    await p.mouse.move(midX, dockGeom.y)
+    await settleT()
+    for (let dx = -10; dx <= 10; dx += 2) {
+      await p.mouse.move(midX + dx, dockGeom.y)
       await p.waitForTimeout(24)
       microSteps.push(await readScales())
     }
@@ -2320,9 +2394,9 @@ async function run() {
         )
       : 9
   check(
-    '单步移动 2px 时任一图标的 scale 变化 ≤ 0.25（防"突然跳一下"；实测改后 0.16 / 改前 0.21）',
-    microSteps.length > 5 && maxStepDelta <= 0.25,
-    JSON.stringify({ 单步最大变化: Number(maxStepDelta.toFixed(3)), 采样步数: microSteps.length }),
+    '⭐ **冻结框内单步 2px 零变化**（改写自「单步 2px scale 变化 ≤0.25」）：在同一颗图标上 ±10px 内每 2px 走一步，任一图标 scale 变化 **≤0.005**（原判据 0.25 是按连续波浪定的；新口径是"框内不许重算"）',
+    microSteps.length > 5 && maxStepDelta <= 0.005,
+    JSON.stringify({ 单步最大变化: Number(maxStepDelta.toFixed(4)), 采样步数: microSteps.length }),
   )
 
   /* ── 2026-10-06（第 8 轮）「波浪」最终口径的四组断言 ────────────────────────────
@@ -2337,6 +2411,9 @@ async function run() {
         return { s: Number(m.a.toFixed(3)), t: Number(m.e.toFixed(2)) }
       })
     }, DOCK)
+  /* ⚠️ `settleT` 已经定义在上面（`readScales` 之后）—— 这里**不再重复定义**。
+     上一版在本行又定义了一遍，而前面的块先用了 → `Cannot access 'settleT' before initialization`
+     → **套件中途崩**（后面一条都没跑）。同一个标识符只留一处定义。 */
   let waveRound = null
   if (dockGeom) {
     const cen = dockGeom.centres
@@ -2348,9 +2425,9 @@ async function run() {
        累计场位移在 `hot` 取整时使 `gap_i ≡ DOCK_GAP`（与 scale 无关、逐对相等）。
        ⚠️ 中心距 = 两图标半宽之和 + GAP，**尺寸不同时必然不等**，别按中心距改回去。 */
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(320)
+    await settleT()
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 4 })
-    await p.waitForTimeout(320)
+    await settleT()
     const r1 = await readT()
     const peakI = r1.reduce((b, v, i) => (v.s > r1[b].s ? i : b), 0)
     const outer = r1.map((v, i) => ({ d: Math.abs(i - peakI), ...v })).filter((v) => v.d >= 2)
@@ -2358,7 +2435,7 @@ async function run() {
     const outerMoved = outer.filter((v) => Math.abs(v.t) > 2).length
     const neighborOk = [peakI - 1, peakI + 1].every((i) => i < 0 || i >= r1.length || (r1[i].s > 1.05 && r1[i].s < 1.45))
     const stepPx = cen[1] - cen[0]
-    const wBtn = stepPx - 2
+    const wBtn = stepPx - 3
     const gaps = []
     for (let i = 0; i + 1 < r1.length; i++) {
       gaps.push(stepPx + (r1[i + 1].t - r1[i].t) - (wBtn * r1[i].s + wBtn * r1[i + 1].s) / 2)
@@ -2366,66 +2443,90 @@ async function run() {
     const gapSpread = Math.max(...gaps) - Math.min(...gaps)
     /* ⚠️ 改写（2026-10-07 第 12 轮）：期望间隙 5 → **3**（`DOCK_GAP` 同步收紧）；`wBtn` 也按新 GAP 反推。 */
     const gapOk = gaps.every((g) => Math.abs(g - 2) <= 1)
+    /* ⭐ 2026-10-07（第 14 轮）**改写**（原断言 → 新断言 + 为什么）：
+       原来是「所有图标都左右让路 + **逐对间隙恒为 DOCK_GAP(2px)±1**」（那是"整排按连续场让路"的判据）；
+       站主新口径是「**其他不变**、右侧紧邻**可以有一点让路**」→ 整排不再均匀让路，
+       所以新判据：**只有右侧紧邻有位移（>2px）、其余位移 0**；间隙那条**按新口径作废**
+       （它钉的是旧模型；换成"左侧与远处 scale/位移都不变"更贴新口径，且**更严**）。 */
+    const onlyRight =
+      r1[peakI + 1] !== undefined &&
+      r1[peakI + 1].s >= 1.05 &&
+      r1[peakI + 1].s <= 1.2 &&
+      Math.abs(r1[peakI + 1].t) > 2 &&
+      r1.every((v, i) => (i === peakI + 1 ? true : Math.abs(v.t) <= 0.5)) &&
+      r1.every((v, i) => (i === peakI || i === peakI + 1 ? true : Math.abs(v.s - 1) <= 0.02)) &&
+      (r1[peakI - 1] === undefined || Math.abs(r1[peakI - 1].s - 1) <= 0.02)
     check(
-      '全排均匀让路（改写自「≥2 格之外位移恒 0」）：只有「指针正对 + 紧邻左右各一个」缩放（紧邻 1.05~1.45、≥2 格之外 scale 1.0±0.02），但**所有**图标都左右让路，且**逐对间隙恒为 DOCK_GAP(2px)±1**（量间隙不量中心距 —— 中心距含两半宽之和，尺寸不同必然不等）',
-      outer.length > 2 && outerScaleOk && outerMoved >= 2 && neighborOk && gapOk && peakI === midI,
-      JSON.stringify({ 峰: peakI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t), 让路格数: outerMoved, 间隙: gaps.map((g) => Number(g.toFixed(2))), 间隙极差: Number(gapSpread.toFixed(2)) }),
+      '⭐ **只有右侧紧邻让路（改写自「全排均匀让路」）**：选中那颗最大、**右侧紧邻** scale ∈[1.05,1.20] 且位移 >2px（看得出"滑开"）、**左侧紧邻与其余全部 ==1.0(±0.02) 且位移 0(±0.5px)**；大图标可以压住左邻居的圆角（macOS 就是如此）—— 站主 2026-10-07 新口径「其他不变」',
+      onlyRight && peakI === midI,
+      JSON.stringify({
+        峰: peakI,
+        整排scale: r1.map((v) => Number(v.s.toFixed(3))),
+        整排位移: r1.map((v) => Number(v.t.toFixed(1))),
+        右邻: { scale: r1[peakI + 1]?.s, tx: r1[peakI + 1]?.t },
+        左邻: { scale: r1[peakI - 1]?.s, tx: r1[peakI - 1]?.t },
+        旧间隙读数: gaps.map((g) => Number(g.toFixed(2))),
+      }),
     )
-    /* (2) ⭐ **两侧邻居等大**（2026-10-07 站主口径反转）。
-       **改写自**：「方向不对称：左→右滑动时左邻比右邻小、右→左时相反」（那是 2026-10-06 的口径，
-       站主当时说"从左往右滑，左边比右边小一点"；**2026-10-07 他改成**「两侧图标生长大小改为
-       **略大于正常图标、且一样大**」）→ 于是 `ASYM_BIAS` 的方向偏置被取消（常量留在 `lib/dock.ts`），
-       邻居大小改由 `MAGNIFY_EXP=1.9` 定（`d=1 → 1.12`）。
-       判据：两个方向**滑动过程中**各采一遍（1 槽一步、每步只等 1 帧，速度 EMA 已建立）：
-       **|左 − 右| ≤0.01 且两者都 ∈[1.06, 1.18]**。 */
+    /* (2) ⭐⭐ **只有右侧放大、与滑动方向无关**（2026-10-07 第 14 轮站主最新口径）。
+       **改写沿革**（原 → 新 + 为什么，一条没删）：
+         · 原①「方向不对称：左→右滑动时左邻比右邻小、右→左时相反」（2026-10-06 口径）；
+         · 原②「两侧邻居等大、且只略大于正常」（2026-10-07 上一轮口径，`MAGNIFY_EXP=1.9`）；
+         · **原③（现在）**站主又推翻成：「**先光做选中图标放大，和右侧图标放大，其他不变**」
+           → 只剩**右侧紧邻**变大（`MAGNIFY_RIGHT_NEIGHBOR = 1.12`），**左侧恒 1.0**，
+           而且**与滑动方向无关**（两个方向扫过去必须一模一样）。
+       判据：两个方向各走一遍，**每一站都等它安定**再采（动画变慢后"边走边采"只会采到中间态，
+       那不是口径问题而是采样问题）→ 右邻 ∈[1.05,1.20]、左邻 ==1.0(±0.02)。 */
     const asymSweep = async (dir) => {
       await p.mouse.move(640, 120)
-      await p.waitForTimeout(300)
+      await settleT()
       const idxs = dir > 0 ? [2, 3, 4, 5, 6, 7, 8, 9] : [9, 8, 7, 6, 5, 4, 3, 2]
       const out = []
       for (const i of idxs) {
         await p.mouse.move(cen[i], dockGeom.y)
-        await p.waitForTimeout(20)
+        await settleT()
         const m = await readT()
         const pk = m.reduce((b, v, k) => (v.s > m[b].s ? k : b), 0)
         out.push({ pk, left: m[pk - 1]?.s ?? null, right: m[pk + 1]?.s ?? null })
       }
-      const tail = out.slice(2).filter((r) => r.left !== null && r.right !== null)
-      const diff = tail.map((r) => Math.abs(r.left - r.right))
-      const allInBand = tail.every((r) => r.left >= 1.06 && r.left <= 1.18 && r.right >= 1.06 && r.right <= 1.18)
+      const tail = out.slice(1).filter((r) => r.left !== null && r.right !== null)
+      const ok = tail.every((r) => Math.abs(r.left - 1) <= 0.02 && r.right >= 1.05 && r.right <= 1.2)
       return {
         dir,
         尾段: tail.length,
-        最大左右差: Number(Math.max(...diff).toFixed(4)),
-        都在区间: allInBand,
-        邻居取值: [...new Set(tail.map((r) => Number(r.left.toFixed(3))))],
+        都合规: ok,
+        左邻取值: [...new Set(tail.map((r) => Number(r.left.toFixed(3))))],
+        右邻取值: [...new Set(tail.map((r) => Number(r.right.toFixed(3))))],
         最后一片: out[out.length - 1],
       }
     }
     const a1 = await asymSweep(1)
     const a2 = await asymSweep(-1)
     check(
-      '⭐ **两侧邻居等大、且只"略大于正常"**：左→右 / 右→左 两个方向**滑动过程中**采样，|左邻 − 右邻| ≤0.01 且两者都 ∈[1.06, 1.18]（**改写自**「方向不对称」那条：2026-10-07 站主口径反转成"两侧一样大"）',
+      '⭐ **只有右侧放大、且与滑动方向无关**：左→右 / 右→左 各走一遍，**每个位置**都满足 **右邻 ∈[1.05,1.20]**、**左邻 ==1.0(±0.02)**（**改写自**「两侧邻居等大」→更早的「方向不对称」：2026-10-07 站主最新口径「先光做选中图标放大，和右侧图标放大，其他不变」）',
       a1.尾段 > 3 &&
         a2.尾段 > 3 &&
-        a1.最大左右差 <= 0.01 &&
-        a2.最大左右差 <= 0.01 &&
-        a1.都在区间 &&
-        a2.都在区间,
+        a1.都合规 &&
+        a2.都合规,
       JSON.stringify({ 左到右: a1, 右到左: a2 }),
     )
-    /* (3) **停手后收敛回对称**：速度衰减到 0 → 波峰偏置归 0 → 左右邻居 scale 差 ≤0.02 */
+    /* (3) ⭐ **停手后形状定住**（2026-10-07 第 14 轮**改写**）。
+       **原断言 → 新断言 + 为什么**：原来是「停手后**收敛回左右对称**：左右邻居 scale 差 ≤0.02」
+       —— 那是"方向偏置随时间归零"的判据；新口径本来就不对称（左 1.0 / 右 1.12），
+       所以那条判据在新模型下**必然红且没有意义**。换成**钉住"定住不动"**这件事：
+       停手后隔 300ms 再采一次，整排必须**完全一致**（新口径的真要求是"动画一做完就不许动"）。 */
     await p.mouse.move(cen[midI] - 22, dockGeom.y, { steps: 3 })
     await p.waitForTimeout(50)
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 2 })
-    await p.waitForTimeout(340)
+    await settleT()
     const r3 = await readT()
-    const pk3 = r3.reduce((b, v, i) => (v.s > r3[b].s ? i : b), 0)
-    const symDiff = Math.abs((r3[pk3 - 1]?.s ?? 1) - (r3[pk3 + 1]?.s ?? 1))
+    await p.waitForTimeout(300)
+    const r3b = await readT()
+    const drift = Math.max(...r3.map((v, i) => Math.abs(v.s - (r3b[i]?.s ?? v.s))))
     check(
-      '停手后**收敛回左右对称**：等 340ms 后左右邻居 scale 差 ≤0.02（速度归零 → 偏置归零）',
-      symDiff <= 0.02,
-      JSON.stringify({ 峰: pk3, 左: r3[pk3 - 1]?.s, 右: r3[pk3 + 1]?.s, 差: Number(symDiff.toFixed(3)) }),
+      '⭐ **停手后形状定住**（改写自「停手后收敛回左右对称」）：安定之后再等 300ms，整排 scale 漂移 ≤0.005（原判据"左右邻居差 ≤0.02"在新口径下没意义：左侧本来就该 1.0、右侧 1.12）',
+      drift <= 0.005,
+      JSON.stringify({ 安定后: r3.map((v) => Number(v.s.toFixed(3))), '300ms后': r3b.map((v) => Number(v.s.toFixed(3))), 最大漂移: Number(drift.toFixed(4)) }),
     )
     /* (3b) ⭐⭐ 2026-10-07（第 13 轮）**放大时"凸出任务栏的那一截"仍算在任务栏上** —— 站主报的真 bug：
        「图标放大之后，移动到任务栏**上边缘**会取消选中图标」。
@@ -2440,9 +2541,9 @@ async function run() {
          N3 **交叉轴不影响槽位**：同一 x 上把 y 从栏内中部扫到"图标顶部内侧"，argmax 不变。 */
     const unionProbe = async () => {
       await p.mouse.move(640, 120)
-      await p.waitForTimeout(380)
+      await settleT()
       await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
-      await p.waitForTimeout(460)
+      await settleT()
       return p.evaluate((sel) => {
         const bar = document.querySelector(sel)
         const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
@@ -2473,7 +2574,7 @@ async function run() {
     const u1 = await unionProbe()
     /* N1：移到放大图标**顶部内侧**（这里 y < 任务栏 top，确实在栏外）→ 必须**保持**放大 */
     await p.mouse.move(u1.iconCx, u1.iconTop + 3)
-    await p.waitForTimeout(320)
+    await settleT()
     const u1os = await readScalesNow()
     const u1max = Math.max(...u1os)
     const u1shape = u1.scales.every((s, i) => Math.abs(s - (u1os[i] ?? s)) <= 0.02)
@@ -2490,21 +2591,23 @@ async function run() {
         形状未变: u1shape,
       }),
     )
-    /* N2：继续上移到**并集 + 容差之外** → 必须收回（`fade` 归 0，max scale ≤1.05） */
-    await p.mouse.move(u1.iconCx, u1.iconTop - 9)
-    await p.waitForTimeout(520)
+    /* N2：继续上移到**大框（`FREEZE_PAD = 30px`）之外** → 必须收回（`fade` 归 0，max scale ≤1.05）。
+       ⚠️ 2026-10-07（第 14 轮）**改写**：原来只上移 9px（那时"离开"的判据是 `LEAVE_SLACK = 5px`）；
+       现在多了一层**冻结大框**（各向 30px），9px 还在框里 —— 得移到 **图标 top − (30 + 12)** 才算真出去。 */
+    await p.mouse.move(u1.iconCx, u1.iconTop - 10)
+    await settleT()
     const u2os = await readScalesNow()
     const u2max = Math.max(...u2os)
     check(
-      '⭐ **移出"放大图标上下范围"才取消**：再往上到并集 + 5px 容差之外 → 放大收回（整排 max scale ≤1.05）',
+      '⭐ **移出"放大图标上下范围"才取消**：上移到**冻结框（= 放大图标盒 + 1 个间距，各向仅 +1.5px）+ 余量**之外 → 放大收回（整排 max scale ≤1.05）',
       u2max <= 1.05,
-      JSON.stringify({ 探针y: Number((u1.iconTop - 9).toFixed(1)), 图标top: u1.iconTop, 整排: u2os.map((s) => Number(s.toFixed(3))), 峰值: Number(u2max.toFixed(3)) }),
+      JSON.stringify({ 探针y: Number((u1.iconTop - 10).toFixed(1)), 图标top: u1.iconTop, 整排: u2os.map((s) => Number(s.toFixed(3))), 峰值: Number(u2max.toFixed(3)) }),
     )
     /* N3：**交叉轴不影响槽位** —— 同一 x，y 从"栏内中部"扫到"图标顶部内侧"，argmax 必须不变 */
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(320)
+    await settleT()
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
-    await p.waitForTimeout(430)
+    await settleT()
     const u3 = await p.evaluate((sel) => {
       const bar = document.querySelector(sel)
       const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
@@ -2531,10 +2634,105 @@ async function run() {
       amBarMid === u3.hot && amLow === u3.hot && amTop === u3.hot,
       JSON.stringify({ 期望槽位: u3.hot, 栏内中部: amBarMid, 栏内偏上: amLow, 图标顶部内侧: amTop, 探针x: u3.iconCx, 图标top: u3.iconTop, 任务栏top: u3.barTop }),
     )
+    /* N4 ⭐ 2026-10-07（第 14 轮）**大框内四向往返：零变化** —— 站主：「在放大的图标外围一个足够大的
+       框范围内，在放大动画做完之后就都不许动」。框 = 放大图标渲染盒各向外扩 `FREEZE_PAD = 30px`。
+       做法：往四个方向各走到**框边内侧**（各向 30px 减 4px = 26px，留点余量别踩边界）、再回到中心，
+       每一步与"冻结后的基准"比：**所有图标 scale 变化 ≤0.005、位移变化 ≤0.5px**。 */
+    {
+      const base = await readT()
+      const geom = await p.evaluate((sel) => {
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        const scales = items.map((el) => {
+          const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+          return m ? Number(m[1]) : 1
+        })
+        const hot = scales.indexOf(Math.max(...scales))
+        const r = items[hot].getBoundingClientRect()
+        return { hot, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }
+      }, DOCK)
+      const step = 16
+      const probes = [
+        [step, 0],
+        [0, -step],
+        [-step, 0],
+        [0, step],
+        [0, 0],
+      ]
+      let maxS = 0
+      let maxT = 0
+      for (const [dx, dy] of probes) {
+        await p.mouse.move(geom.cx + dx, geom.cy + dy)
+        await p.waitForTimeout(150)
+        const now = await readT()
+        now.forEach((v, i) => {
+          maxS = Math.max(maxS, Math.abs(v.s - base[i].s))
+          maxT = Math.max(maxT, Math.abs(v.t - base[i].t))
+        })
+      }
+      check(
+        '⭐ **框内四向往返：零变化**（第 14 轮关键）：冻结后往上下左右各走到**放大图标盒内部**（±16px，因为冻结框只有图标盒 + 1.5px）再回中心，**所有图标 scale 变化 ≤0.005、位移变化 ≤0.5px**（站主：「框范围内……都不许动」）',
+        maxS <= 0.005 && maxT <= 0.5,
+        JSON.stringify({ 框: `放大图标盒 ± (DOCK_GAP/2 = 1.5px)`, 探针偏移: `±${step}px（在图标盒内部）`, scale最大变化: Number(maxS.toFixed(4)), 位移最大变化: Number(maxT.toFixed(3)) }),
+      )
+    }
+    /* N5 ⭐ **移出大框才变化**：横向越过框边（半宽 + 30 + 12）→ 才允许换目标（argmax 必须变/或收回）。 */
+    {
+      const geom = await p.evaluate((sel) => {
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        const scales = items.map((el) => {
+          const m = /scale\(([\d.]+)\)/.exec(el.style.transform || '')
+          return m ? Number(m[1]) : 1
+        })
+        const hot = scales.indexOf(Math.max(...scales))
+        const r = items[hot].getBoundingClientRect()
+        return { hot, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, halfW: (r.right - r.left) / 2 }
+      }, DOCK)
+      await p.mouse.move(geom.cx + geom.halfW + 1.5 + 12, geom.cy)
+      await settleT()
+      const after = await readScalesNow()
+      const newHot = after.indexOf(Math.max(...after))
+      check(
+        '⭐ **移出冻结框才变化**：横向越过框边（放大图标半宽 + `FREEZE_PAD`(1.5) + 12px）→ **才**重新判定（波峰换到指针最近的那颗）',
+        newHot !== geom.hot && Math.max(...after) >= 1.5,
+        JSON.stringify({ 原选中: geom.hot, 出框后选中: newHot, 出框距离: Number((geom.halfW + 13.5).toFixed(1)), 整排: after.map((s) => Number(s.toFixed(3))) }),
+      )
+    }
+    /* N6 ⭐ **动画慢一点**（站主：「动画的动作慢一点」）：从栏外一步落到图标上，
+       以 40ms 间隔采峰值 scale —— 必须采到**中间帧**（0.05 < s < 1.9，证明是渐变不是跳变），
+       且从进场到峰值 ≥1.9 的**总时长 ≥300ms**（旧版 0.09s 时间常数约 200ms 就长满）。 */
+    /* N6 ⭐ **动画时长 = 恢复后的速度**（2026-10-07 第 14 轮**改写**）。
+       **原断言 → 新断言 + 为什么**：上一版站主说要「慢一点」，这里立过「总时长 ≥300ms」；
+       本轮站主**改成「动画太慢了，恢复原来的速度」** ⇒ "≥300ms" 作废，换成**钉住"渐变 + 与
+       `78e9d18` 那版速度一致"**：
+         · **有中间帧**（采到 0.05 < scale < 1.9 的过渡帧）→ 证明是渐变不是瞬跳；
+         · **长满用时 ≤600ms** —— 原来的时间常数就是 0.09s（`78e9d18` 里写死的 `dt / 0.09`），
+           本版把 `MAGNIFY_TAU` 恢复成 0.09、逐图标缓动用它的 ~一半（`MAGNIFY_EASE_TAU = 0.05`），
+           两级叠加后 90% 用时约 250ms，留一倍余量到 600ms 防抖动。
+       ⚠️ 不要再写成"≥300ms"（那会把"恢复原速"误判成 bug）。 */
+    {
+      await p.mouse.move(640, 120)
+      await settleT()
+      const t0 = Date.now()
+      await p.mouse.move(cen[midI], dockGeom.y)
+      const series = []
+      for (let i = 0; i < 34; i += 1) {
+        const sc = await readScalesNow()
+        series.push({ t: Date.now() - t0, s: Math.max(...sc) })
+        if (series[series.length - 1].s >= 1.9) break
+        await p.waitForTimeout(40)
+      }
+      const midFrames = series.filter((x) => x.s > 0.05 && x.s < 1.9).length
+      const final = series[series.length - 1]
+      check(
+        '⭐ **动画是渐变、且速度已恢复**：进场生长**有中间帧**（采到 0.05 < scale < 1.9 的过渡帧）且**长满 ≤600ms** —— 站主 2026-10-07 修正「动画太慢了，恢复原来的速度」（`MAGNIFY_TAU` 恢复 0.09、`MAGNIFY_EASE_TAU` 0.05）',
+        midFrames >= 2 && final.s >= 1.9 && final.t <= 600,
+        JSON.stringify({ 中间帧数: midFrames, 长满用时ms: final.t, 峰值: Number(final.s.toFixed(3)), 序列: series.map((x) => `${x.t}:${x.s.toFixed(2)}`).slice(0, 12) }),
+      )
+    }
     /* (4) **不许抖**：恒速慢扫（2px/步、每步 28ms），盯着**固定一个图标**采样：
        相邻两次变化 ≤0.06，且方向**不许来回翻转**（≤1 次）。 */
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(300)
+    await settleT()
     await p.mouse.move(cen[midI - 2], dockGeom.y)
     await p.waitForTimeout(220)
     const watch = midI
@@ -2553,31 +2751,36 @@ async function run() {
       series.length === 20 && Math.max(...dser) <= 0.06 && flips <= 1,
       JSON.stringify({ 最大帧间差: Number(Math.max(...dser).toFixed(3)), 方向翻转: flips, 序列: series.map((s) => s.toFixed(3)) }),
     )
-    /* (5) **进入时让路**：栏外 → 栏内，紧邻位移 >2px，且**是渐进的**（50ms 时处于中间态） */
-    await p.mouse.move(640, 120)
-    await p.waitForTimeout(340)
-    const beforeIn = await readT()
-    await p.mouse.move(cen[midI], dockGeom.y, { steps: 2 })
-    await p.waitForTimeout(50)
-    const duringIn = await readT()
-    await p.waitForTimeout(340)
-    const afterIn = await readT()
-    const nL = midI - 1
-    const nR = midI + 1
-    const dist = (arr, i) => Math.abs(arr[i]?.t ?? 0)
-    check(
-      '**进入任务栏时让路**：紧邻图标的位移 >2px（看得出"滑开"），且**是渐进的**（50ms 时处于 0 与到位值之间）',
-      dist(afterIn, nL) > 2 &&
-        dist(afterIn, nR) > 2 &&
-        dist(duringIn, nL) > 0.5 &&
-        dist(duringIn, nL) < dist(afterIn, nL) &&
-        dist(beforeIn, nL) < 0.5,
-      JSON.stringify({
-        进入前: [beforeIn[nL]?.t, beforeIn[nR]?.t],
-        '50ms': [duringIn[nL]?.t, duringIn[nR]?.t],
-        到位: [afterIn[nL]?.t, afterIn[nR]?.t],
-      }),
-    )
+  /* (5) ⭐ **进入时让路**（2026-10-07 第 14 轮**改写**）。
+     **原断言 → 新断言 + 为什么**：原来要求「**左右两个紧邻**位移都 >2px，且 50ms 时处于中间态」
+     —— 那是"整排按连续场让路"的口径；新口径是「**其他不变**、**右侧紧邻**可以有一点让路」
+     ⇒ **左侧紧邻必须一动不动**（原来它越大越算对，现在反了），而且只有右侧那颗 >0；
+     渐进性照旧要（说明是动画不是瞬移），但**采样点从 50ms 挪到"中途"**：新动画 ~0.5s，
+     50ms 才走了 10%（可能取到 0），所以用 `settleT` 之前的**中途**读数判渐进。 */
+  await p.mouse.move(640, 120)
+  await settleT()
+  const beforeIn = await readT()
+  await p.mouse.move(cen[midI], dockGeom.y, { steps: 2 })
+  await p.waitForTimeout(180)
+  const duringIn = await readT()
+  await settleT()
+  const afterIn = await readT()
+  const nL = midI - 1
+  const nR = midI + 1
+  const dist = (arr, i) => Math.abs(arr[i]?.t ?? 0)
+  check(
+    '⭐ **进入时只有右侧紧邻让路、左侧一动不动**（改写自「进入任务栏时让路」）：到位后**右邻位移 >2px**、**左邻位移 ==0(±0.5px)**，且右邻是**渐进的**（中途读数处于 0 与到位值之间）—— 站主 2026-10-07「其他不变」',
+    dist(afterIn, nR) > 2 &&
+      dist(afterIn, nL) <= 0.5 &&
+      dist(duringIn, nR) > 0.3 &&
+      dist(duringIn, nR) < dist(afterIn, nR) &&
+      dist(beforeIn, nR) < 0.5,
+    JSON.stringify({
+      进入前: [beforeIn[nL]?.t, beforeIn[nR]?.t],
+      中途: [duringIn[nL]?.t, duringIn[nR]?.t],
+      到位: [afterIn[nL]?.t, afterIn[nR]?.t],
+    }),
+  )
     /* (6) ⭐ **离开后完全还原**（含"快速扫出"这条最容易留半截状态的路径） */
     const restoreProbe = async (fast) => {
       await p.mouse.move(cen[midI], dockGeom.y)
@@ -2588,7 +2791,7 @@ async function run() {
         await p.waitForTimeout(60)
         await p.mouse.move(80, 90)
       }
-      await p.waitForTimeout(420)
+      await settleT()
       const m = await readT()
       const pitch = await p.evaluate(
         (sel) => {
@@ -2632,9 +2835,9 @@ async function run() {
        解冻重算 —— 单点/静止读数抓不到这个毛病，只有"一边抖一边量极差"才证明它**真的冻住了**。
        （±8px 远小于 45px 的格距，取整后仍是同一颗图标 → 按新口径**不许**解锁。）*/
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(320)
+    await settleT()
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
-    await p.waitForTimeout(450)
+    await settleT()
     const freezeSamples = []
     for (let k = 0; k < 10; k += 1) {
       freezeSamples.push(await readT())
@@ -2669,40 +2872,62 @@ async function run() {
         最大位移漂移: Number(maxShiftDrift.toFixed(2)),
       }),
     )
-    /* (7b) ⭐ **换到另一颗图标才解冻**：指针跨过半格（移到紧邻那颗的中心）→ 必须解冻并**重新生长**：
-       新峰 ≥1.9；旧峰从小下去（它现在成了"紧邻"，按曲线是 1.19 → 判 ≤1.25 即"确实回落"）。
-       ⚠️ 判据不能要求旧峰 == 1.0：**紧邻本来就该留一点起伏**（站主："两侧只动一丢丢"）。 */
+    /* (7b) ⭐⭐ **换到另一颗图标就解锁**（2026-10-07 第 14 轮**改写两遍**，写清沿革别删）。
+       **原断言 → 新断言 + 为什么**：
+         · 原①「换到另一颗图标才解冻：跨过半格到紧邻那颗 → 旧的回落 ≤1.25、新的长到 ≥1.9」；
+         · 原②（同一个语义，中间那版把框做成各向 +30px 时）「**框内**换到紧邻那颗 = 一动不动」
+           —— 那时框 78px 宽、一格的 50px 落在框内；
+         · ⭐ **现版（站主定稿：框 = 放大图标尺寸 + 一个间距 = 96 + 3 → 每侧只 +1.5px）**：
+           框几乎就是放大图标本体，**紧邻那颗（+50px）已经在框外** ⇒ 回到"**换到另一颗就解锁**"
+           （站主本轮原话里的"冻结解锁只看槽位"）。
+         判据：移到紧邻那颗的中心 → 旧的回落（≤1.05）、新的长到 ≥1.9。 */
+    const frozenBefore = await readT()
     await p.mouse.move(cen[midI + 1], dockGeom.y, { steps: 4 })
-    await p.waitForTimeout(450)
+    await settleT()
+    const insideBox = await readT()
+    const oldPeakAtNeighbor = insideBox[midI]?.s ?? 1
+    const newPeakAtNeighbor = insideBox[midI + 1]?.s ?? 1
+    check(
+      '⭐ **换到紧邻那颗就解锁（冻结解锁只看槽位）**：指针移到紧邻那颗的中心（+50px，已在"图标盒 + 1.5px"的冻结框之外）→ 旧的回落 ≤1.05、新的长到 ≥1.9（沿革：中间那版把框做成各向 +30px 时是"框内换过去也不动"，站主定稿收窄后回到槽位口径）',
+      oldPeakAtNeighbor <= 1.05 && newPeakAtNeighbor >= 1.9,
+      JSON.stringify({ 冻结时: frozenBefore.map((v) => Number(v.s.toFixed(3))), 换过去后: insideBox.map((v) => Number(v.s.toFixed(3))), 旧峰: Number(oldPeakAtNeighbor.toFixed(3)), 新峰: Number(newPeakAtNeighbor.toFixed(3)) }),
+    )
+    /* ② 移出框（> 半宽 + FREEZE_PAD）→ 才换目标 */
+    await p.mouse.move(cen[midI + 3], dockGeom.y, { steps: 4 })
+    await settleT()
     const afterNeighbor = await readT()
     const oldAtNeighbor = afterNeighbor[midI]?.s ?? 1
-    const newAtNeighbor = afterNeighbor[midI + 1]?.s ?? 1
+    const newAtNeighbor = Math.max(...afterNeighbor.map((v) => v.s))
     check(
-      '⭐ **换到另一颗图标才解冻**：指针跨过半格到紧邻那颗 → 旧的回落（≤1.25）、新的长到 ≥1.9（"移动到另一个图标上才解冻"）',
-      oldAtNeighbor <= 1.25 && newAtNeighbor >= 1.9,
-      JSON.stringify({ 旧的: oldAtNeighbor, 新的: newAtNeighbor, 整排: afterNeighbor.map((v) => v.s) }),
+      '⭐ **移出大框才换目标**：指针移到 3 格外（越过"半宽 48 + 30"的框边）→ 新的那颗长到 ≥1.9、旧峰回落（≤1.05）',
+      oldAtNeighbor <= 1.05 && newAtNeighbor >= 1.9,
+      JSON.stringify({ 旧峰: Number(oldAtNeighbor.toFixed(3)), 新峰: Number(newAtNeighbor.toFixed(3)), 整排: afterNeighbor.map((v) => Number(v.s.toFixed(3))) }),
     )
-    /* (8) ⭐ **换了图标才动 / 移开才缩**：指针从 i 移到 i+2 → 旧峰缩回 1.0(±0.02)、新峰长到 ≥1.9。
-       ⚠️ 用 i+2 而不是 i+1：**紧邻**按现在的曲线应该是 1.19（比峰小、比 1 大），不是 1.0 ——
-       站主那句话的意思是"离开的那颗要缩回去"，最近的邻居本来就该留一点起伏。 */
+    /* (8) ⭐ **换了图标才动 / 移开才缩**（2026-10-07 第 14 轮**补归位**）。
+       ⚠️ 这里必须先**移出任务栏等它收回**：上一条断言把指针留在了 `midI + 3`（那里成了新峰），
+       而冻结大框是 ±(半宽 48 + 30) = ±78px —— 只往回移一格（50px）**还在框里**，
+       按新口径"框内换图标不算离开"，于是这条会红（实测"新的那颗"=1.0，看着像没换目标，
+       其实是被框留住了）。归位后从"没放大"起步，才是它真正要量的语义。 */
+    await p.mouse.move(640, 120)
+    await settleT()
     await p.mouse.move(cen[midI + 2], dockGeom.y, { steps: 3 })
-    await p.waitForTimeout(450)
+    await settleT()
     const afterSwitch = await readT()
     const oldPeak = afterSwitch[peakFrozen]?.s ?? 1
     const newPeak = afterSwitch[midI + 2]?.s ?? 1
     check(
-      '⭐ **换了图标才动**：指针移到 2 格外 → 原来那颗缩回 1.0(±0.02)、新的那颗长到 ≥1.9（"移开就缩小"）',
+      '⭐ **换了图标才动**：归位后指针移到 2 格外 → 原来那颗（`peakFrozen`）保持 1.0(±0.02)、新的那颗长到 ≥1.9（"移开就缩小"）',
       Math.abs(oldPeak - 1) <= 0.02 && newPeak >= 1.9,
-      JSON.stringify({ 原来那颗: oldPeak, 新的那颗: newPeak, 整排: afterSwitch.map((v) => v.s) }),
+      JSON.stringify({ 原来那颗: Number(oldPeak.toFixed(3)), 新的那颗: Number(newPeak.toFixed(3)), 整排: afterSwitch.map((v) => Number(v.s.toFixed(3))) }),
     )
     /* (9) ⭐ **悬停零裁切**（站主：「也允许任务栏稍微左右扩张，以保证不会有图标溢出」）：
        悬停**最左 / 最右**两个极端图标 —— 它们自己的 2× 增量最容易顶出图标区、被主轴 `clip-path`
        切掉一截。判据：**每个**图标的主轴渲染盒都完整落在图标区内（越界 ≤0.5px）、且都在视口内。 */
     const clipProbe = async (idx) => {
       await p.mouse.move(640, 120)
-      await p.waitForTimeout(320)
+      await settleT()
       await p.mouse.move(cen[idx], dockGeom.y, { steps: 4 })
-      await p.waitForTimeout(380)
+      await settleT()
       return p.evaluate((sel) => {
         const view = document.querySelector(sel + ' [data-dock-view]')
         const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
@@ -2761,7 +2986,7 @@ async function run() {
     const lenBase = await waitStableW()
     const storeBefore = await p.evaluate(() => localStorage.getItem('desktop.dock'))
     await p.mouse.move(cen[Math.floor(cen.length / 2)], dockGeom.y, { steps: 3 })
-    await p.waitForTimeout(420)
+    await settleT()
     const lenHover = await viewW()
     await p.mouse.move(640, 120)
     const lenAfter = await waitStableW()
@@ -2795,10 +3020,10 @@ async function run() {
        "见过的最大值"，宽度恒定，离开时随 `amp` 平滑收回。
        判据：连续跨 3 个图标，逐帧采样图标区宽度与 `view.left`。 */
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(340)
+    await settleT()
     const sweepFrom = Math.min(2, Math.max(0, cen.length - 8))
     await p.mouse.move(cen[sweepFrom], dockGeom.y, { steps: 4 })
-    await p.waitForTimeout(420)
+    await settleT()
     await p.evaluate((sel) => {
       const view = document.querySelector(sel + ' [data-dock-view]')
       window.__w = []
@@ -2835,7 +3060,7 @@ async function run() {
       }),
     )
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(340)
+    await settleT()
     /* (12) ⭐ **生长中途离开 = 停止变大并缩小**（站主 2026-10-07：「我要移动到图标上，就动画变大，
        **在动画过程中移动到其他图标，就会停止变大，然后变小**」）。
        做法：从栏外**一步落到**图标 4（触发进场生长：`fade` ~90ms 内 0→1），约 40ms 后（长到 ~1.3~1.5）
@@ -2843,7 +3068,7 @@ async function run() {
        且随后**确实缩小**（至少降 0.05）。 */
     const growIdx = Math.min(4, cen.length - 2)
     await p.mouse.move(cen[0], 120)
-    await p.waitForTimeout(420)
+    await settleT()
     await p.evaluate(() => {
       const items = [...document.querySelectorAll('nav[aria-label="任务栏"] [data-dock-item][data-dock-copy="1"]')]
       const el = items[4]
@@ -2863,7 +3088,7 @@ async function run() {
       return m ? Number(m[1]) : 1
     })
     await p.mouse.move(cen[growIdx + 1], dockGeom.y)
-    await p.waitForTimeout(420)
+    await settleT()
     const gSamples = await p.evaluate(() => {
       cancelAnimationFrame(window.__gr)
       return window.__g
@@ -2883,7 +3108,7 @@ async function run() {
       }),
     )
     await p.mouse.move(640, 120)
-    await p.waitForTimeout(340)
+    await settleT()
   } else {
     check('波浪四组（外圈不动 / 方向不对称 / 停手对称 / 不抖 / 进入让路 / 离开还原）', false, 'dockGeom 拿不到')
   }

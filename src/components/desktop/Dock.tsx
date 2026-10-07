@@ -12,17 +12,19 @@ import {
   DOCK_MARGIN,
   DOCK_PAD as PAD,
   DOCK_THICKNESS,
-  /* ⚠️ 2026-10-07 站主口径反转：**两侧邻居等大**（不再随滑动方向变化）→ 这里**不再 import**
-     `ASYM_BIAS` / `ASYM_V_REF`（常量本身留在 `lib/dock.ts` 记沿革，别删）。
-     `ASYM_DEAD` / `ASYM_DECAY` 仍要：速度 EMA 还要**衰减到 0**，`tick` 的安定判据在用。 */
-  ASYM_DEAD,
+  /* ⚠️ 波浪模型已退役（2026-10-07 第 14 轮，站主最新口径优先）→ **不再 import** `MAGNIFY_EXP` /
+     `MAGNIFY_RADIUS_SLOTS` / `ASYM_BIAS` / `ASYM_V_REF` / `ASYM_DEAD`（常量都留在 `lib/dock.ts` 记沿革，
+     别删）。`ASYM_DECAY` 仍要：速度 EMA 还要衰减到 0，`tick` 的安定判据在用。 */
   ASYM_DECAY,
+  FREEZE_PAD,
   LATCH_MS,
   LATCH_SNAP_TAU,
   LEAVE_SLACK,
-  MAGNIFY_EXP,
+  MAGNIFY_EASE_TAU,
+  MAGNIFY_NEIGHBOR_PUSH,
   MAGNIFY_PEAK,
-  MAGNIFY_RADIUS_SLOTS,
+  MAGNIFY_RIGHT_NEIGHBOR,
+  MAGNIFY_TAU,
   MOVE_THRESHOLD,
   SPRING_DAMPING,
   SPRING_STIFFNESS,
@@ -172,6 +174,16 @@ export function Dock() {
   /** 波浪把整排推宽时，图标区**临时**撑开的长度（null = 没撑，用 React 给的 `viewLen`）。
    *  只写 DOM 的内联宽高，**绝不写回 `desktop.dock`** —— 指针离开必须像素级复原（见 `paint` 的 ④）。 */
   const waveLen = useRef<number | null>(null)
+  /** ⭐ 第 14 轮：**每个图标自己当前的缩放**（逐帧按 `MAGNIFY_TAU` 缓动到目标档位）。
+   *  为什么要它：新模型是**离散选中**（一颗一颗换），若把目标值直接写进 transform，
+   *  换目标时旧那颗会 **1.0 一帧跳变**（观感就是"啪"地缩回去）。缓存现值 → 慢动作收放 ✓
+   *  （站主：「**动画的动作慢一点**」；"不许抖"也才继续成立）。 */
+  const easeS = useRef<number[]>([])
+  /** 上一次 `paint()` 的时间戳（缓动用 dt）。 */
+  const lastPaint = useRef(0)
+  /** ⭐ 第 14 轮：**逐图标缓动还没走完**（`paint()` 每帧写，`tick` 的 `settled` 读）——
+   *  不加它，rAF 循环会在缓动半路停下、图标冻在中间尺寸。 */
+  const easeBusy = useRef(false)
   /** 悬停期间的**扩张容量上限**（peak-hold，见 `paint()` 里那段注释）：取整次悬停期间见过的最大伸出量，
    *  不随指针在图标之间移动回落 —— 否则居中布局下整排会随宽度"呼吸"而左右平移（实测 3.19px 抖动）。 */
   const waveHold = useRef(0)
@@ -502,58 +514,62 @@ export function Dock() {
     const active = fade > 0.002
     const amp = active ? fade : 0
     const magBtn = Math.max(1, step - GAP)
-    /* ①3 2026-10-06（第 8 轮）**最终口径**：站主「图标问题还是**震动感太强**……**其他图标要是尽量不动的，
-       只有左右两个图标变化**。从左往右滑动，左边就比右边的小一点；从右往左滑动，右边就比左边小一点」。
-       → 半径收到 **1.5 格**（`MAGNIFY_RADIUS_SLOTS`）、曲线幂 **1.9**（`MAGNIFY_EXP`）：
-         实测曲线 `d=0 → 2.00 / d=0.5 → 1.46 / d=1 → 1.12 / d=1.5 → 1.00 / d≥2 → 1.00`。
-         **到窗口边缘正好回 0**，所以第 2 格之外的图标既不缩放也不位移，**且不会在边界 pop 一下**。
-       ⚠️ 别把半径改回 3~5：那样"整排都在动"，正是站主说的"其他图标被挤"和"震动感"。 */
-    const wave = (d: number) => {
-      const t = Math.min(1, Math.abs(d) / MAGNIFY_RADIUS_SLOTS)
-      return Math.pow(1 - t, MAGNIFY_EXP)
-    }
-    /* ② **两侧邻居等大**（2026-10-07 站主口径反转：「两侧图标生长大小改为**略大于正常图标、且一样大**」）。
-       原来是"把波峰按平滑速度偏置"（`hotEff = hot + vNorm * ASYM_BIAS`，最多 0.3 格）做出
-       "左邻居小、右邻居大"的方向感 —— **现在取消**（那条口径被站主推翻）。
-       于是 `hotEff = hot`：两侧同一个 `wave(1)` 值 ⇒ **严格等大**，且与滑动方向无关（滑动中、
-       停手后都等大）。邻居的大小改由 `MAGNIFY_EXP`（=1.9）定，实测 d=1 → **1.12**。
-       ⚠️ 想恢复方向感：把 `ASYM_BIAS`/`ASYM_V_REF` 重新 import，并把这行改回 `hot + vNorm * ASYM_BIAS`
-       （`vNorm` 的定义是 `clamp(pointer.current.vEma / ASYM_V_REF, -1, 1)`）—— 常量都还在 `lib/dock.ts`。 */
-    const hotEff = hot
-    const scales = items.map((_, i) => {
+    /* ①3 ⭐⭐ 2026-10-07（第 14 轮）**站主最新口径，优先于之前所有波浪口径**：
+       「**先光做选中图标放大，和右侧图标放大，其他不变**」→ **波浪模型退役**，改成**三个离散档**：
+         · `i === sel`（选中那颗）     → `MAGNIFY_PEAK` = **2×**，自身不动
+         · `i === sel + 1`（右侧紧邻） → `MAGNIFY_RIGHT_NEIGHBOR` = **1.12**（"略大于正常"）
+         · 其余（**含左侧紧邻**）       → **1.0**
+       ⚠️ **推翻**了上一轮的「两侧邻居等大」与更早的「方向不对称」：波浪那套常量不再参与渲染（留着记沿革）。
+       ⚠️ `sel` 是**整数**槽位（选中是一颗一颗换，不是连续波峰）；冻结期间它被锁住，
+       只有"指针移出大框"才重算（见 `wheelMove` 的 `frozen` 与 `FREEZE_PAD`）。
+       ⭐ **每个图标自己的缩放按 `MAGNIFY_TAU` 缓动**（站主：「**动画的动作慢一点**」）：
+       换目标时旧的 2× 是**平滑收回**的，不是"啪"地掉回 1.0 —— 这也是"不许抖"能继续成立的原因。 */
+    /* ⚠️ 选中槽位的取法（第 14 轮踩过的坑）：**不能直接 `Math.round(hot)`** ——
+       停手后 `hot` 会被 `tick` 缓动地滑向 `settleTo`（指针当时的连续位置），
+       滑过格边界时 `round(hot)` 会**翻到隔壁**（实测"停手后波峰自己追了一格"：9 → 10）。
+       所以：已冻住就用 `latched`；正在吸附就用**吸附目标** `settleTo` 取整（一确定就不再变）；
+       否则才跟着连续的 `hot` 走。 */
+    const ptSel = pointer.current
+    const sel =
+      ptSel.latched !== -1
+        ? ptSel.latched
+        : ptSel.settleTo !== null
+          ? Math.round(ptSel.settleTo)
+          : Math.round(hot)
+    const targetScale = (i: number) => {
       if (!active) return 1
-      return 1 + (MAGNIFY_PEAK - 1) * wave(i - hotEff) * amp
-    })
-    /* ③ 位移：**峰值那个绝不动**（它往栏外长，位移会让它和邻居叠在一起）；
-       **第 2 格之外位移恒 0**（站主：「其他图标要是尽量不动的」）；
-       紧邻按**峰值增量的一半**让路（进入时看得出"滑开"约 12px；乘 `amp` → 离开时平滑收回、末态严格 0）。
-       ⚠️ 大图标会**压住邻居的圆角**（macOS 就是这样），所以这里不追求"互不相交"——
-       `verify` 里那条"交叠不超过一半"的放宽断言正是为此，别改成"不许交叠"。 */
-    /* ⚠️ 位移用**连续累计场**，不许退回"取整锚点 + 整段重算"（实测：锚点离散会让单步 2px 的
-       scale 跳 0.483、固定图标帧间 0.101 —— 两条断言当场红，那正是站主报的"跳一下/震动"）。
-       定义（`x` 是**浮点**槽位，逐段线性 → 对 hot 连续）：
-         gapShift(j) = ((s_j − 1) + (s_{j+1} − 1)) · magBtn / 2        // 相邻两格之间让出的缝
-         F(x)        = Σ_{j<⌊x⌋} gapShift(j) + (x − ⌊x⌋) · gapShift(⌊x⌋)
-         shift(i)    = sign(i − hot) · (F(max(i,hot)) − F(min(i,hot)))   // 且 i === round(hot) 时为 0
-       `hot` 取整数时它**退化成原式** ⇒ 相邻两图标的**间隙恒等于 `DOCK_GAP`**（与 scale 无关，逐对相等）
-       —— 这就是站主要的"图标之间的距离一致"。**注意量的是间隙、不是中心距**（中心距 = 两图标半宽
-       之和 + DOCK_GAP，尺寸不同时必然不等）。amp → 0 时 scales → 1 ⇒ gapShift → 0 ⇒ 位移自然归零。 */
-    const gapShift = (j: number) => ((scales[j] ?? 1) - 1 + (scales[j + 1] ?? 1) - 1) * magBtn * 0.5
-    const field = (x: number) => {
-      const k = Math.floor(x)
-      let sum = 0
-      for (let j = 0; j < k; j++) sum += gapShift(j)
-      return sum + (x - k) * gapShift(k)
+      if (i === sel) return 1 + (MAGNIFY_PEAK - 1) * amp
+      if (i === sel + 1) return 1 + (MAGNIFY_RIGHT_NEIGHBOR - 1) * amp
+      return 1
     }
-    const shifts = items.map((_, i) => {
-      if (!active) return 0
-      if (i === Math.round(hotEff)) return 0
-      const hi = Math.max(i, hotEff)
-      const lo = Math.min(i, hotEff)
-      const mag = field(hi) - field(lo)
-      if (Math.abs(mag) <= 0.01) return 0
-      return (i < hotEff ? -1 : 1) * mag
+    if (easeS.current.length !== items.length) easeS.current = items.map(() => 1)
+    const nowP = performance.now()
+    const dtP = lastPaint.current ? Math.min(0.05, Math.max(0.001, (nowP - lastPaint.current) / 1000)) : 0.016
+    lastPaint.current = nowP
+    const scales = items.map((_, i) => {
+      const to = targetScale(i)
+      const cur = easeS.current[i] ?? 1
+      const next = cur + (to - cur) * Math.min(1, dtP / MAGNIFY_EASE_TAU)
+      easeS.current[i] = next
+      return next
     })
+    /* ⭐⭐ 第 14 轮：**把"缓动还没走完"告诉 rAF 循环**（`tick` 的 `settled` 判据用它）。
+       ⚠️ 这是本轮踩到的真坑：`tick` 原来只看 `fade`/速度/吸附是否安定，**不看逐图标缓动** ——
+       于是循环在缓动走到一半时就 `raf.current = 0` 停下，图标被**冻在半路**（实测 1.83、凸出只有 27px
+       而不是 40.9px，"换了图标才动 / 凸出 ≥ 增量"那几条断言当场红）。
+       现在只要还有图标离目标 >0.002 就继续排帧，缓动一定走完。 */
+    easeBusy.current = scales.some((s, i) => Math.abs(s - targetScale(i)) > 0.002)
+    /* ③ 位移（第 14 轮按新口径重写）：站主「**其他不变**」「左侧紧邻 1.0 / 位移 0」、
+       「右侧紧邻**可以有一点让路**」→ **只推右侧紧邻那一颗**，别的（含左侧紧邻）**一动不动**。
+       ⚠️ 这是从"连续累计场"退回**离散单点位移**，是有意的：新模型本身就是**离散选中**（一颗一颗换），
+       不再需要"整排按连续场让路"。**旧模型那条铁律（连续量不许取整当锚点）在这里不适用** ——
+       因为**已经没有连续量**：`sel` 恒为整数、位移只挂在 `sel+1` 上，且乘 `amp` 平滑收放。
+       ⚠️ 让路量刻意给得小（`MAGNIFY_NEIGHBOR_PUSH = 0.25` × 峰值半增量 ≈ **6px**）：
+       大图标压住邻居圆角是 macOS 的样子（verify 那条"交叠不超过一半"的放宽断言仍适用），
+       但**别把邻居推成"完全让开"** —— 那样它会压住再右边那颗，而站主说"其他不变"。
+       amp → 0 时归零（离开后位移严格 0，verify 有断言钉着）。 */
+    const pushRight = (MAGNIFY_PEAK - 1) * magBtn * 0.5 * MAGNIFY_NEIGHBOR_PUSH * amp
+    const shifts = items.map((_, i) => (!active || i !== sel + 1 ? 0 : pushRight))
     items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
       if (lift.current && lift.current.el === el) return
@@ -652,7 +668,9 @@ export function Dock() {
        于是 `0.002 < fade < 0.004` 时循环已经 `settled` 停下、而 `active` 仍为真 →
        **扩张宽度永远不会被复原**（"松手后像素级复原"那条断言因此红；以前是靠"React 重渲染会把
        宽度写回"这个 bug 掩盖着，2026-10-07 长度改成命令式接管后它就露出来了）。 */
-    pt.fade += (pt.target - pt.fade) * Math.min(1, dt / 0.09)
+    /* ⭐ 第 14 轮：时长改成**具名常量** `MAGNIFY_TAU`（站主「**动画的动作慢一点**」：0.09 → **0.16s**，
+       总时长 ≈450ms）。⚠️ 冻结仍是硬要求：`fade` 到 1 就该停（配合"大框"冻结，不许"一直在缓慢漂移"）。 */
+    pt.fade += (pt.target - pt.fade) * Math.min(1, dt / MAGNIFY_TAU)
     const fadeSettled = Math.abs(pt.target - pt.fade) < 0.002
     if (fadeSettled) pt.fade = pt.target
     /* ⚠️⚠️ 2026-10-06（站主：「在图标之间移动的时候感觉还不够顺滑，左右滑动鼠标有瞬间移动的感觉」）：
@@ -675,21 +693,24 @@ export function Dock() {
       pt.hot += (pt.settleTo - pt.hot) * Math.min(1, dt / LATCH_SNAP_TAU)
       if (Math.abs(pt.hot - pt.settleTo) < 0.004 && pt.vEma === 0) {
         pt.hot = pt.settleTo
-        pt.latched = pt.settleTo
+        /* ⭐ 第 14 轮：冻结点锁成**整数槽位**（新模型是"选中一颗"的离散模型；
+           配 `pointerInFreezeBox` 的大框，解锁只由"移出框"决定，不会像旧模型那样来回跳）。 */
+        pt.latched = Math.round(pt.settleTo)
         pt.settleTo = null
       }
     } else if (pt.latched === -1) {
       pt.hot = pt.hotTarget
     }
-    /* 方向不对称的速度**在指针事件里算**（`wheelMove`），这里只负责**衰减**：
-       指针停住后 `vEma` 平滑归零 → 波峰偏置归零 → **左右收敛回对称**（站主明确要求）。
-       循环也因此要多跑一会儿（速度没归零就不能停，否则不对称会"冻"在歪的状态）。 */
+    /* 方向不对称的"速度"已经整段退役（第 14 轮口径：只有右侧放大、与滑动方向无关）——
+       这里只保留**衰减到 0** 这一步（`vEma` 恒为 0，无害），因为它还挂在 `settled` 判据里：
+       循环要等它归零才允许停，删掉反而要多改一处判据。⚠️ 原来的 `ASYM_DEAD` 死区行已删（没用处了）。 */
     pt.vEma += (0 - pt.vEma) * Math.min(1, dt / ASYM_DECAY)
-    if (Math.abs(pt.vEma) < ASYM_DEAD) pt.vEma = 0
     paint()
-    /* 循环收尾：强度、**速度**、吸附都安定，而且要么**已经冻住**、要么指针**已经离开**，才停。
-       ⚠️ 指针还在栏上但**没冻住**时必须继续跑 —— 否则"停稳 200ms 后开始吸附"这个定时条件没人来触发。 */
-    const settled = fadeSettled && pt.vEma === 0 && pt.settleTo === null
+    /* 循环收尾：强度、**速度**、吸附、**以及逐图标缓动**都安定，而且要么**已经冻住**、
+       要么指针**已经离开**，才停。
+       ⚠️ 指针还在栏上但**没冻住**时必须继续跑 —— 否则"停稳 200ms 后开始吸附"这个定时条件没人来触发。
+       ⚠️ `!easeBusy.current` 是第 14 轮补的：缓动走完之前不许停（否则图标冻在半路，见 `easeBusy` 的注释）。 */
+    const settled = fadeSettled && pt.vEma === 0 && pt.settleTo === null && !easeBusy.current
     if (settled && (pt.latched !== -1 || pt.target === 0)) {
       raf.current = 0
     } else {
@@ -886,6 +907,22 @@ export function Dock() {
     }
     return false
   }
+  /** ⭐⭐ 第 14 轮：**冻结期间允许的"大框"** —— 放大后那个图标的渲染盒，**各向外扩 `FREEZE_PAD`**。
+   *  站主：「在放大的图标外围**一个足够大的框范围内**……都**不许动**，直到**移出这个框**之后再变化」。
+   *  ⚠️ 与 `pointerInDockUnion`（`LEAVE_SLACK = 5px`，管"还算不算在任务栏区域里、要不要收起"）是
+   *  **两回事**，两者都要：**先判大框**（框里 → 什么都不做），**出了框再判并集**（并集外才收起）。
+   *  ⚠️ 框的中心是**放大后图标**的盒子（不是指针位置）：图标一放大就往栏外长，框也跟着把栏外那截包进去。 */
+  function pointerInFreezeBox(e: { clientX: number; clientY: number }, slot: number): boolean {
+    const el = mainCentres().els[slot]
+    if (!el) return false
+    const r = el.getBoundingClientRect()
+    return (
+      e.clientX >= r.left - FREEZE_PAD &&
+      e.clientX <= r.right + FREEZE_PAD &&
+      e.clientY >= r.top - FREEZE_PAD &&
+      e.clientY <= r.bottom + FREEZE_PAD
+    )
+  }
   function wheelLeave(e?: { clientX: number; clientY: number }) {
     if (gesture.current) return
     /* ⭐ 2026-10-07（第 13 轮）**站主报的真 bug**：「图标放大之后，移动到任务栏**上边缘**会取消选中图标」。
@@ -970,55 +1007,22 @@ export function Dock() {
             }
           }
         }
-        pointer.current.hotTarget = target
-        /* ⭐ 冻结（站主 2026-10-07：「**完成生长动画就不要动了，直到我移动到其他图标之后再缩小**」）：
-           冻住的锚点是**指针当时的实际位置**（连续值，不是取整槽位）——
-           ⚠️ 锚在**取整槽位**上会出问题：指针停在偏离格中心处时，`tick` 把它吸附到格心、
-           下一个事件又把它跳回指针处 → **来回跳**（实测单步 2px 的 scale 变化 0.483，
-           两条"不抖/单步"断言当场红）。锚在指针处，吸附几乎不产生位移，解锁时的补量也 ≤ 死区。
-           冻住之后**同格内的 pointermove 就不排帧、不碰 hot、也不更新速度 EMA** —— 这才是"完全不动"
-           （不是"继续算但值恰好不变"）。
-           ⚠️ 只冻结**悬停驱动**这一段：下面的拖动手势照旧（拖动自己会 `schedulePaint`），
-              所以这里绝不 `return`，只把悬停那段跳过。 */
+        /* ⭐⭐ 2026-10-07（第 14 轮）**冻结判定改成"大框"** —— 站主：「在**放大的图标外围一个足够大的
+           框范围内**，在放大动画做完之后就**都不许动**，直到**移出这个框**之后再变化」。
+           ⇒ 解锁条件 = **指针移出大框**（放大后那个图标的渲染盒，各向外扩 `FREEZE_PAD = 30px`）。
+           ⚠️ **推翻**了上一轮的"换到另一个图标才解冻"（那版只看目标槽位变没变）：现在**框内换到
+           别的图标也不算离开** —— 站主要的就是"框内一切都不许变"。
+           ⚠️ 它**不是** `LEAVE_SLACK`（5px 那个管"还算不算在任务栏区域里、要不要收起"）——
+           两者都要：**先判大框**（在框里 → 什么都不做），**出了框再判任务栏并集**（并集外才收起）。
+           ⚠️ 冻住之后这里**不写 `hotTarget`、不排帧、不碰 hot** —— 这才是"完全不动"。 */
         {
-          /* ⭐ 解锁条件（站主 2026-10-07：「**冻住之后，移动到另一个图标上才解冻**」）：
-             只看**目标槽位**变没变（取整后比较），**不再看漂移量** —— 只要指针还在同一颗图标上，
-             无论它在这颗图标上怎么漂（实测 ±8px 往返）都**不许解锁、不许重算、不许动一像素**。
-             ⚠️ `LATCH_DEAD`（漂移死区）已按这条口径**废弃**：拿漂移当解锁条件会让"手指微抖"就解冻重算
-             —— 那正是站主报的"还在动"。常量留在 `lib/dock` 里记沿革，这里不再引用。 */
           const ptF = pointer.current
-          frozen =
-            ptF.latched !== -1 &&
-            ptF.settleTo === null &&
-            Math.round(target) === Math.round(ptF.latched)
+          frozen = ptF.latched !== -1 && ptF.settleTo === null && pointerInFreezeBox(e, ptF.latched)
         }
-        /* **方向不对称用的速度在这里算**（不是在 tick 里）：用指针事件自己的时间戳与位移 ——
-           事件之间可能一帧都没跑（快速滑动），放 tick 里会取不到样本、速度忽有忽无
-           （实测不对称会来回翻、看着就是"震动"）。⚠️ 仍然只有一个 pointermove 监听。 */
-        if (!frozen) {
-          const pt2 = pointer.current
-          const evT = e.timeStamp || performance.now()
-          if (pt2.moveT) {
-            const dtEv = Math.max(0.004, Math.min(0.08, (evT - pt2.moveT) / 1000))
-            const dHot = target - pt2.prevMoveHot
-            const vRaw = dHot / dtEv
-            /* ⚠️ 权重**按位移**给（不是纯按时间）：时间型 EMA 在 `dtEv≈4~16ms` 时每次事件只吃
-               3%~13%，要几十个事件才建立起来 —— 实测那样偏置只有设计值的 1/4，"方向感"几乎看不见。
-               按位移加权 → 快滑 2~3 个事件就到位，慢滑仍然平缓。 */
-            /* ⚠️ 权重**按位移**给（不是纯按时间）：时间型 EMA 在 `dtEv≈4~16ms` 时每次事件只吃
-             3%~13%，要几十个事件才建立起来 —— 实测那样偏置只有设计值的 1/4，"方向感"几乎看不见。
-             按位移加权 → 快滑 2~3 个事件就到位，慢滑仍然平缓。
-             ⚠️ 2026-10-07（第 11 轮）上限 **0.5 → 0.2**：单次噪声事件原来能推动 `vEma` 一半，
-             实测邻居 scale 出现 **1.008 → 1.005** 这种小幅回落（"不许抖"断言方向翻转 2 次、红）。
-             压到 0.2 后一次事件最多吃 1/5，配合 `ASYM_DEAD` 加大（0.35 → 0.8）把残余噪声直接归零 ——
-             真机 125Hz 下仍然 ~8 个事件（≈60ms）就建立方向感，肉眼无差别。 */
-          const alpha = Math.min(0.2, Math.max(0.04, Math.abs(dHot) / 0.5))
-            pt2.vEma += (vRaw - pt2.vEma) * alpha
-            if (Math.abs(pt2.vEma) < ASYM_DEAD) pt2.vEma = 0
-          }
-          pt2.prevMoveHot = target
-          pt2.moveT = evT
-        }
+        /* ⛔ 方向不对称的"速度 EMA"整段**删除**（第 14 轮口径：只有右侧放大、与滑动方向无关）——
+           那条"绝不拿逐帧位移判方向"的教训随之失效，因为**已经没有方向量**了。
+           `ASYM_*` 常量留在 `lib/dock.ts` 记沿革；`tick` 里对 `vEma` 的衰减保留（恒为 0，无害）。 */
+        if (!frozen) pointer.current.hotTarget = target
       }
       if (!frozen) {
         const pt3 = pointer.current
