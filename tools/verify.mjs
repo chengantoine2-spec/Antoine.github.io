@@ -345,6 +345,34 @@ async function run() {
     wall.img.slice(0, 34),
   )
 
+  /* 站主 2026-10-06 追加的四套 macOS 味道渐变壁纸（极光 / 晚霞 / 海雾 / 紫夜）。
+     ⚠️ 只断言"背景不是 none"是不够的 —— 四套要是抄同一份渐变，那样也会绿；
+     所以这里**两两比对** `backgroundImage`，并要求类名各命中自己的 id。
+     （这条是先在一次性探针里量出 distinct:true 之后才固化的，见 ARCH-THEME.md。） */
+  const WALL_IDS = { 极光: 'aurora', 晚霞: 'sunset', 海雾: 'mist', 紫夜: 'violet' }
+  const wallFx = {}
+  for (const [name, id] of Object.entries(WALL_IDS)) {
+    await p.getByRole('button', { name: new RegExp(name) }).click()
+    await p.waitForTimeout(160)
+    wallFx[name] = await p.evaluate(
+      (want) => {
+        const el = document.querySelector('.desktop__wall')
+        return {
+          hit: !!el && el.className.includes(`desktop__wall--${want}`),
+          img: el ? getComputedStyle(el).backgroundImage : '',
+        }
+      },
+      id,
+    )
+  }
+  const fxValues = Object.values(wallFx).map((v) => v.img)
+  check(
+    '四套新渐变壁纸都能选中、类名命中各自 id，且四张背景两两不同（防"四套抄同一份渐变"）',
+    Object.values(wallFx).every((v) => v.hit && v.img !== 'none' && v.img.includes('gradient')) &&
+      new Set(fxValues).size === fxValues.length,
+    JSON.stringify(Object.fromEntries(Object.entries(wallFx).map(([k, v]) => [k, v.img.slice(0, 44)]))),
+  )
+
   // 7 任务栏边缘缩放 + 双击回自适应
   /* ⚠️ 这一步只测**任务栏自己的几何**，所以要回一个**干净桌面**再量：
      上一步开过设置窗口，而顶部有了菜单栏之后窗口层矮了 28px，那个窗口正好压在任务栏**上沿**
