@@ -380,3 +380,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - `.github/workflows/deploy.yml`：推到 `main` 或手动触发，构建时用 `VITE_BASE` 注入子路径
 - 项目站深链靠 `build:pages` 生成的 `dist/404.html` 兜底，路由 `basename` 取自 `import.meta.env.BASE_URL`
 - Pages 的 Source 必须设为 "GitHub Actions"（仓库 Settings → Pages）
+- `.github/workflows/devlog.yml`：**推到 main 之后**自动生成一篇「开发日志草稿」——`tools/ci-devlog.mjs`
+  读本次推送的提交区间 → 让 DeepSeek（secret 名 **`DEEPSEEKCHAN`**）写成中文第一人称日志 → 用 REST 建 issue。
+  ⚠️ **建成即 `closed`**：公开博客只显示 `state=open`，所以草稿**不会直接上线**，站主在「博客创作」窗口里
+  能看到它、审完点「重新显示」。⚠️ **没有 secret 时打印提示并 `exit 0`**（fork 的 PR / 未配置环境不许把构建弄红）；
+  网络调用有 60s 超时 + 1 次重试，失败也优雅退出，**绝不会带崩部署**。
+  本机自证（不调 API、不建 issue）：`BEFORE=<旧提交> AFTER=HEAD node tools/ci-devlog.mjs --dry-run`

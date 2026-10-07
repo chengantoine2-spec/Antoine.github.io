@@ -1,0 +1,39 @@
+# 开发日志草稿（CI 自动生成）
+# ---------------------------------------------------------------------------
+# 每次推到 main → 读这次推送的提交区间 → 让 DeepSeek 写一篇中文开发日志 →
+# 用 GitHub REST 建成一个**已关闭**的 issue 当作草稿。
+#
+# ⚠️ 为什么建成即 closed：本站公开博客只显示 `state=open` 的 issue，
+#    所以草稿不会立刻出现在线上；站主在「博客创作」窗口里能看到它，审完点「重新显示」即可。
+# ⚠️ fork 的 PR 拿不到 secret（GitHub 限制）→ 脚本在**没有 key 时打印提示并 exit 0**，
+#    不会把构建弄红；所以这个 workflow 永远不该成为部署失败的原因。
+# ⚠️ 别在这里 `echo` 任何 env、也别开 `set -x`：secret 只以 env 形式传给脚本。
+name: 开发日志草稿
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read # 只需读代码
+  issues: write # 建 issue（草稿）
+
+jobs:
+  devlog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 要拿提交区间，浅克隆不行
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 生成开发日志草稿
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEKCHAN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node tools/ci-devlog.mjs
