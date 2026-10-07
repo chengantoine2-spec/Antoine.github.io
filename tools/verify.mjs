@@ -2497,6 +2497,13 @@ async function run() {
     /* (7) ⭐ **生长完成后冻结**：停稳后**连续采样 1s** —— hot 的 scale 变化 ≤0.005、
        **所有**图标位移变化 ≤0.5px。为什么必须"看一段时间"而不是"看一眼"：站主报的正是
        "还在动"（每帧都在微调），单点读数抓不到，只有看极差才证明它真的停住了。 */
+    /* (7) ⭐ **生长完成后冻结（含"漂移不解锁"）** —— 站主 2026-10-07 补的口径：
+       「**冻住之后，移动到另一个图标上才解冻**」。
+       判定要**两段一起看**：① 停稳后**连续采样 1s**；② **在同一颗图标上 ±3px / ±8px 往返抖动**。
+       两段里 hot 的 scale 变化 ≤0.005、**所有**图标位移变化 ≤0.5px。
+       为什么要"抖着量"：站主报的正是"还在动"，而**漂移解锁**的老实现（`LATCH_DEAD`）会让手指微抖就
+       解冻重算 —— 单点/静止读数抓不到这个毛病，只有"一边抖一边量极差"才证明它**真的冻住了**。
+       （±8px 远小于 45px 的格距，取整后仍是同一颗图标 → 按新口径**不许**解锁。）*/
     await p.mouse.move(640, 120)
     await p.waitForTimeout(320)
     await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
@@ -2506,24 +2513,47 @@ async function run() {
       freezeSamples.push(await readT())
       await p.waitForTimeout(100)
     }
+    const jitterSamples = []
+    for (let k = 0; k < 10; k += 1) {
+      await p.mouse.move(cen[midI] + (k % 2 === 0 ? 3 : -3), dockGeom.y)
+      await p.waitForTimeout(60)
+      jitterSamples.push(await readT())
+      await p.mouse.move(cen[midI] + (k % 2 === 0 ? -8 : 8), dockGeom.y)
+      await p.waitForTimeout(60)
+      jitterSamples.push(await readT())
+    }
+    const allFrozen = freezeSamples.concat(jitterSamples)
     const fz0 = freezeSamples[0]
     const peakFrozen = fz0.reduce((b, v, i) => (v.s > fz0[b].s ? i : b), 0)
     const maxScaleDrift = Math.max(
-      ...freezeSamples.map((f) => Math.max(...f.map((v, i) => Math.abs(v.s - (fz0[i]?.s ?? 1))))),
+      ...allFrozen.map((f) => Math.max(...f.map((v, i) => Math.abs(v.s - (fz0[i]?.s ?? 1))))),
     )
     const maxShiftDrift = Math.max(
-      ...freezeSamples.map((f) => Math.max(...f.map((v, i) => Math.abs(v.t - (fz0[i]?.t ?? 0))))),
+      ...allFrozen.map((f) => Math.max(...f.map((v, i) => Math.abs(v.t - (fz0[i]?.t ?? 0))))),
     )
     check(
-      '⭐ **生长完成后冻结**：停稳后连续采样 1s，峰值 scale 变化 ≤0.005、**所有**图标位移变化 ≤0.5px（站主："完成生长动画就不要动了"）',
+      '⭐ **生长完成后冻结（含"漂移不解锁"）**：停稳后 1s + **在同图标上 ±3px/±8px 往返抖动**，全程峰值 scale 变化 ≤0.005、所有图标位移变化 ≤0.5px（站主："冻住之后，移动到另一个图标上才解冻"）',
       (fz0[peakFrozen]?.s ?? 0) >= 1.8 && maxScaleDrift <= 0.005 && maxShiftDrift <= 0.5,
       JSON.stringify({
         峰: peakFrozen,
         峰scale: fz0[peakFrozen]?.s,
+        采样数: allFrozen.length,
         最大缩放漂移: Number(maxScaleDrift.toFixed(4)),
         最大位移漂移: Number(maxShiftDrift.toFixed(2)),
-        首帧: fz0.map((v) => v.s),
       }),
+    )
+    /* (7b) ⭐ **换到另一颗图标才解冻**：指针跨过半格（移到紧邻那颗的中心）→ 必须解冻并**重新生长**：
+       新峰 ≥1.9；旧峰从小下去（它现在成了"紧邻"，按曲线是 1.19 → 判 ≤1.25 即"确实回落"）。
+       ⚠️ 判据不能要求旧峰 == 1.0：**紧邻本来就该留一点起伏**（站主："两侧只动一丢丢"）。 */
+    await p.mouse.move(cen[midI + 1], dockGeom.y, { steps: 4 })
+    await p.waitForTimeout(450)
+    const afterNeighbor = await readT()
+    const oldAtNeighbor = afterNeighbor[midI]?.s ?? 1
+    const newAtNeighbor = afterNeighbor[midI + 1]?.s ?? 1
+    check(
+      '⭐ **换到另一颗图标才解冻**：指针跨过半格到紧邻那颗 → 旧的回落（≤1.25）、新的长到 ≥1.9（"移动到另一个图标上才解冻"）',
+      oldAtNeighbor <= 1.25 && newAtNeighbor >= 1.9,
+      JSON.stringify({ 旧的: oldAtNeighbor, 新的: newAtNeighbor, 整排: afterNeighbor.map((v) => v.s) }),
     )
     /* (8) ⭐ **换了图标才动 / 移开才缩**：指针从 i 移到 i+2 → 旧峰缩回 1.0(±0.02)、新峰长到 ≥1.9。
        ⚠️ 用 i+2 而不是 i+1：**紧邻**按现在的曲线应该是 1.19（比峰小、比 1 大），不是 1.0 ——

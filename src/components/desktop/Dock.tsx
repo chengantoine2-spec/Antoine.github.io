@@ -16,7 +16,6 @@ import {
   ASYM_DEAD,
   ASYM_DECAY,
   ASYM_V_REF,
-  LATCH_DEAD,
   LATCH_MS,
   LATCH_SNAP_TAU,
   MAGNIFY_EXP,
@@ -870,9 +869,16 @@ export function Dock() {
            ⚠️ 只冻结**悬停驱动**这一段：下面的拖动手势照旧（拖动自己会 `schedulePaint`），
               所以这里绝不 `return`，只把悬停那段跳过。 */
         {
+          /* ⭐ 解锁条件（站主 2026-10-07：「**冻住之后，移动到另一个图标上才解冻**」）：
+             只看**目标槽位**变没变（取整后比较），**不再看漂移量** —— 只要指针还在同一颗图标上，
+             无论它在这颗图标上怎么漂（实测 ±8px 往返）都**不许解锁、不许重算、不许动一像素**。
+             ⚠️ `LATCH_DEAD`（漂移死区）已按这条口径**废弃**：拿漂移当解锁条件会让"手指微抖"就解冻重算
+             —— 那正是站主报的"还在动"。常量留在 `lib/dock` 里记沿革，这里不再引用。 */
           const ptF = pointer.current
-          const drift = ptF.latched === -1 ? Infinity : Math.abs(target - ptF.latched)
-          frozen = ptF.latched !== -1 && ptF.settleTo === null && drift <= LATCH_DEAD
+          frozen =
+            ptF.latched !== -1 &&
+            ptF.settleTo === null &&
+            Math.round(target) === Math.round(ptF.latched)
         }
         /* **方向不对称用的速度在这里算**（不是在 tick 里）：用指针事件自己的时间戳与位移 ——
            事件之间可能一帧都没跑（快速滑动），放 tick 里会取不到样本、速度忽有忽无
