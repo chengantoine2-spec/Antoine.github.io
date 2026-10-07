@@ -21,7 +21,6 @@ import {
   LATCH_SNAP_TAU,
   LEAVE_SLACK,
   MAGNIFY_EASE_TAU,
-  MAGNIFY_NEIGHBOR_PUSH,
   MAGNIFY_PEAK,
   MAGNIFY_RIGHT_NEIGHBOR,
   MAGNIFY_TAU,
@@ -184,6 +183,14 @@ export function Dock() {
   /** ⭐ 第 14 轮：**逐图标缓动还没走完**（`paint()` 每帧写，`tick` 的 `settled` 读）——
    *  不加它，rAF 循环会在缓动半路停下、图标冻在中间尺寸。 */
   const easeBusy = useRef(false)
+  /** 让位完成后**其余图标位移的冻结值**（未冻结的每一帧更新，冻结期间原样使用）。 */
+  const heldShifts = useRef<number[]>([])
+  /** **冻结标志**（"让位完成"）—— 由 `wheelMove` 写、`paint()` 读（后者不在前者作用域里）。 */
+  const frozenRef = useRef(false)
+  /** **让位已完成**（第 15 轮的**黏性**冻结）：一旦成立就保持到"真正离开任务栏"（`cancelMagnify` 清）。
+   *  ⚠️ 绝不能用"指针出了那个 1.5px 小框"来解除 —— 那框比一格（50px）小得多，一移就出框，
+   *  冻结会当场失效、整排重新铺开（实测跨到第 2 颗时"其他图标"动了 47.96px）。 */
+  const entryDone = useRef(false)
   /** 悬停期间的**扩张容量上限**（peak-hold，见 `paint()` 里那段注释）：取整次悬停期间见过的最大伸出量，
    *  不随指针在图标之间移动回落 —— 否则居中布局下整排会随宽度"呼吸"而左右平移（实测 3.19px 抖动）。 */
   const waveHold = useRef(0)
@@ -513,6 +520,9 @@ export function Dock() {
        缩放与位移都乘 `amp = fade`，所以**衰减过程中平滑地收回原样**，末态严格是 scale 1 / 位移 0。 */
     const active = fade > 0.002
     const amp = active ? fade : 0
+    /* ⭐ 第 15 轮：**冻结标志**由 `wheelMove` 写进 ref、这里读（`paint()` 不在它作用域里）。
+       它决定两件事：其余图标的**缩放**与**位移**是否冻结（见下面 `held()` 与 `shifts` 三段式）。 */
+    const frozen = frozenRef.current
     const magBtn = Math.max(1, step - GAP)
     /* ①3 ⭐⭐ 2026-10-07（第 14 轮）**站主最新口径，优先于之前所有波浪口径**：
        「**先光做选中图标放大，和右侧图标放大，其他不变**」→ **波浪模型退役**，改成**三个离散档**：
@@ -524,14 +534,17 @@ export function Dock() {
        只有"指针移出大框"才重算（见 `wheelMove` 的 `frozen` 与 `FREEZE_PAD`）。
        ⭐ **每个图标自己的缩放按 `MAGNIFY_TAU` 缓动**（站主：「**动画的动作慢一点**」）：
        换目标时旧的 2× 是**平滑收回**的，不是"啪"地掉回 1.0 —— 这也是"不许抖"能继续成立的原因。 */
-    /* ⚠️ 选中槽位的取法（第 14 轮踩过的坑）：**不能直接 `Math.round(hot)`** ——
-       停手后 `hot` 会被 `tick` 缓动地滑向 `settleTo`（指针当时的连续位置），
-       滑过格边界时 `round(hot)` 会**翻到隔壁**（实测"停手后波峰自己追了一格"：9 → 10）。
-       所以：已冻住就用 `latched`；正在吸附就用**吸附目标** `settleTo` 取整（一确定就不再变）；
-       否则才跟着连续的 `hot` 走。 */
+    /* ⚠️ 选中槽位的取法（第 14 轮踩过的坑 + 第 15 轮扩展）：
+       ① **不冻结时**：不能直接 `Math.round(hot)` —— 停手后 `hot` 会缓动滑向 `settleTo`，
+          滑过格边界时会翻到隔壁（实测"停手后波峰自己追了一格"9 → 10）。所以已冻住用 `latched`、
+          正在吸附用 `settleTo` 取整、否则才跟连续的 `hot` 走。
+       ② ⭐ **冻结（让位完成）后**：站主 ③ 明确"**只改变选中图标的大小位置及其右侧图标大小位置**"
+          ⇒ hot 必须**继续跟随指针**（`hotTarget` 一直在更新，见 `wheelMove`），所以这里直接取
+          `Math.round(hotTarget)`；而其余图标由 `held()` 冻住，于是"别人不动、hot 与右邻动"成立。 */
     const ptSel = pointer.current
-    const sel =
-      ptSel.latched !== -1
+    const sel = frozen
+      ? Math.round(ptSel.hotTarget)
+      : ptSel.latched !== -1
         ? ptSel.latched
         : ptSel.settleTo !== null
           ? Math.round(ptSel.settleTo)
@@ -546,9 +559,18 @@ export function Dock() {
     const nowP = performance.now()
     const dtP = lastPaint.current ? Math.min(0.05, Math.max(0.001, (nowP - lastPaint.current) / 1000)) : 0.016
     lastPaint.current = nowP
+    /* ⭐⭐ 2026-10-07（第 15 轮）**站主三段式模型**。这一段管"大小"，下一段管"让位"：
+       ① 大小：**hot ≈ 2×**、**右邻（+1）= `MAGNIFY_RIGHT_NEIGHBOR` = 1.5×**、**左邻与其余 = 1.0**；
+       ③ 冻结（让位完成之后）：**除 hot 与右邻之外，其余图标的"大小"也一律冻结**（不只是位置）——
+          因为 `rect.left` 同时受位置与缩放影响（放大原点贴在栏那侧，缩放会改 `left`），
+          只冻位置不冻大小的话，被冻的那些照样会动 ⇒ 站主"其他图标不改动"就落不了地。
+          ⚠️ 实现上**冻结 = 这一格不推进缓动**（`easeS` 原值返回）：解锁（移出栏）后它从冻结值
+          继续平滑收回，不会"啪"地弹回去。 */
+    const held = (i: number) => frozen && active && i !== sel && i !== sel + 1
     const scales = items.map((_, i) => {
-      const to = targetScale(i)
       const cur = easeS.current[i] ?? 1
+      if (held(i)) return cur
+      const to = targetScale(i)
       const next = cur + (to - cur) * Math.min(1, dtP / MAGNIFY_EASE_TAU)
       easeS.current[i] = next
       return next
@@ -560,16 +582,39 @@ export function Dock() {
        现在只要还有图标离目标 >0.002 就继续排帧，缓动一定走完。 */
     easeBusy.current = scales.some((s, i) => Math.abs(s - targetScale(i)) > 0.002)
     /* ③ 位移（第 14 轮按新口径重写）：站主「**其他不变**」「左侧紧邻 1.0 / 位移 0」、
-       「右侧紧邻**可以有一点让路**」→ **只推右侧紧邻那一颗**，别的（含左侧紧邻）**一动不动**。
-       ⚠️ 这是从"连续累计场"退回**离散单点位移**，是有意的：新模型本身就是**离散选中**（一颗一颗换），
-       不再需要"整排按连续场让路"。**旧模型那条铁律（连续量不许取整当锚点）在这里不适用** ——
-       因为**已经没有连续量**：`sel` 恒为整数、位移只挂在 `sel+1` 上，且乘 `amp` 平滑收放。
-       ⚠️ 让路量刻意给得小（`MAGNIFY_NEIGHBOR_PUSH = 0.25` × 峰值半增量 ≈ **6px**）：
-       大图标压住邻居圆角是 macOS 的样子（verify 那条"交叠不超过一半"的放宽断言仍适用），
-       但**别把邻居推成"完全让开"** —— 那样它会压住再右边那颗，而站主说"其他不变"。
-       amp → 0 时归零（离开后位移严格 0，verify 有断言钉着）。 */
-    const pushRight = (MAGNIFY_PEAK - 1) * magBtn * 0.5 * MAGNIFY_NEIGHBOR_PUSH * amp
-    const shifts = items.map((_, i) => (!active || i !== sel + 1 ? 0 : pushRight))
+    /* ③ 位移 —— 2026-10-07（第 15 轮）**按站主三段式重写**（替换掉上一版"只推右邻 6px"）：
+       ② **让位只发生在"进栏那一段"**：站主「在鼠标移动到图标上面时，**其他图标要让位，保持图标之间
+          距离不变**」→ 这一段用**连续累计场**（第 9 轮那套）：`gapShift(j)` 把相邻两格让出的缝补上，
+          于是**逐对间隙恒为 `DOCK_GAP`**（与缩放无关、逐对相等）—— 这就是"距离不变"。
+       ③ **让位完成后（冻结）其他图标位置冻结**：站主「让位完成之后，鼠标**仅在任务栏里面移动**时，
+          **就不要再改动其他图标的位置**，只改变**选中图标**的大小位置以及其**右侧图标**大小位置」
+          → 冻结期间：`sel` 与 `sel+1` 继续按场取值（这两颗允许动），**其余一律用冻结那一刻的值**
+          （`heldShifts`，在"未冻结的每一帧"更新）。
+          ⚠️ **本轮核心**：以前"换了 hot 就整排重铺"，现在**重铺只发生在进栏那一段**。
+       ⚠️ 别把"冻结"实现成"值恰好不变"：held 分支**根本不写新值**（下一帧还是那个数）。 */
+    const gapShift = (j: number) => ((scales[j] ?? 1) - 1 + (scales[j + 1] ?? 1) - 1) * magBtn * 0.5
+    const field = (x: number) => {
+      const k = Math.floor(x)
+      let sum = 0
+      for (let j = 0; j < k; j++) sum += gapShift(j)
+      return sum + (x - k) * gapShift(k)
+    }
+    const fieldShifts = items.map((_, i) => {
+      if (!active) return 0
+      if (i === sel) return 0
+      const hi = Math.max(i, sel)
+      const lo = Math.min(i, sel)
+      const mag = field(hi) - field(lo)
+      if (Math.abs(mag) <= 0.01) return 0
+      return (i < sel ? -1 : 1) * mag
+    })
+    const shifts = items.map((_, i) => {
+      if (!active) return 0
+      if (!frozen) return fieldShifts[i] ?? 0
+      if (i === sel || i === sel + 1) return fieldShifts[i] ?? 0
+      return heldShifts.current[i] ?? fieldShifts[i] ?? 0
+    })
+    if (active && !frozen) heldShifts.current = fieldShifts.slice()
     items.forEach((el, i) => {
       /* 正在被拖走换位的那个不动它（它已经淡出当占位，跟手的是浮层幽灵） */
       if (lift.current && lift.current.el === el) return
@@ -945,6 +990,9 @@ export function Dock() {
   /** 真正取消放大：清指针、`target = 0`、解锁冻结（然后交给 `fade` 平滑收回，末态严格 scale 1 / 位移 0）。 */
   function cancelMagnify() {
     setOverhang(false)
+    frozenRef.current = false
+    /* ⭐ 第 15 轮：**只有真正离开任务栏才解除"黏性冻结"**（并让 `heldShifts` 下一轮重新采集）。 */
+    entryDone.current = false
     pointer.current.pos = null
     pointer.current.target = 0
     pointer.current.latched = -1
@@ -1015,14 +1063,32 @@ export function Dock() {
            ⚠️ 它**不是** `LEAVE_SLACK`（5px 那个管"还算不算在任务栏区域里、要不要收起"）——
            两者都要：**先判大框**（在框里 → 什么都不做），**出了框再判任务栏并集**（并集外才收起）。
            ⚠️ 冻住之后这里**不写 `hotTarget`、不排帧、不碰 hot** —— 这才是"完全不动"。 */
+        /* ⭐⭐⭐ 2026-10-07（第 15 轮）**冻结改成"黏性"的** —— 站主 ③ 的原话：
+           「**让位完成之后**，鼠标仅在任务栏里面移动时，**就不要再改动其他图标的位置**，
+           只改变选中图标的大小位置以及其右侧图标大小位置」+「**即使 hot 换到别处**」。
+           ⇒ 判定 = 「让位完成」= `fade` 稳定 **且槽位稳定**（= 已经 `latched`）。
+           ⚠️ **它绝不能由"指针出了那个 1.5px 的小框"来解除** —— 那框比一格（50px）小得多，
+           指针一移到隔壁就出框，冻结会当场失效、整排重新铺开（上一版实测：跨到第 2 颗时
+           "其他图标"动了 **47.96px**，站主这条口径直接落不了地）。
+           ⇒ 冻结**一旦成立就黏住**，只有**真正离开任务栏**（`cancelMagnify`）才解除。
+           ⚠️ 小框（`FREEZE_PAD`）仍然有用：它管"指针没动出放大图标多少 → 连 hot 都不用重算"，
+           与"其他人的冻结"是两件事。 */
         {
           const ptF = pointer.current
-          frozen = ptF.latched !== -1 && ptF.settleTo === null && pointerInFreezeBox(e, ptF.latched)
+          const slotNow = ptF.latched !== -1 ? ptF.latched : Math.round(ptF.settleTo ?? ptF.hot)
+          const inBox = pointerInFreezeBox(e, slotNow)
+          if (ptF.latched !== -1 && ptF.settleTo === null) entryDone.current = true
+          frozen = entryDone.current && (inBox || ptF.latched !== -1)
         }
+        /* ⭐ 第 15 轮：**把冻结状态写给 `paint()`**（它不在这个作用域里，见 `frozenRef` 的注释）。 */
+        frozenRef.current = frozen
         /* ⛔ 方向不对称的"速度 EMA"整段**删除**（第 14 轮口径：只有右侧放大、与滑动方向无关）——
            那条"绝不拿逐帧位移判方向"的教训随之失效，因为**已经没有方向量**了。
            `ASYM_*` 常量留在 `lib/dock.ts` 记沿革；`tick` 里对 `vEma` 的衰减保留（恒为 0，无害）。 */
-        if (!frozen) pointer.current.hotTarget = target
+        /* ⭐⭐ 第 15 轮：`hotTarget` **即使冻结也要更新** —— 站主 ③ 允许"**选中图标的大小/位置**"
+           在冻结期间继续变（只锁"其他图标"）。原来写成 `if (!frozen)` 更新，结果是冻结后
+           hot 永远停在进栏那一刻（实测跨 3 颗时 hot 一直是第 5 颗 = 假通过）。 */
+        pointer.current.hotTarget = target
       }
       if (!frozen) {
         const pt3 = pointer.current

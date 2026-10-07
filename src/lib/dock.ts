@@ -66,7 +66,7 @@ export const MAGNIFY_MIN = 1
 export const MAGNIFY_EXP = 1.9
 /** ⭐ 第 14 轮：**右侧紧邻**（`sel + 1`）的倍数 —— 站主「略大于正常图标」，取 **1.12**。
  *  ⚠️ 左侧紧邻、以及其余所有图标**恒为 1.0**（`paint()` 里的三档，别再写成"两侧对称"）。 */
-export const MAGNIFY_RIGHT_NEIGHBOR = 1.12
+export const MAGNIFY_RIGHT_NEIGHBOR = 1.5
 /** ⭐ 第 14 轮：**右侧紧邻的让路系数** —— 位移 = `(PEAK−1) · 图标边长 · 0.5 · 本值 · amp`。
  *  0.25 × 48 × 0.5 = **6px**（"可以有一点让路"，别推成"完全让开"）。 */
 export const MAGNIFY_NEIGHBOR_PUSH = 0.25

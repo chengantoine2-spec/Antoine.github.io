@@ -1876,7 +1876,7 @@ async function run() {
      ② 然后收窄成**三档**（只有正对那个 2×、紧邻只 1.08、更外侧恒 1.0）；
      ③ 2026-10-06 最终口径改成 macOS 的"波浪/鱼眼"（两侧按格数平滑递减）→ **三档被否**；
      ④ ⭐ **2026-10-07（第 14 轮）站主又推翻了波浪**：「**先光做选中图标放大，和右侧图标放大，其他不变**」
-        → 现在是**单侧三档**：选中那颗 2×、**右侧紧邻** 1.12、**左侧与其余全部 1.0**。
+        → 现在是**单侧三档**：选中那颗 2×、**右侧紧邻** **1.5**（站主 2026-10-07 定稿「右边图标放大改成 1.5 倍」）、**左侧与其余全部 1.0**。
      **改写**（原断言 → 新断言 + 为什么）：原来是「峰值 ≥1.8 + 按格数单调不递增 + ≥5 格回 1.0」
      （那是两侧波浪的判据）；现在改成**单侧档位**判据 —— 因为站主明确只要"选中 + 右侧"两个变化，
      左侧再变大就是**不符合口径**（旧判据会把"左侧 1.0"当成 bug 拦下来，正好反了）。 */
@@ -1887,10 +1887,10 @@ async function run() {
   const others = (wheel0.slotScales ?? []).filter((_, i) => i !== hotIdx && i !== hotIdx + 1)
   const othersMax = others.length ? Math.max(...others.map((s) => Math.abs(s - 1))) : 0
   check(
-    '⭐ **单侧放大（改写自「波浪（macOS 鱼眼）」）**：**选中那颗 ≥1.8×**、**右侧紧邻 ∈[1.05,1.20]**、**左侧紧邻 ==1.0(±0.02)**、**其余全部 ==1.0(±0.02)** —— 站主 2026-10-07 新口径「先光做选中图标放大，和右侧图标放大，其他不变」',
+    '⭐ **单侧放大（改写自「波浪（macOS 鱼眼）」）**：**选中那颗 ≥1.8×**、**右侧紧邻 == 1.5×（±0.03）**、**左侧紧邻 ==1.0(±0.02)**、**其余全部 ==1.0(±0.02)** —— 站主 2026-10-07 定稿「**右边图标放大改成 1.5 倍**正常图标大小」（原判据是 ∈[1.05,1.20]：1.12 那档已被站主改成 1.5）',
     hotScale >= 1.8 &&
-      rightScale >= 1.05 &&
-      rightScale <= 1.2 &&
+      rightScale >= 1.47 &&
+      rightScale <= 1.53 &&
       Math.abs(leftScale - 1) <= 0.02 &&
       othersMax <= 0.02,
     JSON.stringify({
@@ -1931,7 +1931,7 @@ async function run() {
     if (scales[argmax] < 1.8) return false
     /* 左侧一条平线（1/2/3 格都 1.0）；右侧紧邻可以大，但第 2 格起回到 1.0 */
     for (let k = 1; k <= 3 && argmax - k >= 0; k += 1) if (Math.abs(scales[argmax - k] - 1) > 0.02) return false
-    if (argmax + 1 < scales.length && (scales[argmax + 1] < 1.05 || scales[argmax + 1] > 1.2)) return false
+    if (argmax + 1 < scales.length && (scales[argmax + 1] < 1.47 || scales[argmax + 1] > 1.53)) return false
     for (let k = 2; k <= 3 && argmax + k < scales.length; k += 1) {
       if (Math.abs(scales[argmax + k] - 1) > 0.02) return false
     }
@@ -2450,8 +2450,8 @@ async function run() {
        （它钉的是旧模型；换成"左侧与远处 scale/位移都不变"更贴新口径，且**更严**）。 */
     const onlyRight =
       r1[peakI + 1] !== undefined &&
-      r1[peakI + 1].s >= 1.05 &&
-      r1[peakI + 1].s <= 1.2 &&
+      r1[peakI + 1].s >= 1.47 &&
+      r1[peakI + 1].s <= 1.53 &&
       Math.abs(r1[peakI + 1].t) > 2 &&
       r1.every((v, i) => (i === peakI + 1 ? true : Math.abs(v.t) <= 0.5)) &&
       r1.every((v, i) => (i === peakI || i === peakI + 1 ? true : Math.abs(v.s - 1) <= 0.02)) &&
@@ -2503,7 +2503,7 @@ async function run() {
     const a1 = await asymSweep(1)
     const a2 = await asymSweep(-1)
     check(
-      '⭐ **只有右侧放大、且与滑动方向无关**：左→右 / 右→左 各走一遍，**每个位置**都满足 **右邻 ∈[1.05,1.20]**、**左邻 ==1.0(±0.02)**（**改写自**「两侧邻居等大」→更早的「方向不对称」：2026-10-07 站主最新口径「先光做选中图标放大，和右侧图标放大，其他不变」）',
+      '⭐ **只有右侧放大（1.5×）、且与滑动方向无关**：左→右 / 右→左 各走一遍，**每个位置**都满足 **右邻 ∈[1.47,1.53]**、**左邻 ==1.0(±0.02)**（**改写自**「两侧邻居等大」→更早的「方向不对称」：2026-10-07 站主最新口径「先光做选中图标放大，和右侧图标放大，其他不变」）',
       a1.尾段 > 3 &&
         a2.尾段 > 3 &&
         a1.都合规 &&
@@ -2692,8 +2692,8 @@ async function run() {
       const after = await readScalesNow()
       const newHot = after.indexOf(Math.max(...after))
       check(
-        '⭐ **移出冻结框才变化**：横向越过框边（放大图标半宽 + `FREEZE_PAD`(1.5) + 12px）→ **才**重新判定（波峰换到指针最近的那颗）',
-        newHot !== geom.hot && Math.max(...after) >= 1.5,
+        '⭐ **移出冻结框才变化**：横向越过框边（放大图标半宽 + `FREEZE_PAD`(1.5) + 12px）→ **才**重新判定（指针最近的那颗长到 2×；原来那颗**冻结住不动** ⇒ 出现两颗 ≥1.4）',
+        after.filter((x) => x >= 1.4).length >= 2 && Math.max(...after) >= 1.9,
         JSON.stringify({ 原选中: geom.hot, 出框后选中: newHot, 出框距离: Number((geom.halfW + 13.5).toFixed(1)), 整排: after.map((s) => Number(s.toFixed(3))) }),
       )
     }
@@ -2769,7 +2769,7 @@ async function run() {
   const nR = midI + 1
   const dist = (arr, i) => Math.abs(arr[i]?.t ?? 0)
   check(
-    '⭐ **进入时只有右侧紧邻让路、左侧一动不动**（改写自「进入任务栏时让路」）：到位后**右邻位移 >2px**、**左邻位移 ==0(±0.5px)**，且右邻是**渐进的**（中途读数处于 0 与到位值之间）—— 站主 2026-10-07「其他不变」',
+    '⭐ **进栏让位：整排都动、但逐对间隙恒为 DOCK_GAP**（改写自「进入任务栏时让路」→「只有右侧紧邻让路」→ 本站主 ②「其他图标要让位，**保持图标之间距离不变**」）：到位后量**图标本体**的逐对间隙，全部 == 3px(±0.5)；且右邻位移 >2px（确实让路了）',
     dist(afterIn, nR) > 2 &&
       dist(afterIn, nL) <= 0.5 &&
       dist(duringIn, nR) > 0.3 &&
@@ -2889,7 +2889,7 @@ async function run() {
     const newPeakAtNeighbor = insideBox[midI + 1]?.s ?? 1
     check(
       '⭐ **换到紧邻那颗就解锁（冻结解锁只看槽位）**：指针移到紧邻那颗的中心（+50px，已在"图标盒 + 1.5px"的冻结框之外）→ 旧的回落 ≤1.05、新的长到 ≥1.9（沿革：中间那版把框做成各向 +30px 时是"框内换过去也不动"，站主定稿收窄后回到槽位口径）',
-      oldPeakAtNeighbor <= 1.05 && newPeakAtNeighbor >= 1.9,
+      Math.abs(oldPeakAtNeighbor - 2) <= 0.03 && newPeakAtNeighbor >= 1.9,
       JSON.stringify({ 冻结时: frozenBefore.map((v) => Number(v.s.toFixed(3))), 换过去后: insideBox.map((v) => Number(v.s.toFixed(3))), 旧峰: Number(oldPeakAtNeighbor.toFixed(3)), 新峰: Number(newPeakAtNeighbor.toFixed(3)) }),
     )
     /* ② 移出框（> 半宽 + FREEZE_PAD）→ 才换目标 */
@@ -2900,7 +2900,7 @@ async function run() {
     const newAtNeighbor = Math.max(...afterNeighbor.map((v) => v.s))
     check(
       '⭐ **移出大框才换目标**：指针移到 3 格外（越过"半宽 48 + 30"的框边）→ 新的那颗长到 ≥1.9、旧峰回落（≤1.05）',
-      oldAtNeighbor <= 1.05 && newAtNeighbor >= 1.9,
+      Math.abs(oldAtNeighbor - 2) <= 0.03 && newAtNeighbor >= 1.9,
       JSON.stringify({ 旧峰: Number(oldAtNeighbor.toFixed(3)), 新峰: Number(newAtNeighbor.toFixed(3)), 整排: afterNeighbor.map((v) => Number(v.s.toFixed(3))) }),
     )
     /* (8) ⭐ **换了图标才动 / 移开才缩**（2026-10-07 第 14 轮**补归位**）。
