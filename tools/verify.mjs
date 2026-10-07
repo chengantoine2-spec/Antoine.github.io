@@ -530,17 +530,39 @@ async function run() {
     await p.waitForTimeout(450)
   }
 
-  let dt = await dockTarget()
-  await p.mouse.move(dt.x, dt.y, { steps: 8 })
-  await p.waitForTimeout(320)
-  dt = await dockTarget()
-  await p.mouse.move(dt.x, dt.y, { steps: 8 })
-  await p.waitForTimeout(500)
-  const tooltip = await p.evaluate(
-    (sel) => document.querySelector(`${sel} [role="tooltip"]`)?.textContent?.trim() ?? null,
-    DOCK,
+  /* ⚠️ 2026-10-07（第 15 轮）**修的是断言的准备步骤，不是判据**（判据仍要求气泡含「博客」）：
+     这条原来按**布局坐标**瞄"博客"，而站主新口径 ② 明确"进栏那一段**整排都动**" ⇒
+     布局中心与**渲染**中心不再重合，指针会落到隔壁（本轮实测 `tooltip=项目`）。
+     现在：① 先**离开任务栏复位**（让位收回去）② 按**渲染盒中心**分步靠近
+     ③ 用"气泡文字对不对"做**验证 + 重瞄**（最多 4 次）。**没有放宽任何阈值、也没跳过**。 */
+  await p.mouse.move(640, 120)
+  await p.waitForTimeout(700)
+  const aimBlog = async () => {
+    let tip = null
+    for (let i = 0; i < 4; i += 1) {
+      const t = await p.evaluate((sel) => {
+        const btn = document.querySelector(`${sel} button[aria-label="博客"]`)
+        if (!btn) return null
+        const r = btn.getBoundingClientRect()
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+      }, DOCK)
+      if (!t) return tip
+      await p.mouse.move(t.x, t.y, { steps: 4 })
+      await p.waitForTimeout(500)
+      tip = await p.evaluate(
+        (sel) => document.querySelector(`${sel} [role="tooltip"]`)?.textContent?.trim() ?? null,
+        DOCK,
+      )
+      if ((tip ?? '').includes('博客')) return tip
+    }
+    return tip
+  }
+  const tooltip = await aimBlog()
+  check(
+    '鼠标悬停任务栏图标显示名字（带「一样菜」）',
+    (tooltip ?? '').includes('博客'),
+    `tooltip=${tooltip}（按渲染盒重瞄 + 验证；见上面注释）`,
   )
-  check('鼠标悬停任务栏图标显示名字（带「一样菜」）', (tooltip ?? '').includes('博客'), `tooltip=${tooltip}`)
 
   // 10b 假 Token 要被明确拒绝（真打一次 GitHub API，但不产生任何写入）
   await p.fill('[aria-label="博客创作 窗口"] input[type="password"]', 'ghp_this_token_is_fake_for_test')
@@ -2448,16 +2470,21 @@ async function run() {
        站主新口径是「**其他不变**、右侧紧邻**可以有一点让路**」→ 整排不再均匀让路，
        所以新判据：**只有右侧紧邻有位移（>2px）、其余位移 0**；间隙那条**按新口径作废**
        （它钉的是旧模型；换成"左侧与远处 scale/位移都不变"更贴新口径，且**更严**）。 */
+    /* ⚠️ 2026-10-07（第 15 轮）**再改写**（原 → 新 + 为什么）：站主新口径是
+       「鼠标移动到图标上面时，**其他图标要让位**，保持图标之间距离不变」＋「让位完成之后……**其他图标冻结**」
+       ⇒ 本条**只再管"哪几颗在变大"**（其余 scale ==1.0、hot 2×、右邻 1.5×）。
+       "**位移**"分两段，分别由别的断言量：**进栏那一段整排都动**（下一条量逐对间隙 == `DOCK_GAP`）、
+       **让位完成后其余冻结**（「让位完成后其他图标冻结」量 `left` 变化 ≤0.5px）。
+       原来这条还要求"其余位移 ≤0.5px" —— 那是"其他不变"那版的做法，**已被站主 ② 取代**，故删去该子条件。 */
     const onlyRight =
       r1[peakI + 1] !== undefined &&
       r1[peakI + 1].s >= 1.47 &&
       r1[peakI + 1].s <= 1.53 &&
       Math.abs(r1[peakI + 1].t) > 2 &&
-      r1.every((v, i) => (i === peakI + 1 ? true : Math.abs(v.t) <= 0.5)) &&
       r1.every((v, i) => (i === peakI || i === peakI + 1 ? true : Math.abs(v.s - 1) <= 0.02)) &&
       (r1[peakI - 1] === undefined || Math.abs(r1[peakI - 1].s - 1) <= 0.02)
     check(
-      '⭐ **只有右侧紧邻让路（改写自「全排均匀让路」）**：选中那颗最大、**右侧紧邻** scale ∈[1.05,1.20] 且位移 >2px（看得出"滑开"）、**左侧紧邻与其余全部 ==1.0(±0.02) 且位移 0(±0.5px)**；大图标可以压住左邻居的圆角（macOS 就是如此）—— 站主 2026-10-07 新口径「其他不变」',
+      '⭐ **只有 hot 与右邻在变大（右邻 1.5×）**（改写自「全排均匀让路」→「只有右侧紧邻让路」）：选中那颗 ≈2×、**右侧紧邻 ==1.5×（±0.03）且确实让路（位移 >2px）**、**左侧与其余 scale ==1.0(±0.02)** —— 站主 2026-10-07 定「右边图标放大改成 1.5 倍」；位移的分段判据见下两条（进栏让位 / 让位完成后冻结）',
       onlyRight && peakI === midI,
       JSON.stringify({
         峰: peakI,
@@ -2490,7 +2517,7 @@ async function run() {
         out.push({ pk, left: m[pk - 1]?.s ?? null, right: m[pk + 1]?.s ?? null })
       }
       const tail = out.slice(1).filter((r) => r.left !== null && r.right !== null)
-      const ok = tail.every((r) => Math.abs(r.left - 1) <= 0.02 && r.right >= 1.05 && r.right <= 1.2)
+      const ok = tail.every((r) => Math.abs(r.left - 1) <= 0.02 && r.right >= 1.47 && r.right <= 1.53)
       return {
         dir,
         尾段: tail.length,
@@ -2768,17 +2795,33 @@ async function run() {
   const nL = midI - 1
   const nR = midI + 1
   const dist = (arr, i) => Math.abs(arr[i]?.t ?? 0)
+  /* ⚠️ 2026-10-07（第 15 轮）**条件也一起改**（上一版只改了名字、条件还是"左邻一动不动"⇒ 红）：
+     新口径 ②「其他图标要让位，**保持图标之间距离不变**」⇒ 量**图标本体**的逐对间隙 == `DOCK_GAP`，
+     而不是量"谁位移了"。同时保留"右邻确实让路（位移 >2px）"这条，免得"整排都没动"也算过。 */
+  const bodyGapsAfter = await p.evaluate((sel) => {
+    const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+    const boxes = items.map((el) => {
+      const g = el.querySelector('img') ?? el.querySelector('svg')
+      return g ? g.getBoundingClientRect() : null
+    })
+    const gaps = []
+    for (let i = 0; i + 1 < boxes.length; i += 1) {
+      if (!boxes[i] || !boxes[i + 1]) continue
+      gaps.push(Number((boxes[i + 1].left - boxes[i].right).toFixed(2)))
+    }
+    return gaps
+  }, DOCK)
   check(
-    '⭐ **进栏让位：整排都动、但逐对间隙恒为 DOCK_GAP**（改写自「进入任务栏时让路」→「只有右侧紧邻让路」→ 本站主 ②「其他图标要让位，**保持图标之间距离不变**」）：到位后量**图标本体**的逐对间隙，全部 == 3px(±0.5)；且右邻位移 >2px（确实让路了）',
-    dist(afterIn, nR) > 2 &&
-      dist(afterIn, nL) <= 0.5 &&
+    '⭐ **进栏让位：整排都动、但逐对间隙恒为 DOCK_GAP**（改写自「进入任务栏时让路」→「只有右侧紧邻让路」→ 本站主 ②「其他图标要让路，**保持图标之间距离不变**」）：到位后量**图标本体**的逐对间隙，**全部 == 3px(±0.5)**；且右邻**确实让路了**（位移 >2px、且是渐进的）',
+    bodyGapsAfter.length > 3 &&
+      bodyGapsAfter.every((g) => Math.abs(g - 3) <= 0.5) &&
+      dist(afterIn, nR) > 2 &&
       dist(duringIn, nR) > 0.3 &&
-      dist(duringIn, nR) < dist(afterIn, nR) &&
-      dist(beforeIn, nR) < 0.5,
+      dist(duringIn, nR) < dist(afterIn, nR),
     JSON.stringify({
-      进入前: [beforeIn[nL]?.t, beforeIn[nR]?.t],
-      中途: [duringIn[nL]?.t, duringIn[nR]?.t],
-      到位: [afterIn[nL]?.t, afterIn[nR]?.t],
+      本体逐对间隙: bodyGapsAfter,
+      右邻位移: { 中途: duringIn[nR]?.t, 到位: afterIn[nR]?.t },
+      左邻位移: { 中途: duringIn[nL]?.t, 到位: afterIn[nL]?.t },
     }),
   )
     /* (6) ⭐ **离开后完全还原**（含"快速扫出"这条最容易留半截状态的路径） */
@@ -2902,6 +2945,71 @@ async function run() {
       '⭐ **移出大框才换目标**：指针移到 3 格外（越过"半宽 48 + 30"的框边）→ 新的那颗长到 ≥1.9、旧峰回落（≤1.05）',
       Math.abs(oldAtNeighbor - 2) <= 0.03 && newAtNeighbor >= 1.9,
       JSON.stringify({ 旧峰: Number(oldAtNeighbor.toFixed(3)), 新峰: Number(newAtNeighbor.toFixed(3)), 整排: afterNeighbor.map((v) => Number(v.s.toFixed(3))) }),
+    )
+    /* (7c) ⭐⭐ **让位完成后其他图标位置冻结**（2026-10-07 第 15 轮**新增**，站主 ③ 的正面断言）：
+       「让位完成之后，鼠标**仅在任务栏里面移动**时，**就不要再改动其他图标的位置**」
+       ⇒ 在栏内**连续跨过 3 颗**，量**除 hot 与右邻之外**所有图标的 `rect.left`：**最大变化 ≤0.5px**；
+       同时 **hot 与右邻必须真的变了（>2px）** —— 这是**反向条件**，防"整排都没动"那种假通过。
+       ⚠️ 用**活布局坐标**瞄（进栏让位会把整排推开，进栏前的坐标会瞄到隔壁）；
+       ⚠️ 用"指针最近的槽位"判定谁是 hot（**不能用 argmax**：被冻结的旧 hot 也是 2×，会 tie）。 */
+    const liveSnap = () =>
+      p.evaluate((sel) => {
+        const view = document.querySelector(sel + ' [data-dock-view]')
+        const track = document.querySelector(sel + ' [data-dock-track]')
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        const vr = view.getBoundingClientRect()
+        const tr = track.getBoundingClientRect()
+        const origin = tr.left - vr.left
+        return {
+          viewLeft: vr.left,
+          items: items.map((el) => ({
+            x: tr.left + el.offsetLeft + el.offsetWidth / 2,
+            centre: origin + el.offsetLeft + el.offsetWidth / 2,
+            left: Number(el.getBoundingClientRect().left.toFixed(2)),
+          })),
+        }
+      }, DOCK)
+    let freezeCheck = null
+    {
+      await p.mouse.move(640, 120)
+      await settleT()
+      const first = await liveSnap()
+      await p.mouse.move(first.items[midI].x, dockGeom.y, { steps: 3 })
+      await settleT()
+      const frozen0 = await liveSnap()
+      let maxOther = 0
+      let minHotMove = Infinity
+      const perStep = []
+      for (let k = 1; k <= 3; k += 1) {
+        const live = await liveSnap()
+        const aimX = live.items[midI + k].x
+        await p.mouse.move(aimX, dockGeom.y, { steps: 3 })
+        await settleT()
+        const now = await liveSnap()
+        const pos = aimX - now.viewLeft
+        let slot = 0
+        let bd = Infinity
+        now.items.forEach((it, i) => {
+          const d = Math.abs(it.centre - pos)
+          if (d < bd) { bd = d; slot = i }
+        })
+        let stepOther = 0
+        let stepHot = 0
+        now.items.forEach((it, i) => {
+          const d = Math.abs(it.left - (frozen0.items[i]?.left ?? it.left))
+          if (i === slot || i === slot + 1) stepHot = Math.max(stepHot, d)
+          else stepOther = Math.max(stepOther, d)
+        })
+        maxOther = Math.max(maxOther, stepOther)
+        minHotMove = Math.min(minHotMove, stepHot)
+        perStep.push({ 跨到: k, 槽位: slot, 其他最大变化: Number(stepOther.toFixed(2)), hot或右邻最小变化: Number(stepHot.toFixed(2)) })
+      }
+      freezeCheck = { 其他图标left最大变化: Number(maxOther.toFixed(2)), hot与右邻最小变化: Number(minHotMove.toFixed(2)), 逐步: perStep }
+    }
+    check(
+      '⭐ **让位完成后其他图标位置冻结**（第 15 轮新增，站主 ③）：在栏内**连续跨 3 颗**时，**除 hot 与右邻之外**所有图标的 `rect.left` 最大变化 **≤0.5px**；且 **hot 与右邻确实变了（>2px）**（反向条件，防"整排都没动"的假通过）',
+      !!freezeCheck && freezeCheck.其他图标left最大变化 <= 0.5 && freezeCheck.hot与右邻最小变化 > 2,
+      JSON.stringify(freezeCheck),
     )
     /* (8) ⭐ **换了图标才动 / 移开才缩**（2026-10-07 第 14 轮**补归位**）。
        ⚠️ 这里必须先**移出任务栏等它收回**：上一条断言把指针留在了 `midI + 3`（那里成了新峰），
