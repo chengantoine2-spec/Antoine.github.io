@@ -355,7 +355,9 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - 饥荒 Wiki 专属：`npm run verify:dst`（21 项，归 wiki 负责人）
 - ⚠️ **地址要显式给它，而且两个都试一下**：`npm run verify -- http://localhost:5173`。
   本机实测过两种情形 —— 有时只有 `127.0.0.1` 通、有时只有 `localhost` 通（dev server 只绑一个）。
-- 改完**至少**跑 `npm run build`；涉及交互再跑 `npm run verify`。**当前 `verify.mjs` 共 130 项。**
+- 改完**至少**跑 `npm run build`；涉及交互再跑 `npm run verify`。**当前 `verify.mjs` 共 151 项。**
+- ⚠️ 上面这个项数**会随断言增删过期**，别当圣旨：跑完看结尾那行 `N/N 通过` 最准，
+  只想快速核一遍就 `Select-String -Path tools/verify.mjs -Pattern '^\s*check\('` 数一下（改了断言顺手更新这里）。
 - ⚠️ **换皮 / 重构时那些断言是"改写"不是"删掉"** —— 每条改写都要写清"原断言 → 新断言 + 为什么"。
 - ⚠️ 博客那几条会**随机红**（GitHub 文章数读到 0 的瞬时抖动）：重跑一次再判，别当自己的锅。
 - ⚠️ **dev server 一改文件就没了的真凶**：Vite 的 watcher 会去 watch 原子写留下的临时目录
