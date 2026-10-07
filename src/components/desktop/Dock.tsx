@@ -16,6 +16,9 @@ import {
   ASYM_DEAD,
   ASYM_DECAY,
   ASYM_V_REF,
+  LATCH_DEAD,
+  LATCH_MS,
+  LATCH_SNAP_TAU,
   MAGNIFY_EXP,
   MAGNIFY_PEAK,
   MAGNIFY_RADIUS_SLOTS,
@@ -162,6 +165,9 @@ export function Dock() {
   const tipEl = useRef<HTMLSpanElement | null>(null)
   const offset = useRef(0)
   const raf = useRef(0)
+  /** 波浪把整排推宽时，图标区**临时**撑开的长度（null = 没撑，用 React 给的 `viewLen`）。
+   *  只写 DOM 的内联宽高，**绝不写回 `desktop.dock`** —— 指针离开必须像素级复原（见 `paint` 的 ④）。 */
+  const waveLen = useRef<number | null>(null)
   /** 松手回弹的弹簧动画句柄（用 rAF 自己积分，见 settle：不引动画依赖） */
   const springRaf = useRef(0)
   const gesture = useRef<{
@@ -201,6 +207,17 @@ export function Dock() {
     /** 上一次指针事件的时间戳 / 当时的连续槽位 —— 只用于在**事件里**算速度（见 `wheelMove`） */
     moveT: number
     prevMoveHot: number
+    /** ⭐ 冻结（站主 2026-10-07：「**完成生长动画就不要动了，直到我移动到其他图标之后再缩小**」）：
+     *  `slotSeen`/`stableSince` = 指针**上一次动过的目标值**、以及它从什么时候起没再变过；
+     *  `settleTo` = 正在平滑吸附到的**指针位置**（null = 没在吸附）；`latched` = 已经冻住时
+     *  `hot` 的取值（-1 = 没冻）。
+     *  ⚠️ 锚点一律用**指针的连续位置**，**不许换成 `Math.round(hotTarget)` 那种"取整槽位"**：
+     *  指针停在偏离格心处时，取整锚点会让"吸附回格心 → 下一事件跳回指针处"来回跳
+     *  （实测单步 2px 的 scale 变化 0.483 → 两条"不抖/单步"断言当场红）。 */
+    slotSeen: number
+    stableSince: number
+    settleTo: number | null
+    latched: number
   }>({
     pos: null,
     fade: 0,
@@ -213,6 +230,10 @@ export function Dock() {
     vEma: 0,
     moveT: 0,
     prevMoveHot: 0,
+    slotSeen: -1,
+    stableSince: 0,
+    settleTo: null,
+    latched: -1,
   })
   /* 换位预览：只有"越过邻居中点"这种离散事件才 setState（每帧不动 state） */
   const [preview, setPreview] = useState<AppId[] | null>(null)
@@ -543,6 +564,47 @@ export function Dock() {
         el.style.zIndex = ''
       }
     })
+    /* ④ 任务栏随波浪**左右扩张**（站主 2026-10-07：「**也允许任务栏稍微左右扩张，以保证不会有
+       图标溢出**」）。为什么需要：全排让路之后整排每侧会涨 ~14px，而自动宽度下每侧只剩 ~7px 余量
+       → 悬停**最左/最右**那个图标时，它自己的 2× 增量会顶出图标区，被 `.dock__view--h` 的主轴
+       `clip-path` 切掉一截。这里按"实际伸出去多少"把图标区撑开：**图标一律不被裁**，而且间隙
+       仍严格均匀（⚠️ **不许**改成"给位移乘个全局系数" —— 那会让间隙不再均匀，见 `ARCH-DOCK.md`）。
+       ⚠️ 只写 DOM 的内联宽高、**绝不写回 `desktop.dock`**：`active` 为假时写回 React 给的
+          `viewLen`（像素级复原，verify 有断言钉着"松手后宽度复原 + 存档未脏"）。
+       ⚠️ 只在"值变化 >0.5px"时写一次，**不是每帧写** —— 稳态下一帧都不写，避免布局抖动。 */
+    let extra = 0
+    if (active) {
+      let leftNeed = 0
+      let rightNeed = 0
+      items.forEach((el, i) => {
+        const size = vertical ? el.offsetHeight : el.offsetWidth
+        const grow = (Math.max(1, size) * ((scales[i] ?? 1) - 1)) / 2
+        const sh = shifts[i] ?? 0
+        leftNeed = Math.max(leftNeed, grow - Math.min(0, sh))
+        rightNeed = Math.max(rightNeed, grow + Math.max(0, sh))
+      })
+      extra = Math.max(leftNeed, rightNeed)
+    }
+    const vpW = window.innerWidth
+    const vpH = window.innerHeight
+    /* 封顶与 CSS 同源（底板 `maxWidth: 87.5vw` / `maxHeight: 25vh`）+ 两侧各留 `DOCK_MARGIN`：
+       超长任务栏 / 窄屏时按"能扩多少扩多少"（那种极端下仍可能被裁一点点，见文档）。 */
+    const capView = Math.min(
+      maxDockLength(position, { w: vpW, h: vpH }) - wheelChrome(btn),
+      (vertical ? vpH : vpW) - DOCK_MARGIN * 2 - wheelChrome(btn),
+    )
+    const wantLen = Math.min(viewLen + extra * 2, Math.max(viewLen, capView))
+    if (wantLen - viewLen > 0.5) {
+      if (waveLen.current === null || Math.abs(waveLen.current - wantLen) > 0.5) {
+        waveLen.current = wantLen
+        if (vertical) view.style.height = `${wantLen}px`
+        else view.style.width = `${wantLen}px`
+      }
+    } else if (waveLen.current !== null) {
+      waveLen.current = null
+      if (vertical) view.style.height = `${viewLen}px`
+      else view.style.width = `${viewLen}px`
+    }
   }
 
   /* 放大强度 + **hot 位置**的平滑推进 + 重画。⚠️ **只用 `raf.current` 这一个 rAF 槽**
@@ -567,15 +629,35 @@ export function Dock() {
        而且中途 peak 先降后升（1.89→1.77→1.86…）——"瞬间移动/跳一下"的手感就是这么来的。
        macOS 的波峰是**锁在光标上**的，所以这里直接赋值（`hot = hotTarget`）。
        进/出栏那种离散变化仍由上面的 `fade` 负责平滑 —— 两者别混。 */
-    pt.hot = pt.hotTarget
+    /* ⭐ 冻结（站主 2026-10-07：「完成生长动画就不要动了，直到我移动到其他图标之后再缩小」）：
+       指针**停住** `LATCH_MS` → 平滑吸附到**指针当前位置**（`LATCH_SNAP_TAU`，因为目标≈现值，
+       这一步几乎看不出位移），到位**且速度归零**后置 `latched` → 从此**真的不再更新**
+       （`wheelMove` 里同位置直接不排帧）。
+       ⚠️ 锚点必须是**指针的连续位置**，不能用 `Math.round` 吸到格心：指针停在偏离格心处时
+          "吸回格心 → 下一个事件又跳回指针处"会来回跳（实测单步 2px 变化 0.483，断言会红）。 */
+    if (pt.latched === -1 && pt.target > 0 && pt.stableSince > 0 && now - pt.stableSince > LATCH_MS) {
+      if (pt.settleTo === null) pt.settleTo = pt.hotTarget
+    }
+    if (pt.settleTo !== null) {
+      pt.hot += (pt.settleTo - pt.hot) * Math.min(1, dt / LATCH_SNAP_TAU)
+      if (Math.abs(pt.hot - pt.settleTo) < 0.004 && pt.vEma === 0) {
+        pt.hot = pt.settleTo
+        pt.latched = pt.settleTo
+        pt.settleTo = null
+      }
+    } else if (pt.latched === -1) {
+      pt.hot = pt.hotTarget
+    }
     /* 方向不对称的速度**在指针事件里算**（`wheelMove`），这里只负责**衰减**：
        指针停住后 `vEma` 平滑归零 → 波峰偏置归零 → **左右收敛回对称**（站主明确要求）。
        循环也因此要多跑一会儿（速度没归零就不能停，否则不对称会"冻"在歪的状态）。 */
     pt.vEma += (0 - pt.vEma) * Math.min(1, dt / ASYM_DECAY)
     if (Math.abs(pt.vEma) < ASYM_DEAD) pt.vEma = 0
     paint()
-    /* 循环收尾：强度与**速度**都安定下来才停 */
-    if (fadeSettled && pt.vEma === 0) {
+    /* 循环收尾：强度、**速度**、吸附都安定，而且要么**已经冻住**、要么指针**已经离开**，才停。
+       ⚠️ 指针还在栏上但**没冻住**时必须继续跑 —— 否则"停稳 200ms 后开始吸附"这个定时条件没人来触发。 */
+    const settled = fadeSettled && pt.vEma === 0 && pt.settleTo === null
+    if (settled && (pt.latched !== -1 || pt.target === 0)) {
       raf.current = 0
     } else {
       raf.current = requestAnimationFrame(tick)
@@ -592,6 +674,14 @@ export function Dock() {
     offset.current = clampRaw(next)
     scheduleTick()
   }
+
+  /* 悬停浮层（`hover`）是 React state：**每换一个图标都会重渲染**，而重渲染会把 `.dock__view` 的
+     内联宽高按 `viewLen` 写回去 → 抹掉 `paint()` 里"随波浪扩张"那点宽度（稳态下我们又不再补帧，
+     扩张就丢了、最左/最右的图标又被裁）。所以在**每次重渲染之后补一帧**，让 paint 重新撑开。
+     只挂 `hover`（离散事件，不是每帧）。⚠️ 别改成依赖 `pointer.current`（ref 变了不会触发 effect）。 */
+  useEffect(() => {
+    if (pointer.current.target > 0 || pointer.current.fade > 0.002) scheduleTick()
+  }, [hover])
 
   /* 松手 / 滚轮之后**回弹到界内**（macOS 滚动视图的行为）：
      - 越界了 → 弹簧弹回端点（`SPRING_STIFFNESS/DAMPING` 就是 playground-macos DockItem 那组 1700/90，
@@ -729,6 +819,11 @@ export function Dock() {
     if (gesture.current) return
     pointer.current.pos = null
     pointer.current.target = 0
+    /* ⭐ 离开 = **解锁冻结**（然后交给 `fade` 平滑收回，末态严格 scale 1 / 位移 0） */
+    pointer.current.latched = -1
+    pointer.current.settleTo = null
+    pointer.current.slotSeen = -1
+    pointer.current.stableSince = 0
     scheduleTick()
   }
 
@@ -747,6 +842,8 @@ export function Dock() {
          旧式子把 `off` 减了两次（`here = pos + off`、`centre = … − off`）—— 未滚动时恰好对，
          **一滚动就整体偏 `2 × off`**；现在两边都统一在「视口主轴坐标」里比，`off` 只出现一次。 */
       const { els, centre } = mainCentres()
+      /* ⭐ 本帧要不要"完全不动"（冻结）—— 判定见下面 `hotTarget` 之后那一段 */
+      let frozen = false
       if (els.length) {
         const here = pointer.current.pos
         let target = 0
@@ -763,10 +860,24 @@ export function Dock() {
           }
         }
         pointer.current.hotTarget = target
+        /* ⭐ 冻结（站主 2026-10-07：「**完成生长动画就不要动了，直到我移动到其他图标之后再缩小**」）：
+           冻住的锚点是**指针当时的实际位置**（连续值，不是取整槽位）——
+           ⚠️ 锚在**取整槽位**上会出问题：指针停在偏离格中心处时，`tick` 把它吸附到格心、
+           下一个事件又把它跳回指针处 → **来回跳**（实测单步 2px 的 scale 变化 0.483，
+           两条"不抖/单步"断言当场红）。锚在指针处，吸附几乎不产生位移，解锁时的补量也 ≤ 死区。
+           冻住之后**同格内的 pointermove 就不排帧、不碰 hot、也不更新速度 EMA** —— 这才是"完全不动"
+           （不是"继续算但值恰好不变"）。
+           ⚠️ 只冻结**悬停驱动**这一段：下面的拖动手势照旧（拖动自己会 `schedulePaint`），
+              所以这里绝不 `return`，只把悬停那段跳过。 */
+        {
+          const ptF = pointer.current
+          const drift = ptF.latched === -1 ? Infinity : Math.abs(target - ptF.latched)
+          frozen = ptF.latched !== -1 && ptF.settleTo === null && drift <= LATCH_DEAD
+        }
         /* **方向不对称用的速度在这里算**（不是在 tick 里）：用指针事件自己的时间戳与位移 ——
            事件之间可能一帧都没跑（快速滑动），放 tick 里会取不到样本、速度忽有忽无
            （实测不对称会来回翻、看着就是"震动"）。⚠️ 仍然只有一个 pointermove 监听。 */
-        {
+        if (!frozen) {
           const pt2 = pointer.current
           const evT = e.timeStamp || performance.now()
           if (pt2.moveT) {
@@ -784,8 +895,18 @@ export function Dock() {
           pt2.moveT = evT
         }
       }
-      if (pointer.current.fade < 0.02) pointer.current.hot = pointer.current.hotTarget
-      scheduleTick()
+      if (!frozen) {
+        const pt3 = pointer.current
+        pt3.latched = -1
+        pt3.settleTo = null
+        /* "停稳"的判据是**指针真的不动了**：目标值一变就重置计时（<0.02 格 ≈ 1px 的微抖不算动）。 */
+        if (Math.abs(pt3.hotTarget - pt3.slotSeen) > 0.02) {
+          pt3.slotSeen = pt3.hotTarget
+          pt3.stableSince = e.timeStamp || performance.now()
+        }
+        if (pt3.fade < 0.02) pt3.hot = pt3.hotTarget
+        scheduleTick()
+      }
     }
     const g = gesture.current
     if (!g || !view) return

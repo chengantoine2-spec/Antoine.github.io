@@ -2490,6 +2490,121 @@ async function run() {
       restoreOk(outSlow) && restoreOk(outFast),
       JSON.stringify(waveRound),
     )
+    /* ── ⭐ 2026-10-07（第 9 轮）站主两条新口径 ─────────────────────────────────────
+       ①「鼠标移动到图标上面之后，**完成生长动画就不要动了**，直到我移动到其他图标之后再缩小」
+       ②「移动到任务栏之后，**所有的图标都要左右让路**，保持图标之间的距离一致」+
+         「**也允许任务栏稍微左右扩张，以保证不会有图标溢出**」 */
+    /* (7) ⭐ **生长完成后冻结**：停稳后**连续采样 1s** —— hot 的 scale 变化 ≤0.005、
+       **所有**图标位移变化 ≤0.5px。为什么必须"看一段时间"而不是"看一眼"：站主报的正是
+       "还在动"（每帧都在微调），单点读数抓不到，只有看极差才证明它真的停住了。 */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(320)
+    await p.mouse.move(cen[midI], dockGeom.y, { steps: 3 })
+    await p.waitForTimeout(450)
+    const freezeSamples = []
+    for (let k = 0; k < 10; k += 1) {
+      freezeSamples.push(await readT())
+      await p.waitForTimeout(100)
+    }
+    const fz0 = freezeSamples[0]
+    const peakFrozen = fz0.reduce((b, v, i) => (v.s > fz0[b].s ? i : b), 0)
+    const maxScaleDrift = Math.max(
+      ...freezeSamples.map((f) => Math.max(...f.map((v, i) => Math.abs(v.s - (fz0[i]?.s ?? 1))))),
+    )
+    const maxShiftDrift = Math.max(
+      ...freezeSamples.map((f) => Math.max(...f.map((v, i) => Math.abs(v.t - (fz0[i]?.t ?? 0))))),
+    )
+    check(
+      '⭐ **生长完成后冻结**：停稳后连续采样 1s，峰值 scale 变化 ≤0.005、**所有**图标位移变化 ≤0.5px（站主："完成生长动画就不要动了"）',
+      (fz0[peakFrozen]?.s ?? 0) >= 1.8 && maxScaleDrift <= 0.005 && maxShiftDrift <= 0.5,
+      JSON.stringify({
+        峰: peakFrozen,
+        峰scale: fz0[peakFrozen]?.s,
+        最大缩放漂移: Number(maxScaleDrift.toFixed(4)),
+        最大位移漂移: Number(maxShiftDrift.toFixed(2)),
+        首帧: fz0.map((v) => v.s),
+      }),
+    )
+    /* (8) ⭐ **换了图标才动 / 移开才缩**：指针从 i 移到 i+2 → 旧峰缩回 1.0(±0.02)、新峰长到 ≥1.9。
+       ⚠️ 用 i+2 而不是 i+1：**紧邻**按现在的曲线应该是 1.19（比峰小、比 1 大），不是 1.0 ——
+       站主那句话的意思是"离开的那颗要缩回去"，最近的邻居本来就该留一点起伏。 */
+    await p.mouse.move(cen[midI + 2], dockGeom.y, { steps: 3 })
+    await p.waitForTimeout(450)
+    const afterSwitch = await readT()
+    const oldPeak = afterSwitch[peakFrozen]?.s ?? 1
+    const newPeak = afterSwitch[midI + 2]?.s ?? 1
+    check(
+      '⭐ **换了图标才动**：指针移到 2 格外 → 原来那颗缩回 1.0(±0.02)、新的那颗长到 ≥1.9（"移开就缩小"）',
+      Math.abs(oldPeak - 1) <= 0.02 && newPeak >= 1.9,
+      JSON.stringify({ 原来那颗: oldPeak, 新的那颗: newPeak, 整排: afterSwitch.map((v) => v.s) }),
+    )
+    /* (9) ⭐ **悬停零裁切**（站主：「也允许任务栏稍微左右扩张，以保证不会有图标溢出」）：
+       悬停**最左 / 最右**两个极端图标 —— 它们自己的 2× 增量最容易顶出图标区、被主轴 `clip-path`
+       切掉一截。判据：**每个**图标的主轴渲染盒都完整落在图标区内（越界 ≤0.5px）、且都在视口内。 */
+    const clipProbe = async (idx) => {
+      await p.mouse.move(640, 120)
+      await p.waitForTimeout(320)
+      await p.mouse.move(cen[idx], dockGeom.y, { steps: 4 })
+      await p.waitForTimeout(380)
+      return p.evaluate((sel) => {
+        const view = document.querySelector(sel + ' [data-dock-view]')
+        const items = [...document.querySelectorAll(sel + " [data-dock-item][data-dock-copy='1']")]
+        const v = view.getBoundingClientRect()
+        let minTop = Infinity
+        let maxBottom = -Infinity
+        const over = []
+        for (const el of items) {
+          const r = el.getBoundingClientRect()
+          minTop = Math.min(minTop, r.top)
+          maxBottom = Math.max(maxBottom, r.bottom)
+          const ov = Math.max(0, v.left - r.left, r.right - v.right)
+          if (ov > 0.5) over.push({ id: el.dataset.dockItem, 越界: Number(ov.toFixed(1)) })
+        }
+        return {
+          图标区宽: Number(v.width.toFixed(1)),
+          主轴越界: over,
+          交叉轴在视口内: minTop >= -0.5 && maxBottom <= window.innerHeight + 0.5,
+        }
+      }, DOCK)
+    }
+    const clipL = await clipProbe(0)
+    const clipR = await clipProbe(cen.length - 1)
+    check(
+      '⭐ **悬停零裁切**：悬停**最左 / 最右**两个极端图标时，每个图标的主轴渲染盒都完整落在图标区内（越界 ≤0.5px）且都在视口内 —— 靠"任务栏随波浪左右扩张"实现（**不是**压缩间距）',
+      clipL.主轴越界.length === 0 &&
+        clipR.主轴越界.length === 0 &&
+        clipL.交叉轴在视口内 &&
+        clipR.交叉轴在视口内,
+      JSON.stringify({ 最左: clipL, 最右: clipR }),
+    )
+    /* (10) ⭐ **扩张后松手复原、存档未脏**（扩张只写 DOM，绝不写回 `desktop.dock`） */
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(360)
+    const viewW = () =>
+      p.evaluate(
+        (sel) => Number(document.querySelector(sel + ' [data-dock-view]').getBoundingClientRect().width.toFixed(1)),
+        DOCK,
+      )
+    const lenBase = await viewW()
+    const storeBefore = await p.evaluate(() => localStorage.getItem('desktop.dock'))
+    await p.mouse.move(cen[Math.floor(cen.length / 2)], dockGeom.y, { steps: 3 })
+    await p.waitForTimeout(380)
+    const lenHover = await viewW()
+    await p.mouse.move(640, 120)
+    await p.waitForTimeout(460)
+    const lenAfter = await viewW()
+    const storeAfter = await p.evaluate(() => localStorage.getItem('desktop.dock'))
+    check(
+      '⭐ **扩张后松手复原**：悬停时图标区确实扩张（>2px）→ 松手后**像素级复原（±1px）**，且 `desktop.dock` **未被写脏**（扩张只走 DOM）',
+      lenHover > lenBase + 2 && Math.abs(lenAfter - lenBase) <= 1 && storeAfter === storeBefore,
+      JSON.stringify({
+        悬停前: lenBase,
+        悬停中: lenHover,
+        复原后: lenAfter,
+        扩了: Number((lenHover - lenBase).toFixed(1)),
+        存档未变: storeAfter === storeBefore,
+      }),
+    )
   } else {
     check('波浪四组（外圈不动 / 方向不对称 / 停手对称 / 不抖 / 进入让路 / 离开还原）', false, 'dockGeom 拿不到')
   }
