@@ -1697,7 +1697,8 @@ async function run() {
     JSON.stringify({ total: glyphProbe.total, img: glyphProbe.img, svg: glyphProbe.svg, labelled: glyphProbe.labelled }),
   )
 
-  /* 14a2 图标**填充比**：`.dock__glyph` 读 `--dock-icon-fill`（默认 **72%**）。
+  /* 14a2 图标**填充比**：`.dock__glyph` 读 `--dock-icon-fill`（默认 **80%**，2026-10-07 站主
+     「增大图标」从 72% 抬上来；按钮同时 40 → 48）。
      来历：`design/ICON-MACOS-BRIEF.md` 读代码量出来「图标只有按钮的一半」（默认 40px 按钮里 20px）
      是**与 macOS 差距最大的单点** —— macOS 的 Dock 图标几乎填满格子。这个值就是那条的回归：
      谁把 `.dock__glyph` 退回 `h-1/2`（或忘了挂 `--dock-icon-fill`），这里会红。 */
@@ -1717,9 +1718,9 @@ async function run() {
     }
   }, DOCK)
   check(
-    'Dock 图标占按钮边长的 **72%**（原来 50%：40px 按钮里只有 20px、周围一圈空）',
-    iconFillProbe.fill.length > 0 && iconFillProbe.fill.every((f) => Math.abs(f - 0.72) <= 0.06),
-    JSON.stringify({ 期望: 0.72, 实测样本: iconFillProbe.sample }),
+    'Dock 图标占按钮边长的 **80%**（原 50% → 72% → 80%：40px 按钮里只有 20px 那版周围一圈空；现在 48px 按钮里约 38px、几乎填满格子）',
+    iconFillProbe.fill.length > 0 && iconFillProbe.fill.every((f) => Math.abs(f - 0.8) <= 0.06),
+    JSON.stringify({ 期望: 0.8, 实测样本: iconFillProbe.sample }),
   )
 
   /* 14a3 悬停出**名称气泡**（站主 2026-10-06：macOS 那个 "Photos" 式气泡）。
@@ -2019,9 +2020,12 @@ async function run() {
   }
   const p1 = await pitchOf(null)
   const p2 = await pitchOf(700)
-  const pitchOk = (x) => !!x && Math.abs(x.btn + 5 - Math.round(x.pitch[0])) <= 2
+  /* ⚠️ 改写（2026-10-07 第 12 轮）：`DOCK_GAP` **5 → 3**（站主「继续减少图标间距，紧密一些」），
+     同时按钮默认尺寸 40 → 48（站主「增大图标」）。判据仍是"相邻中心距 == 图标边长 + DOCK_GAP"，
+     但期望值从 `+5` 改成 `+3`；两档长度各量一次。 */
+  const pitchOk = (x) => !!x && Math.abs(x.btn + 2 - Math.round(x.pitch[0])) <= 2
   check(
-    'Dock 图标间距：相邻中心距 == 图标边长 + DOCK_GAP(5)（两档长度各量一次）',
+    'Dock 图标间距：相邻中心距 == 图标边长 + DOCK_GAP(2)（两档长度各量一次；原判据是 +5，随 GAP 收紧到 3 同步改写）',
     pitchOk(p1) && pitchOk(p2),
     JSON.stringify({ 第一档: p1, 第二档: p2 }),
   )
@@ -2354,15 +2358,16 @@ async function run() {
     const outerMoved = outer.filter((v) => Math.abs(v.t) > 2).length
     const neighborOk = [peakI - 1, peakI + 1].every((i) => i < 0 || i >= r1.length || (r1[i].s > 1.05 && r1[i].s < 1.45))
     const stepPx = cen[1] - cen[0]
-    const wBtn = stepPx - 5
+    const wBtn = stepPx - 2
     const gaps = []
     for (let i = 0; i + 1 < r1.length; i++) {
       gaps.push(stepPx + (r1[i + 1].t - r1[i].t) - (wBtn * r1[i].s + wBtn * r1[i + 1].s) / 2)
     }
     const gapSpread = Math.max(...gaps) - Math.min(...gaps)
-    const gapOk = gaps.every((g) => Math.abs(g - 5) <= 1)
+    /* ⚠️ 改写（2026-10-07 第 12 轮）：期望间隙 5 → **3**（`DOCK_GAP` 同步收紧）；`wBtn` 也按新 GAP 反推。 */
+    const gapOk = gaps.every((g) => Math.abs(g - 2) <= 1)
     check(
-      '全排均匀让路（改写自「≥2 格之外位移恒 0」）：只有「指针正对 + 紧邻左右各一个」缩放（紧邻 1.05~1.45、≥2 格之外 scale 1.0±0.02），但**所有**图标都左右让路，且**逐对间隙恒为 DOCK_GAP(5px)±1**（量间隙不量中心距 —— 中心距含两半宽之和，尺寸不同必然不等）',
+      '全排均匀让路（改写自「≥2 格之外位移恒 0」）：只有「指针正对 + 紧邻左右各一个」缩放（紧邻 1.05~1.45、≥2 格之外 scale 1.0±0.02），但**所有**图标都左右让路，且**逐对间隙恒为 DOCK_GAP(2px)±1**（量间隙不量中心距 —— 中心距含两半宽之和，尺寸不同必然不等）',
       outer.length > 2 && outerScaleOk && outerMoved >= 2 && neighborOk && gapOk && peakI === midI,
       JSON.stringify({ 峰: peakI, 整排scale: r1.map((v) => v.s), 整排位移: r1.map((v) => v.t), 让路格数: outerMoved, 间隙: gaps.map((g) => Number(g.toFixed(2))), 间隙极差: Number(gapSpread.toFixed(2)) }),
     )
@@ -2483,10 +2488,12 @@ async function run() {
     }
     const outSlow = await restoreProbe(false)
     const outFast = await restoreProbe(true)
-    const restoreOk = (r) => r.最大位移 <= 1 && r.最大缩放差 <= 0.02 && r.相邻中心距.length === 1 && Math.abs(r.相邻中心距[0] - 45) <= 2
+    /* ⚠️ 改写（2026-10-07 第 12 轮）：中心距期望 **45 → 51**（按钮 40 → 48、GAP 5 → 3：
+       48 + 3 = 51）。原值 45 其实从 GAP=5 那轮起就该是 44，靠 ±2 容差蒙着 —— 顺手改准。 */
+    const restoreOk = (r) => r.最大位移 <= 1 && r.最大缩放差 <= 0.02 && r.相邻中心距.length === 1 && Math.abs(r.相邻中心距[0] - 50) <= 2
     waveRound = { outSlow, outFast }
     check(
-      '⭐ **离开后完全还原**（正常移出 + **快速一步扫出**）：所有图标位移 0(±1px)、scale 1.0(±0.02)、相邻中心距回到 边长+DOCK_GAP(5)',
+      '⭐ **离开后完全还原**（正常移出 + **快速一步扫出**）：所有图标位移 0(±1px)、scale 1.0(±0.02)、相邻中心距回到 边长+DOCK_GAP(48+2=50)',
       restoreOk(outSlow) && restoreOk(outFast),
       JSON.stringify(waveRound),
     )

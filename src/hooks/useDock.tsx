@@ -53,8 +53,16 @@ function readStored(): Stored {
       return {
         position,
         length: typeof v.length === 'number' && v.length > 0 ? v.length : null,
-        thickness: typeof v.thickness === 'number' && v.thickness > 0 ? v.thickness : null,
-        iconSize: typeof v.iconSize === 'number' && v.iconSize > 0 ? v.iconSize : null,
+        /* ⭐ **向上迁移**（2026-10-07 站主「增大图标」：默认按钮 40 → 48、厚度 54 → 62）。
+           为什么要迁移：`thickness`/`iconSize` 是**存在用户浏览器里**的，只改代码默认值
+           对老存档**看不到效果**（他们的存档会一直覆盖新默认）。
+           规则（**只往上抬，绝不覆盖手动调过的更大值**）：
+             · `iconSize` 存了具体值且 < 48 → 抬到 48（40 那个档是老默认；48 及以上不动）；
+             · `thickness` 存了具体值且 ≤ 54（老默认，多半是没动过或从 54 微调的残留）→ 抬到 62；
+               55~61 那样的中间值**尊重用户**、不迁移（厚度下限 56 会自己兜住裁切问题）。
+           ⚠️ 迁移只发生在**读取**时（不写回 localStorage），所以用户之后手动调小依然生效。 */
+        thickness: typeof v.thickness === 'number' && v.thickness > 0 ? (v.thickness <= 54 ? 62 : v.thickness) : null,
+        iconSize: typeof v.iconSize === 'number' && v.iconSize > 0 ? (v.iconSize < 48 ? 48 : v.iconSize) : null,
         dockApps,
         /* 读不到就是 wheel：老数据里没有这个键，用户应当直接看到新的循环轮盘 */
         mode: v.mode === 'wrap' ? 'wrap' : 'wheel',
