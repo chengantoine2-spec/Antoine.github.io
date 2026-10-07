@@ -4,9 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- 站点 logo：标签页用矢量版（任意尺寸都清晰，约 6KB），iOS 添加到主屏用 512 位图版。
-         两个文件都在 public/ 下，出处是 public/logo.svg，改图跑 node tools/make-logo.mjs 重出 PNG。 -->
+         两个文件都在 public/ 下，出处是 public/logo.svg，改图跑 node tools/make-logo.mjs 重出 PNG。
+         ⚠️ 这里的 `/xxx` 是**根绝对路径**、**由 Vite 在构建时按 base 改写成子路径**（部署在
+         `/Antoine.github.io/` 下也指得对）—— 这条只适用于 `index.html`，`src/` 里的字符串
+         Vite 不会改写（那边必须自己拼 `import.meta.env.BASE_URL`，见 `data/site.ts` 的注释）。 -->
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/logo.png" />
+    <!-- PWA（2026-10-06，最小可用）：manifest 提供安装信息；下面三条 apple-* 是 iOS「添加到主屏」用的
+         （iOS 不读 manifest 的 display/icons，得靠它们），不引任何第三方脚本。 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="芹菜耕地" />
+    <!-- 移动端浏览器地址栏配色 = 浅色主题的强调蓝 hsl(211,100%,50%) -->
+    <meta name="theme-color" content="#007bff" />
     <meta
       name="description"
       content="芹菜耕地 —— 一个桌面式的个人站：桌面背景、任务栏、窗口，每个窗口都是一样菜。"

@@ -543,6 +543,11 @@ async function run() {
     }
     return count
   }
+  /* ⚠️ 必须**先打开博客窗口**再等（2026-10-07 修）：`.blog__feed li` 只有窗口开了才有内容 ——
+     第一版把守卫放在"打开之前"，导致它恒读 0 篇、也读不到失败态的 notice（结构性假红）。
+     下面第 11 节还会再点一次这颗按钮，重复点只是聚焦，无副作用。 */
+  await p.click(`${DOCK} button[aria-label="博客"]`)
+  await p.waitForTimeout(2500)
   const blogPostCount = await waitForPosts()
   check(
     '博客数据已就绪：文章数 > 0（拿不到时只把这条断成红，后面的检查仍会跑完）',

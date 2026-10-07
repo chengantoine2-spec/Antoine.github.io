@@ -1,0 +1,16 @@
+{
+  "name": "芹菜耕地",
+  "short_name": "芹菜耕地",
+  "description": "桌面式个人站：博客 / 项目 / 饥荒 Wiki / 塔罗牌",
+  "lang": "zh-CN",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#007bff",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
