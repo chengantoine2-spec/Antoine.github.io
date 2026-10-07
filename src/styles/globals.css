@@ -1263,7 +1263,7 @@
    `design/ICON-MACOS-BRIEF.md` 量出这是**与 macOS 差距最大的单点**（macOS 的 Dock 图标几乎填满格子）。
    ⚠️ 只给**图标区**用：折行模式（`wrap`）仍是 50%，那是它的旧观感，按规矩不动。 */
 .dock__glyph {
-  width: var(--dock-icon-fill, 72%);
+  width: var(--dock-icon-fill, 80%);
   height: var(--dock-icon-fill, 72%);
 }
 /* ── Dock 底板（macOS，2026-10-06「一切以 macOS 为准」）─────────────────────────
