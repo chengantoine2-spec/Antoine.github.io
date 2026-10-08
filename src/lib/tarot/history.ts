@@ -1,7 +1,13 @@
 import { cardOfId } from '../../data/tarot'
+/* ⚠️ 只**读**模式清单（合法值以 INTERP_MODES 为准），不在这里重抄一份 id */
+import { INTERP_MODES, type InterpModeId } from '../../data/tarot/readings'
 import type { DrawnCard, Reading } from './types'
 
 /* 占卜记录的存取（localStorage 键 `desktop.tarot`）。
+
+   **同一个键还记住"上次选的解读粒度"**（mode）—— 只加一个标量字段，
+   历史数组那份逐条校验（isStoredReading）一个字没动：粒度坏了/缺了只会回落默认，
+   不影响历史能不能读出来。写历史时会把 mode 一起带上（...readStore()），别把它写丢。
 
    一条记录存三样东西：
    - `seed`：**有它就能完整复现这次占卜**（洗牌与正逆位都从这条随机流来，见 `draw.ts`）；
@@ -33,6 +39,8 @@ export interface StoredReading {
 
 interface Store {
   history: StoredReading[]
+  /** 上次选的解读粒度（brief / combo / overview）；**原样存**，读出时再校验 */
+  mode?: unknown
 }
 
 function isStoredCard(value: unknown): value is StoredCard {
@@ -63,9 +71,12 @@ function readStore(): Store {
     if (!raw) return { history: [] }
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return { history: [] }
-    const list = (parsed as Record<string, unknown>).history
-    if (!Array.isArray(list)) return { history: [] }
-    return { history: list.filter(isStoredReading).slice(0, HISTORY_LIMIT) }
+    const bag = parsed as Record<string, unknown>
+    const mode = bag.mode
+    const list = bag.history
+    /* mode 与历史各管各的：历史坏了也别把已经存好的粒度丢掉 */
+    if (!Array.isArray(list)) return { history: [], mode }
+    return { history: list.filter(isStoredReading).slice(0, HISTORY_LIMIT), mode }
   } catch {
     /* 坏 JSON / 隐私模式下 localStorage 抛异常 —— 都回空列表 */
     return { history: [] }
@@ -92,13 +103,39 @@ export function appendHistory(item: StoredReading): StoredReading[] {
     (row) => !(row.at === item.at && row.seed === item.seed && row.spreadId === item.spreadId),
   )
   const next = [item, ...kept].slice(0, HISTORY_LIMIT)
-  writeStore({ history: next })
+  /* ⚠️ 必须把 mode 一起写回去 —— 不然"记一次占卜"会把用户选的粒度抹掉 */
+  writeStore({ ...readStore(), history: next })
   return next
 }
 
 export function clearHistory(): StoredReading[] {
-  writeStore({ history: [] })
+  /* 清历史不清粒度：那是两件事 */
+  writeStore({ ...readStore(), history: [] })
   return []
+}
+
+/* ── 解读粒度（desktop.tarot 的 mode 字段） ── */
+
+/** 缺键 / 坏值 / 未知模式时的默认粒度 */
+export const DEFAULT_INTERP_MODE: InterpModeId = 'brief'
+
+/** 合法值以 INTERP_MODES 为唯一来源（数据层加模式，这里自动跟上） */
+export function isInterpMode(value: unknown): value is InterpModeId {
+  return typeof value === 'string' && INTERP_MODES.some((item) => item.id === value)
+}
+
+/**
+ * 读上次选的解读粒度。**坏数据一律回落默认**，绝不抛 ——
+ * 这个键用户能随手改，进不了就进不了，不能把窗口弄崩。
+ */
+export function readInterpMode(): InterpModeId {
+  const raw = readStore().mode
+  return isInterpMode(raw) ? raw : DEFAULT_INTERP_MODE
+}
+
+/** 切换时立刻写（不用等抽牌 / 提交） */
+export function writeInterpMode(mode: InterpModeId): void {
+  writeStore({ ...readStore(), mode })
 }
 
 /** 一次占卜 → 一条存档记录 */

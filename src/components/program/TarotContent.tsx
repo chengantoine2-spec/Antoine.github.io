@@ -8,7 +8,9 @@ import {
   clearHistory,
   fromStored,
   readHistory,
+  readInterpMode,
   toStored,
+  writeInterpMode,
   type StoredReading,
 } from '../../lib/tarot/history'
 import { buildReading } from '../../lib/tarot/reading'
@@ -39,8 +41,10 @@ export default function TarotContent() {
   const [history, setHistory] = useState<StoredReading[]>(() => readHistory())
   const [showPending, setShowPending] = useState(false)
   const [reviewing, setReviewing] = useState(false)
-  /* 解读粒度：三种可切换，**切换不重抽**（同一手牌只换呈现） */
-  const [interpMode, setInterpMode] = useState<InterpModeId>('brief')
+  /* 解读粒度：三种可切换，**切换不重抽**（同一手牌只换呈现）。
+     ⚠️ 初值从存档读（desktop.tarot 的 mode 字段）—— 刷新/关窗重开还是上次那个；
+     坏值/缺键在 guard 里回落 brief。 */
+  const [interpMode, setInterpMode] = useState<InterpModeId>(() => readInterpMode())
 
   const timer = useRef<number | null>(null)
 
@@ -104,6 +108,12 @@ export default function TarotContent() {
     () => history.filter((row) => fromStored(row) !== null),
     [history],
   )
+
+  /* 切粒度：立刻写回存档（站主要求"不必等抽牌/提交"） */
+  function chooseMode(mode: InterpModeId) {
+    setInterpMode(mode)
+    writeInterpMode(mode)
+  }
 
   function clearTimer() {
     if (timer.current !== null) {
@@ -371,7 +381,7 @@ export default function TarotContent() {
                     data-tarot-mode={item.id}
                     aria-pressed={interpMode === item.id}
                     title={item.hint}
-                    onClick={() => setInterpMode(item.id)}
+                    onClick={() => chooseMode(item.id)}
                     className="rounded border border-edge px-2 py-0.5 text-[11px] text-dim aria-pressed:bg-accent aria-pressed:text-accent-ink"
                   >
                     {item.name}

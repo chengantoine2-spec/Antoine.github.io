@@ -659,6 +659,81 @@ async function run() {
   )
   check('解读区注明「仅供思考参考，不构成决策依据」', disclaimer.includes('仅供思考参考') && disclaimer.includes('不构成决策依据'), disclaimer)
 
+  /* ── 解读模式持久化（站主 2026-10-06：「好，塔罗牌就制作持久化」） ──
+     存法：**扩展已有的 desktop.tarot 键**（加一个 mode 标量字段），不新增键。 */
+  const KEY = 'desktop.tarot'
+  const readKey = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}'), KEY)
+
+  /* ① 切换模式 → 键里立刻有 mode（不必等抽牌 / 提交） */
+  await page.locator('[data-tarot-mode="combo"]').click()
+  const wrote = await readKey()
+  check(
+    '① 切换解读模式立即写进 desktop.tarot 的 mode',
+    wrote.mode === 'combo',
+    `mode = ${JSON.stringify(wrote.mode)}（键里还有 history ${Array.isArray(wrote.history) ? wrote.history.length : '?'} 条）`,
+  )
+
+  /* ② 刷新之后还是上次那个模式：按钮按下态 + 解读呈现形态（combo 的句子有"拿到…核心是"，brief 没有） */
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForSelector('.tarot__spread', { timeout: 20000 })
+  await page.locator('.tarot__spread[data-spread="daily"]').click()
+  await page.locator('.tarot__primary').click()
+  await page.waitForSelector('.tarot-card', { timeout: 15000 })
+  await page.locator('.tarot-card').first().click()
+  await page.waitForTimeout(900)
+  const restored = await page.evaluate(() => ({
+    pressed: [...document.querySelectorAll('[data-tarot-mode]')]
+      .filter((el) => el.getAttribute('aria-pressed') === 'true')
+      .map((el) => el.getAttribute('data-tarot-mode')),
+    text: document.querySelector('.tarot-interp__text')?.textContent ?? '',
+  }))
+  check(
+    '② 刷新后仍是上次选的模式（按钮按下态 + 解读形态都对）',
+    restored.pressed.length === 1 &&
+      restored.pressed[0] === 'combo' &&
+      restored.text.includes('拿到') &&
+      restored.text.includes('核心是'),
+    `按下：${restored.pressed.join(',') || '（无）'} · ${restored.text.slice(0, 46)}…`,
+  )
+
+  /* ③ 坏值回落：往键里塞一个不存在的模式 → 不崩、回落 brief */
+  const errsBefore = errors.length
+  await page.evaluate((k) => localStorage.setItem(k, JSON.stringify({ history: [], mode: '不存在的模式' })), KEY)
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForSelector('.tarot__spread', { timeout: 20000 })
+  const guard = await page.evaluate(async () => {
+    const h = await import('/src/lib/tarot/history.ts')
+    return { read: h.readInterpMode(), valid: h.isInterpMode('不存在的模式') }
+  })
+  await page.locator('.tarot__spread[data-spread="daily"]').click()
+  await page.locator('.tarot__primary').click()
+  await page.waitForSelector('.tarot-card', { timeout: 15000 })
+  await page.locator('.tarot-card').first().click()
+  await page.waitForTimeout(900)
+  const fallback = await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('desktop.tarot') ?? '{}')
+    return {
+      pressed: [...document.querySelectorAll('[data-tarot-mode]')]
+        .filter((el) => el.getAttribute('aria-pressed') === 'true')
+        .map((el) => el.getAttribute('data-tarot-mode')),
+      /* 抽完牌后是"打出牌面"的视图：选择区按钮本来就不在，
+         所以这里判"牌面还在"= 页面没崩（判选择区是这个断言自己写错过一次的点） */
+      cards: document.querySelectorAll('.tarot-card').length,
+      spreads: document.querySelectorAll('.tarot__spread').length,
+      storedRaw: raw.mode,
+    }
+  })
+  check(
+    '③ 坏模式值回落 brief（页面不崩，且新增的未捕获错误为 0）',
+    guard.read === 'brief' &&
+      guard.valid === false &&
+      fallback.pressed.length === 1 &&
+      fallback.pressed[0] === 'brief' &&
+      fallback.cards >= 1 &&
+      errors.length === errsBefore,
+    `readInterpMode() = ${guard.read} · isInterpMode(坏值) = ${guard.valid} · 按下 ${fallback.pressed.join(',')} · 牌面 ${fallback.cards} 张 · 键里仍留着 ${JSON.stringify(fallback.storedRaw)} · 新增错误 ${errors.length - errsBefore}`,
+  )
+
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()

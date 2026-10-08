@@ -285,7 +285,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 | `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
 | `desktop.dshUrl` | DSH 快捷入口指向的地址（`lib/dsh.ts`）。**默认跟着页面的主机名走**：页面是 `127.0.0.1` 就默认 `http://127.0.0.1:3080`，是 `localhost` 就默认 `http://localhost:3080`（DSH 的登录 Cookie 是 SameSite=Strict，主机名不一致就带不过去）。只在窗口里改过才写；**复位 = 删掉这个键** |
-| `desktop.tarot` | 塔罗牌窗口的占卜记录：`{ history: [{ at, seed, spreadId, question, cards: [{ id, reversed }] }] }`，最多 30 条、最近的在最前。**只存牌 id 不存图片**；回顾时按存的牌 id 重建，`seed` 留着是为了"能精确复现当时的随机"（`lib/tarot/history.ts` 的 guard 逐条校验，坏数据回空列表） |
+| `desktop.tarot` | 塔罗牌窗口的存档：`{ history: [...], mode }`（**一个键两件事**）。`history` 每条 `{ at, seed, spreadId, question, cards: [{ id, reversed }] }`，最多 30 条、最近的在最前，**只存牌 id 不存图片**；回顾时按存的牌 id 重建，`seed` 留着是为了"能精确复现当时的随机"（`lib/tarot/history.ts` 的 guard 逐条校验，坏数据回空列表）。`mode` = **上次选的解读粒度**（`brief` / `combo` / `overview`，清单在 `data/tarot/readings.ts` 的 `INTERP_MODES`）：切换时立刻写、窗口挂载时读回；**缺键 / 坏值 / 未知模式一律回落 `brief`**，而且写历史时会把 `mode` 一起带上（记一次占卜不会把粒度抹掉） |
 
 读取一律走 `lib/` 里的 guard 函数，坏数据要能回默认值，不要让启动崩掉。
 
