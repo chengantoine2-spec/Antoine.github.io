@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PENDING_SPREADS, SPREADS, spreadOfId } from '../../data/tarot/spreads'
 import { QUESTION_ROTATE_MS, pickQuestion } from '../../data/tarot/questions'
+import { INTERP_MODES, interpret, type InterpModeId } from '../../data/tarot/readings'
 import { drawReading } from '../../lib/tarot/draw'
 import {
   appendHistory,
@@ -38,6 +39,8 @@ export default function TarotContent() {
   const [history, setHistory] = useState<StoredReading[]>(() => readHistory())
   const [showPending, setShowPending] = useState(false)
   const [reviewing, setReviewing] = useState(false)
+  /* 解读粒度：三种可切换，**切换不重抽**（同一手牌只换呈现） */
+  const [interpMode, setInterpMode] = useState<InterpModeId>('brief')
 
   const timer = useRef<number | null>(null)
 
@@ -87,6 +90,14 @@ export default function TarotContent() {
     () => (active ? buildReading(active.reading, activeSpread) : null),
     [active, activeSpread],
   )
+
+  /* 解读文案（组合生成，见 data/tarot/readings.ts）：跟着"正在看的那一把"，
+     切粒度只换呈现 —— 这里**没有**任何重新抽牌的动作 */
+  const interp = useMemo(
+    () => (active ? interpret(active.reading, activeSpread, interpMode, active.seed) : null),
+    [active, activeSpread, interpMode],
+  )
+  const allOpen = revealed.length > 0 && revealed.every(Boolean)
 
   /* 历史里能还原出来的那些（牌表里还找得到全部牌） */
   const usableHistory = useMemo(
@@ -344,6 +355,94 @@ export default function TarotContent() {
               revealed={revealed}
               question={active.reading.question}
             />
+          ) : null}
+          {interp ? (
+            /* ⚠️ `col-span-full` 是必需的：`.tarot__play` 是**显式两行/两列的 grid**，
+               不加就会变成第三个网格项，把牌阵那一格压成 0 高 ——
+               `layoutSpread()` 量到 0 就返回 null，牌面整个不渲染（踩过：全翻开后牌全没了、
+               解读栏还留着几条）。高度上限 + 自身滚动，保证牌阵永远有地方。 */
+            <section className="tarot-interp col-span-full mt-3 max-h-[34vh] overflow-auto">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="解读粒度">
+                <span className="text-[11px] text-dim">解读粒度：</span>
+                {INTERP_MODES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-tarot-mode={item.id}
+                    aria-pressed={interpMode === item.id}
+                    title={item.hint}
+                    onClick={() => setInterpMode(item.id)}
+                    className="rounded border border-edge px-2 py-0.5 text-[11px] text-dim aria-pressed:bg-accent aria-pressed:text-accent-ink"
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+
+              {interp.mode === 'overview' ? (
+                interp.overview && allOpen ? (
+                  <div className="mt-2 space-y-1.5 rounded-md border border-edge bg-surface-2 p-2.5">
+                    <p className="tarot-interp__mood text-xs leading-relaxed text-ink">
+                      <span className="text-dim">整体氛围：</span>
+                      {interp.overview.mood}
+                    </p>
+                    <p className="tarot-interp__flow text-xs leading-relaxed text-ink">
+                      {interp.overview.flow}
+                    </p>
+                    <p className="tarot-interp__remind text-xs leading-relaxed text-ink">
+                      <span className="text-dim">关键提醒：</span>
+                      {interp.overview.remind}
+                    </p>
+                    <ul className="tarot-interp__advice space-y-0.5 pt-0.5">
+                      {interp.overview.advice.map((line) => (
+                        <li key={line} className="tarot-interp__adviceItem text-[11px] leading-relaxed text-dim">
+                          · {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-dim">
+                    全部翻开之后给整体综述（还差 {revealed.filter((v) => !v).length} 张）。
+                  </p>
+                )
+              ) : (
+                <ol className="mt-2 space-y-2">
+                  {interp.entries.map((entry, index) =>
+                    revealed[index] ? (
+                      <li
+                        key={`${entry.position}-${index}`}
+                        className="tarot-interp__item rounded-md border border-edge bg-surface-2 p-2.5"
+                        data-position={entry.position}
+                      >
+                        <p className="text-xs font-medium text-ink">
+                          {entry.position}
+                          <span className="ml-1.5 text-[11px] font-normal text-dim">
+                            {entry.card}
+                            {entry.reversed ? ' · 逆位' : ' · 正位'}
+                          </span>
+                        </p>
+                        <p className="tarot-interp__text mt-1 text-xs leading-relaxed text-ink">{entry.text}</p>
+                        <ul className="tarot-interp__advice mt-1.5 space-y-0.5">
+                          {entry.advice.map((line) => (
+                            <li
+                              key={line}
+                              className="tarot-interp__adviceItem text-[11px] leading-relaxed text-dim"
+                            >
+                              · {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    ) : null,
+                  )}
+                </ol>
+              )}
+
+              <p className="tarot-interp__disclaimer mt-2 text-[10px] leading-relaxed text-dim">
+                {interp.disclaimer}
+              </p>
+            </section>
           ) : null}
         </div>
       </div>

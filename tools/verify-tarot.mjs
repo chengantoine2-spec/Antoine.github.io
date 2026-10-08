@@ -510,6 +510,155 @@ async function run() {
     `${legacy.rows} 条记录 · 选择区仍有 ${legacy.spreads} 个牌阵`,
   )
 
+  /* ── 解读文案（第二乱）：三种粒度可切换 + 每条 2~3 句建议 ── */
+  await page.locator('.tarot__spread[data-spread="relation"]').click()
+  await page.locator('.tarot__primary').click()
+  await page.waitForSelector('.tarot-card', { timeout: 15000 })
+  const relCards = await page.locator('.tarot-card').count()
+  for (let i = 0; i < relCards; i++) await page.locator('.tarot-card').nth(i).click()
+  await page.waitForTimeout(1200)
+
+  const cardSrcs = () =>
+    page.evaluate(() => [...document.querySelectorAll('.tarot-card img')].map((el) => el.getAttribute('src')))
+  const srcsBefore = await cardSrcs()
+
+  /* ① 三种粒度都能切，且同时只有一个处于按下态 */
+  const modeIds = ['brief', 'combo', 'overview']
+  const modeProblems = []
+  for (const id of modeIds) {
+    const btn = page.locator(`[data-tarot-mode="${id}"]`)
+    if ((await btn.count()) !== 1) {
+      modeProblems.push(`${id} 没有按钮`)
+      continue
+    }
+    await btn.click()
+    if ((await btn.getAttribute('aria-pressed')) !== 'true') modeProblems.push(`${id} 没进入按下态`)
+    const stillPressed = await page.evaluate(
+      (self) =>
+        [...document.querySelectorAll('[data-tarot-mode]')].filter(
+          (el) => el.getAttribute('data-tarot-mode') !== self && el.getAttribute('aria-pressed') === 'true',
+        ).length,
+      id,
+    )
+    if (stillPressed !== 0) modeProblems.push(`${id} 按下时还有别的模式也是按下态`)
+  }
+  check('三种解读粒度都能切换（aria-pressed 唯一）', modeProblems.length === 0, modeProblems.join('；') || '3 种都对')
+
+  /* ② 切模式不重新抽牌：牌的图片地址序列一模一样 */
+  const srcsAfter = await cardSrcs()
+  check(
+    '切模式不重新抽牌（同一手牌，牌序未变）',
+    srcsBefore.length === relCards && srcsBefore.join(',') === srcsAfter.join(','),
+    `${srcsBefore.length} 张：${srcsBefore.map((x) => (x ?? '').split('/').pop()).join(' ')}`,
+  )
+
+  /* ③ (a) 每牌位一句：条目数 == 牌位数，每条含自己的牌位名 */
+  await page.locator('[data-tarot-mode="brief"]').click()
+  const brief = await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.tarot-interp__item')]
+    return {
+      count: items.length,
+      ok: items.every((el) => {
+        const pos = el.getAttribute('data-position') ?? ''
+        const text = el.querySelector('.tarot-interp__text')?.textContent ?? ''
+        return pos.length > 0 && text.includes(pos)
+      }),
+      adviceCounts: items.map((el) => el.querySelectorAll('.tarot-interp__adviceItem').length),
+      sample: items[0]?.querySelector('.tarot-interp__text')?.textContent ?? '',
+    }
+  })
+  check(
+    '(a) 每牌位一句：条目数 == 牌位数，且每条都写出牌位名',
+    brief.count === relCards && brief.ok,
+    `${brief.count}/${relCards} 条 · ${brief.sample}`,
+  )
+
+  /* ④ (b) 牌 × 牌位：**同一张牌放到不同牌位必须给不同的话**（防"只按牌给话"的假实现） */
+  const gen = await page.evaluate(async () => {
+    const R = await import('/src/data/tarot/readings.ts')
+    const S = await import('/src/data/tarot/spreads.ts')
+    const D = await import('/src/data/tarot/index.ts')
+    const spread = S.SPREADS.find((x) => x.id === 'relation')
+    const card = D.CARDS.find((c) => c.id === 'Fool')
+    const mk = (reversed) => ({
+      at: 1,
+      spreadId: spread.id,
+      question: '',
+      cards: [0, 1, 3].map((positionIndex) => ({ card, reversed, positionIndex })),
+    })
+    const up = R.interpret(mk(false), spread, 'combo', 42)
+    const rev = R.interpret(mk(true), spread, 'combo', 42)
+    const ov = R.interpret(mk(false), spread, 'overview', 42)
+    return {
+      three: up.entries.map((e) => e.text),
+      labels: up.entries.map((e) => e.position),
+      upText: up.entries[0].text,
+      revText: rev.entries[0].text,
+      /* 用模块自己算的核心义（上游字段是逗号串，coreOf 会截成前两个词） */
+      coreUp: R.coreOf({ card, reversed: false, positionIndex: 0 }),
+      coreRev: R.coreOf({ card, reversed: true, positionIndex: 0 }),
+      advice: up.entries[0].advice,
+      revAdvice: rev.entries[0].advice,
+      overview: ov.overview,
+      disclaimer: up.disclaimer,
+      mode: { brief: R.interpret(mk(false), spread, 'brief', 42).entries[0].text },
+    }
+  })
+  check(
+    '(b) 牌 × 牌位：同一张牌在三个不同牌位给出三段不同的话（牌位角色真的参与）',
+    new Set(gen.three).size === 3 && gen.three.every((t, i) => t.includes(gen.labels[i])),
+    `${gen.labels.join(' / ')}`,
+  )
+
+  /* ⑤ (c) 整体综述：够长，且三段结构（氛围 / 走向 / 提醒）都在 */
+  await page.locator('[data-tarot-mode="overview"]').click()
+  const ovUi = await page.evaluate(() => {
+    const q = (sel) => document.querySelector(sel)?.textContent ?? ''
+    return {
+      mood: q('.tarot-interp__mood'),
+      flow: q('.tarot-interp__flow'),
+      remind: q('.tarot-interp__remind'),
+      text: q('.tarot-interp__mood') + q('.tarot-interp__flow') + q('.tarot-interp__remind'),
+      advice: document.querySelectorAll('.tarot-interp__adviceItem').length,
+    }
+  })
+  check(
+    '(c) 整体综述够长且含氛围 / 走向 / 提醒三段',
+    ovUi.text.length >= 120 && ovUi.mood.length > 10 && ovUi.flow.length > 30 && ovUi.remind.length > 20,
+    `${ovUi.text.length} 字 · ${ovUi.mood.slice(0, 28)}…`,
+  )
+
+  /* ⑥ 每条 2~3 句建议，每句成句；全篇不许出现宿命论措辞 */
+  const fatalWords = ['一定', '必然', '注定', '绝对', '肯定会', '命中注定']
+  const adviceShape = {
+    ok:
+      brief.adviceCounts.every((n) => n >= 2 && n <= 3) &&
+      gen.advice.length >= 2 &&
+      gen.advice.length <= 3 &&
+      gen.revAdvice.length >= 2 &&
+      gen.revAdvice.every((line) => line.length >= 8),
+    counts: brief.adviceCounts.join(','),
+    fatal: fatalWords.filter((w) => (JSON.stringify(gen) + ovUi.text).includes(w)),
+  }
+  check(
+    '每条都给 2~3 句「建议与注意」（每句成句，且不写宿命论）',
+    adviceShape.ok && adviceShape.fatal.length === 0,
+    `每条 ${adviceShape.counts} 句${adviceShape.fatal.length ? ' · 出现宿命论措辞：' + adviceShape.fatal.join('/') : ''}`,
+  )
+
+  /* ⑦ 逆位文案与正位不同，而且各自带自己的核心义（不是加个"不"字） */
+  check(
+    '逆位文案与正位不同（各用自己的核心义，不是加个"不"字）',
+    gen.upText !== gen.revText && gen.upText.includes(gen.coreUp) && gen.revText.includes(gen.coreRev),
+    `正：${gen.coreUp} / 逆：${gen.coreRev}`,
+  )
+
+  /* ⑧ 免责声明在解读区里（站主要求：不构成决策依据） */
+  const disclaimer = await page.evaluate(
+    () => document.querySelector('.tarot-interp__disclaimer')?.textContent ?? '',
+  )
+  check('解读区注明「仅供思考参考，不构成决策依据」', disclaimer.includes('仅供思考参考') && disclaimer.includes('不构成决策依据'), disclaimer)
+
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
 
   await browser.close()
