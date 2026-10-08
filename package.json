@@ -11,6 +11,7 @@
     "verify": "node tools/verify.mjs",
     "verify:dst": "node tools/verify-dst.mjs",
     "verify:tarot": "node tools/verify-tarot.mjs",
+    "verify:music": "node tools/verify-music.mjs",
     "verify:almanac": "node tools/verify-almanac.mjs",
     "tarot:assets": "python tools/tarot-assets.py",
     "preview": "vite preview",

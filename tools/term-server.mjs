@@ -191,6 +191,22 @@ const AUDIO_MIME = {
   '.ogg': 'audio/ogg',
   '.opus': 'audio/ogg',
 }
+/* 封面图（2026-10-06 补）：清单 music.json 里的 `cover` 指向它们，要能通过 /music/file 取到，
+   否则音乐窗口只有歌没有封面。
+   ⚠️ **绝不能把它们并进 AUDIO_EXT**：那个数组同时被列表扫描器（musicList）当作"这一项是不是一首曲目"，
+   并进去会让 `cover.jpg` 出现在曲目列表里、点开还想播它。所以"能不能取"与"算不算曲目"分成两份：
+     · 算曲目：AUDIO_EXT（列表用）
+     · 能取文件：MEDIA_EXT = 音频 + 图片（/music/file 用）
+   穿越校验对两者是同一条代码路径（都在 musicFileOf 里），所以图片同样不许 ../ 越界。 */
+const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp']
+const IMAGE_MIME = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+}
+const MEDIA_EXT = [...AUDIO_EXT, ...IMAGE_EXT]
+const MEDIA_MIME = { ...AUDIO_MIME, ...IMAGE_MIME }
 
 function extOf(name) {
   const m = /(\.[A-Za-z0-9]+)$/.exec(name)
@@ -211,7 +227,7 @@ async function musicFileOf(rel) {
   /* ⚠️ 前缀校验要带分隔符，否则同前缀的兄弟目录（MusicEvil）能溜过去 */
   const inside = abs === root || abs.startsWith(root + '/') || abs.startsWith(root + '\\')
   if (!inside) return null
-  if (!AUDIO_EXT.includes(extOf(abs))) return null
+  if (!MEDIA_EXT.includes(extOf(abs))) return null
   return abs
 }
 
@@ -302,7 +318,7 @@ async function handleMusicList(res) {
 async function handleMusicFile(req, res, url) {
   const abs = await musicFileOf(url.searchParams.get('path'))
   if (!abs) {
-    sendJson(res, 403, { error: '只能取音乐目录里的音频文件（不许 ../ 穿越、不许非音频扩展名）' })
+    sendJson(res, 403, { error: '只能取音乐目录里的音频与封面图（不许 ../ 穿越、不许白名单外的扩展名）' })
     return
   }
   const { createReadStream, statSync } = await import('node:fs')
@@ -314,7 +330,7 @@ async function handleMusicFile(req, res, url) {
     sendJson(res, 404, { error: '这个文件不在音乐目录里' })
     return
   }
-  const type = AUDIO_MIME[extOf(abs)] ?? 'application/octet-stream'
+  const type = MEDIA_MIME[extOf(abs)] ?? 'application/octet-stream'
   const range = req.headers.range
   /* ⚠️ 必须支持 Range：否则浏览器拖进度条只能重头下 */
   const m = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null
