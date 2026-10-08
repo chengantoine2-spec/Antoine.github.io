@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getApp, matchWindowRoute, pathOf } from '../../lib/apps'
 import { useAppearance } from '../../hooks/useAppearance'
@@ -12,6 +12,12 @@ import { CelestialClock } from './CelestialClock'
 import { DockPositionMenu } from './DockPositionMenu'
 import { FullscreenButton } from './FullscreenButton'
 import { StartMenu } from './StartMenu'
+import {
+  getMusicSnap,
+  next as musicNext,
+  subscribeMusic,
+  toggle as musicToggle,
+} from '../../lib/music/player'
 
 /**
  * macOS 顶部菜单栏（2026-10-06「一切以 macOS 为准」P2）。
@@ -49,6 +55,8 @@ export function MenuBar({ onTile }: MenuBarProps) {
   const { windows, dispatch } = useWindows()
   const { theme, setTheme } = useAppearance()
   const { position, setPosition } = useDock()
+  /* 音乐控件的状态：和音乐窗口**同一份**（`lib/music/player.ts` 的模块级单例 + 广播） */
+  const music = useSyncExternalStore(subscribeMusic, getMusicSnap)
 
   const bar = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState<MenuId | null>(null)
@@ -368,6 +376,49 @@ export function MenuBar({ onTile }: MenuBarProps) {
             }}
           />
         </div>
+
+        {/* 音乐：播放/暂停 + 下一首（2026-10-06 音乐收尾那一单）。
+            ⚠️ **只在"确实有曲目"时出场**（`tracks.length > 0` = 服务在线且清单拿到了）：
+            没服务时整组**隐藏**，而不是摆两颗点了没反应的死按钮（项目红线）。
+            ⚠️ 里面的 svg **必须带尺寸类** —— 菜单栏里不写尺寸的 svg 会按替换元素默认 300×150
+            渲染、把这一条撑成 456×150（当初踩过，见 ARCH-MENUBAR 的坑 1）。
+            `data-menubar-music` 是这一组的标记，验证脚本按它判"出现了没有"。 */}
+        {music.tracks.length > 0 ? (
+          <div className="menubar__wrap" data-menubar-music="">
+            <button
+              type="button"
+              className="menubar__btn"
+              data-menubar-music-ctl={music.paused ? 'play' : 'pause'}
+              aria-label={music.paused ? '音乐：播放' : '音乐：暂停'}
+              title={music.paused ? '播放' : '暂停'}
+              onClick={() => musicToggle()}
+            >
+              {music.paused ? (
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                  <path d="M8 5l11 7-11 7z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                  <rect x="7" y="5" width="3.5" height="14" rx="1" />
+                  <rect x="13.5" y="5" width="3.5" height="14" rx="1" />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              className="menubar__btn"
+              data-menubar-music-ctl="next"
+              aria-label="音乐：下一首"
+              title="下一首"
+              onClick={() => musicNext(false)}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                <path d="M6 5l9 7-9 7z" />
+                <rect x="16" y="5" width="2.5" height="14" rx="1" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
 
         {/* 日月时钟并进菜单栏（同一个组件，紧凑形态；元素与类名一个都不少） */}
         {/* 站主 2026-10-06：「从右上角日期进入」黄历 —— 整枚时钟就是按钮。

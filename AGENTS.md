@@ -281,6 +281,7 @@ logo-mark                        站标：读 --logo-shadow，给透明底图形
 | `desktop.draft` | 编辑中的草稿（自动保存，发布/取消后清除），防止误关窗口丢内容 |
 | `desktop.termPort` | 终端服务端口，默认 5180 |
 | `desktop.termToken` | **终端服务的 token**（`npm run term` 启动时打印）。只存本机浏览器；有了它才能在网页里跑本机命令 |
+| `desktop.music` | 音乐窗口的**小**存档：`{ volume, shuffle, repeat, lastTrackId, position }`（`lib/music/prefs.ts` 的 guard 逐个校验，缺键/坏值/坏 JSON 一律回落默认、不崩）。⚠️ **只存这几样，绝不存曲库清单**（那是本机服务的实时数据，存下来只会"明明删了却还在"）。**只在用户真的改过时写**（拖音量 / 切随机 / 切循环 / 换曲 / 播到一半每 5 秒落一次位置），打开窗口本身不写 |
 | `desktop.articleWidth` | 文章正文列宽（px）。拖过正文两侧的拖动条才有；**双击拖动条 = 删掉这个键**，回到 88ch 自适应 |
 | `desktop.blogNavWidth` / `desktop.blogAsideWidth` | 博客首页左栏（分类）/ 右栏的宽度（px）。拖过分隔条才有；**双击分隔条 = 删掉对应那个键**，回到该断点的默认宽度 |
 | `desktop.wikiNavWidth` / `desktop.wikiAsideWidth` | 饥荒 Wiki 窗口左栏（分类）/ 速览栏的宽度（px），规则同上 |
@@ -355,7 +356,7 @@ markdown 那块是 `React.lazy` 的。如果在**同步**的 `setState` / `navig
 - 饥荒 Wiki 专属：`npm run verify:dst`（21 项，归 wiki 负责人）
 - ⚠️ **地址要显式给它，而且两个都试一下**：`npm run verify -- http://localhost:5173`。
   本机实测过两种情形 —— 有时只有 `127.0.0.1` 通、有时只有 `localhost` 通（dev server 只绑一个）。
-- 改完**至少**跑 `npm run build`；涉及交互再跑 `npm run verify`。**当前 `verify.mjs` 共 171 项**（**运行时总数** = 结尾 `N/N 通过` 的分母）；**静态 `check(` 调用是 170** —— 差值来自"有条目在循环里展开"（一次 `check(` 调用可能产出多条断言，**两个数都对，别拿一个否定另一个**）。
+- 改完**至少**跑 `npm run build`；涉及交互再跑 `npm run verify`。**当前 `verify.mjs` 共 156 项**（**运行时总数** = 结尾 `N/N 通过` 的分母）；**静态 `check(` 调用是 158** —— 差值来自"有条目在循环里展开"（一次 `check(` 调用可能产出多条断言，**两个数都对，别拿一个否定另一个**）。
 - ⚠️ 这个项数**会随断言增删过期**，别当圣旨：跑完看结尾那行 `N/N 通过` 最准，
   只想快速核一遍就 `Select-String -Path tools/verify.mjs -Pattern '^\s*check\('` 数一下（改了断言顺手更新这里）。
 - ⚠️ **换皮 / 重构时那些断言是"改写"不是"删掉"** —— 每条改写都要写清"原断言 → 新断言 + 为什么"。

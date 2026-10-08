@@ -14,7 +14,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -291,6 +291,14 @@ try {
         off.total >= 6 && off.enabledCtrls === 0 && off.enabledButtons.every((b) => b === '重新检测'),
         JSON.stringify({ total: off.total, enabledCtrls: off.enabledCtrls, enabledButtons: off.enabledButtons }),
       )
+
+      /* 菜单栏那组音乐控件在没服务时**整组不出现**（而不是摆两颗点了没反应的死按钮） */
+      const noMusicCtl = await page.locator('[data-menubar] [data-menubar-music]').count()
+      check(
+        '无服务时菜单栏**不出现**音乐控件（没有死按钮）',
+        noMusicCtl === 0,
+        JSON.stringify({ count: noMusicCtl }),
+      )
       await ctx.close()
     }
 
@@ -334,6 +342,20 @@ try {
         play.dataSrc.includes('/music/file') && play.currentSrc.startsWith('blob:'),
         JSON.stringify({ dataSrc: play.dataSrc, currentSrc: play.currentSrc.slice(0, 32) }),
       )
+
+      /* Media Session（锁屏 / 系统媒体键）：支持则 metadata 要真有内容，不支持则优雅跳过。
+         "不抛"那半由最后那条"没有未捕获运行时错误"兜底 —— 这里只管 metadata。 */
+      const ms = await page.evaluate(() => ({
+        supported:
+          typeof navigator.mediaSession !== 'undefined' && typeof MediaMetadata !== 'undefined',
+        title: navigator.mediaSession?.metadata?.title ?? null,
+        artist: navigator.mediaSession?.metadata?.artist ?? null,
+      }))
+      check(
+        'Media Session：支持则 metadata.title 非空（来自正在播的那首）；不支持则优雅跳过',
+        ms.supported ? !!ms.title && String(ms.title).length > 0 : true,
+        JSON.stringify(ms),
+      )
       await ctx.close()
     }
 
@@ -372,6 +394,176 @@ try {
         JSON.stringify(two),
       )
       await ctx.close()
+    }
+
+    /* ⑥ 存档 `desktop.music`：只在用户真改过时写、刷新后读回、坏值不崩并回落默认 */
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+      await seed(ctx, {
+        'desktop.termPort': String(PORT),
+        'desktop.termToken': TOKEN,
+        'desktop.dock': DOCK_WRAP,
+      })
+      const page = await track(ctx)
+      await page.goto(`${APP}/music`, { waitUntil: 'load' })
+      await page.waitForSelector('[data-music-ctl="volume"]', { timeout: 10000 })
+
+      const untouched = await page.evaluate(() => localStorage.getItem('desktop.music'))
+      /* 拖音量：React 受控 range 必须走**原生 setter** + input 事件，直接改 .value 它不认 */
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-music-ctl="volume"]')
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+        setter.call(el, '0.35')
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await page.click('[data-music-ctl="shuffle"]')
+      await page.waitForTimeout(200)
+      const stored = await page.evaluate(() => localStorage.getItem('desktop.music'))
+      let parsed = null
+      try {
+        parsed = JSON.parse(stored ?? 'null')
+      } catch {
+        parsed = null
+      }
+      check(
+        '存档①：拖音量 / 切随机 → desktop.music 被写入（**打开窗口本身不写**：改之前是 null）',
+        untouched === null && !!parsed && Math.abs(parsed.volume - 0.35) < 0.001 && parsed.shuffle === true,
+        JSON.stringify({ untouched, parsed }),
+      )
+
+      await page.reload({ waitUntil: 'load' })
+      await page.waitForSelector('[data-music-ctl="volume"]', { timeout: 10000 })
+      const afterReload = await page.evaluate(() => ({
+        raw: localStorage.getItem('desktop.music'),
+        volume: document.querySelector('[data-music-ctl="volume"]')?.value ?? null,
+        shuffle: document.querySelector('[data-music-ctl="shuffle"]')?.getAttribute('aria-pressed') ?? null,
+      }))
+      check(
+        '存档②：刷新后音量/随机还在，而且界面是从存档里读回来的',
+        afterReload.volume === '0.35' && afterReload.shuffle === 'true' && !!afterReload.raw,
+        JSON.stringify(afterReload),
+      )
+
+      /* 坏值注入：不许崩，也不许把默认值写坏 */
+      const errorsBefore = pageErrors.length
+      await page.evaluate(() =>
+        localStorage.setItem(
+          'desktop.music',
+          '{"volume":"大声","shuffle":"yes","repeat":"weird","lastTrackId":42,"position":-9}',
+        ),
+      )
+      await page.reload({ waitUntil: 'load' })
+      await page.waitForSelector('[data-music-ctl="volume"]', { timeout: 10000 })
+      const degraded = await page.evaluate(() => ({
+        windowAlive: !!document.querySelector('[data-music-root]'),
+        volume: document.querySelector('[data-music-ctl="volume"]')?.value ?? null,
+        shuffle: document.querySelector('[data-music-ctl="shuffle"]')?.getAttribute('aria-pressed') ?? null,
+        repeat: document.querySelector('[data-music-ctl="repeat"]')?.getAttribute('aria-pressed') ?? null,
+      }))
+      check(
+        '存档③：注入坏值 → 窗口照常活着 + 回落默认（音量 0.8 / 随机 false / 循环 off）且没抛错',
+        degraded.windowAlive &&
+          degraded.volume === '0.8' &&
+          degraded.shuffle === 'false' &&
+          degraded.repeat === 'false' &&
+          pageErrors.length === errorsBefore,
+        JSON.stringify({ ...degraded, newErrors: pageErrors.length - errorsBefore }),
+      )
+      await ctx.close()
+    }
+
+    /* ⑦ 菜单栏那组音乐控件：有曲目才出现、点了真能播/停；且**不许把菜单栏撑高** */
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+      await seed(ctx, {
+        'desktop.termPort': String(PORT),
+        'desktop.termToken': TOKEN,
+        'desktop.dock': DOCK_WRAP,
+      })
+      const page = await track(ctx)
+      await page.goto(`${APP}/music`, { waitUntil: 'load' })
+      await page.waitForSelector('[data-music-track]', { timeout: 10000 })
+      await page.waitForSelector('[data-menubar] [data-menubar-music]', { timeout: 10000 })
+      const bar = await page.evaluate(() => {
+        const el = document.querySelector('[data-menubar]')
+        return {
+          h: Math.round(el.getBoundingClientRect().height),
+          buttons: el.querySelectorAll('[data-menubar-music] button').length,
+        }
+      })
+      /* 一次性匹配"播放"或"暂停"那颗（属性值随状态变，同一时刻只会命中一颗）：
+         点一下 → 真开始播；再点一下 → 真停。 */
+      const key = '[data-menubar] [data-menubar-music-ctl="play"], [data-menubar] [data-menubar-music-ctl="pause"]'
+      await page.click(key)
+      await page.waitForTimeout(1500)
+      const playing = await page.evaluate(() => {
+        const a = document.querySelector('audio[data-music-audio]')
+        return { paused: a ? a.paused : null, dataSrc: a?.dataset.src ?? '' }
+      })
+      await page.click(key)
+      await page.waitForTimeout(400)
+      const stopped = await page.evaluate(
+        () => document.querySelector('audio[data-music-audio]')?.paused ?? null,
+      )
+      check(
+        '菜单栏音乐控件：有曲目时出现（2 颗）→ 点了真在播 → 再点真停；且菜单栏高度仍是 28px（没被撑高）',
+        bar.buttons === 2 &&
+          playing.paused === false &&
+          playing.dataSrc.includes('/music/file') &&
+          stopped === true &&
+          bar.h === 28,
+        JSON.stringify({ bar, playing, stopped }),
+      )
+      await ctx.close()
+    }
+
+    /* ⑧ sw.js：把 `shouldBypass` 的**源码抽出来真跑**（不是"文件里有 /music/ 字样"这种弱断言） */
+    {
+      const swSrc = readFileSync(join(ROOT, 'public', 'sw.js'), 'utf8')
+      const portsSrc = /const LOCAL_SERVICE_PORTS = ([^\n]+)/.exec(swSrc)?.[1] ?? ''
+      const fnSrc = /function shouldBypass\(url, origin\) \{[\s\S]*?\n\}/.exec(swSrc)?.[0] ?? ''
+      const shellSrc = /const SHELL = (\[[^\n]*\])/.exec(swSrc)?.[1] ?? ''
+      let readings = {}
+      let ok = false
+      if (fnSrc && portsSrc) {
+        try {
+          const ports = new Function(`return ${portsSrc}`)()
+          const fn = new Function('LOCAL_SERVICE_PORTS', `return ${fnSrc}`)(ports)
+          const origin = 'http://localhost:5173'
+          const test = (u) => fn(new URL(u), origin)
+          readings = {
+            musicService: test('http://127.0.0.1:5180/music/file?path=a.wav'),
+            musicSameOrigin: test('http://localhost:5173/music/file?path=a.wav'),
+            apiHealth: test('http://127.0.0.1:5199/api/health'),
+            dshPort: test('http://127.0.0.1:3080/'),
+            shellJs: test('http://localhost:5173/assets/index-abc.js'),
+            shellRoot: test('http://localhost:5173/'),
+            jsdelivr: test('https://cdn.jsdelivr.net/gh/x/y@img/a.png'),
+          }
+          ok =
+            readings.musicService === true &&
+            readings.musicSameOrigin === true &&
+            readings.apiHealth === true &&
+            readings.dshPort === true &&
+            readings.shellJs === false &&
+            readings.shellRoot === false &&
+            readings.jsdelivr === true
+        } catch (e) {
+          readings = { error: String((e && e.message) || e).slice(0, 160) }
+        }
+      } else {
+        readings = { error: '没能从 public/sw.js 里抽出 shouldBypass / LOCAL_SERVICE_PORTS' }
+      }
+      check(
+        'sw.js：排除规则**真跑**过 —— 音乐（跨源与同源两种）/ 本机服务一律放行，外壳与图标**照旧缓存**',
+        ok,
+        JSON.stringify(readings),
+      )
+      check(
+        'sw.js 的预缓存清单（SHELL）里没有 /music/（壳那条链路没被动过）',
+        !!shellSrc && !shellSrc.includes('/music/'),
+        shellSrc,
+      )
     }
 
     /* ⑤ 窗口那半没抛未捕获错误 */
