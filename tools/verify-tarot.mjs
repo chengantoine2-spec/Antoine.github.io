@@ -120,13 +120,27 @@ async function run() {
   )
   check('每张牌的名/正逆位/描述都不为空', data.emptyField.length === 0, data.emptyField.join(','))
   check('小阿卡纳的花色与点数都合法（1~14）', data.badRank.length === 0, data.badRank.join(','))
+  /* ⚠️ **原断言 → 新断言**：原来是「三个牌阵，张数与定义一致」+ 写死 `length === 3`。
+     2026-10-06 站主要求扩充牌阵（3 → 8 个，覆盖不同场景），写死 3 会立刻红，
+     所以改成「6~8 个 + 每个牌阵的张数逐个点名」—— 以后再加牌阵不必改这条，
+     而某个牌阵张数写错了照样会被点名报出来。 */
+  const EXPECT_POSITIONS = {
+    three: 3,
+    'holy-triangle': 3,
+    'celtic-cross': 10,
+    daily: 1,
+    'two-choice': 5,
+    relation: 5,
+    'four-elements': 4,
+    week: 7,
+  }
+  const wrongCounts = data.spreads
+    .filter((s) => EXPECT_POSITIONS[s.id] !== s.n)
+    .map((s) => `${s.id}=${s.n}（应为 ${EXPECT_POSITIONS[s.id]}）`)
   check(
-    '三个牌阵，张数与定义一致',
-    data.spreads.length === 3 &&
-      data.spreads.some((s) => s.id === 'three' && s.n === 3) &&
-      data.spreads.some((s) => s.id === 'holy-triangle' && s.n === 3) &&
-      data.spreads.some((s) => s.id === 'celtic-cross' && s.n === 10),
-    JSON.stringify(data.spreads),
+    '牌阵 6~8 个，每个的张数与定义一致（含新增的 5 个）',
+    data.spreads.length >= 6 && data.spreads.length <= 8 && wrongCounts.length === 0,
+    `${data.spreads.length} 个 · ${JSON.stringify(data.spreads)}${wrongCounts.length ? ' · 张数不对：' + wrongCounts.join('、') : ''}`,
   )
   check('待接入牌阵也列出来了（不是 0 个）', data.pending > 0, `${data.pending} 个`)
   check(
@@ -191,7 +205,13 @@ async function run() {
   }
 
   /* ── 3. 界面：选牌阵 → 抽牌 → 逐张翻开 → 出解读 ── */
-  check('三个牌阵都摆在选择区', (await page.locator('.tarot__spread').count()) === 3)
+  /* 同上一条：原来写死 3 个按钮，现在按数据算并落在 6~8 的范围里 */
+  const spreadButtons = await page.locator('.tarot__spread').count()
+  check(
+    '牌阵选择区列出全部牌阵（6~8 个，与数据一致）',
+    spreadButtons === data.spreads.length && spreadButtons >= 6 && spreadButtons <= 8,
+    `${spreadButtons} 个按钮 / 数据 ${data.spreads.length} 个`,
+  )
 
   await page.locator('.tarot__spread[data-spread="celtic-cross"]').click()
   check(
@@ -376,6 +396,118 @@ async function run() {
     `等一个周期（${hints.rotateMs / 1000}s）后占位真的会变`,
     placeholderAfter !== hintUi.placeholder,
     `${hintUi.placeholder} → ${placeholderAfter}`,
+  )
+
+  /* ── 牌阵扩充（2026-10-06，站主）：新牌阵逐个验「能被选中 / 牌位数 / 抽满 / 能渲染」 ── */
+  const spreadInfo = await page.evaluate(async () => {
+    const m = await import('/src/data/tarot/spreads.ts')
+    return {
+      spreads: m.SPREADS.map((s) => ({
+        id: s.id,
+        name: s.name,
+        n: s.positions.length,
+        purpose: s.purpose,
+        labels: s.positions.map((p) => p.label),
+        hints: s.positions.map((p) => p.hint),
+      })),
+      pending: m.PENDING_SPREADS.map((p) => p.name),
+    }
+  })
+  const NEW_IDS = ['daily', 'two-choice', 'relation', 'four-elements', 'week']
+  const newOnes = spreadInfo.spreads.filter((s) => NEW_IDS.includes(s.id))
+  check('五个新牌阵都在数据里', newOnes.length === 5, newOnes.map((s) => `${s.id}:${s.n}张`).join(' '))
+  check(
+    '每个新牌阵都有中文名 / 用途 / 牌位名 / 牌位说明',
+    newOnes.every(
+      (s) =>
+        s.name.length >= 2 &&
+        s.purpose.length >= 10 &&
+        s.labels.every((l) => typeof l === 'string' && l.length >= 2) &&
+        s.hints.every((h) => typeof h === 'string' && h.length >= 8),
+    ),
+    newOnes.map((s) => `${s.id}[${s.labels.join('/')}]`).join(' '),
+  )
+  check(
+    '同一牌阵里牌位名不重复（不会出现两个「现状」）',
+    newOnes.every((s) => new Set(s.labels).size === s.labels.length),
+  )
+  check(
+    '做出来的牌阵不再挂在「待接入」里',
+    !newOnes.some((s) => spreadInfo.pending.includes(s.name)),
+    `待接入还剩 ${spreadInfo.pending.length} 个`,
+  )
+
+  /* 逐个选中：按钮在、按下态对、「共 N 张牌」跟着变 */
+  const pickProblems = []
+  for (const s of newOnes) {
+    const btn = page.locator(`.tarot__spread[data-spread="${s.id}"]`)
+    if ((await btn.count()) !== 1) {
+      pickProblems.push(`${s.id} 没有按钮`)
+      continue
+    }
+    await btn.click()
+    if ((await btn.getAttribute('aria-pressed')) !== 'true') pickProblems.push(`${s.id} 没有按下态`)
+    const setupText = (await page.locator('.tarot__setup').innerText()).replace(/\s+/g, ' ')
+    if (!setupText.includes(`共 ${s.n} 张牌`)) pickProblems.push(`${s.id} 张数文案不是 ${s.n}`)
+  }
+  check('每个新牌阵都能被选中，且「共 N 张牌」跟着变', pickProblems.length === 0, pickProblems.join('；') || '5 个都对')
+
+  /* 挑一个抽满一趟（二选一 5 张）：牌数、翻牌、解读按牌位出 */
+  const pick5 = spreadInfo.spreads.find((s) => s.id === 'two-choice')
+  await page.locator('.tarot__spread[data-spread="two-choice"]').click()
+  await page.locator('.tarot__primary').click()
+  await page.waitForSelector('.tarot-card', { timeout: 15000 })
+  const drawn5 = await page.locator('.tarot-card').count()
+  for (let i = 0; i < drawn5; i++) await page.locator('.tarot-card').nth(i).click()
+  await page.waitForTimeout(1200)
+  const read5 = await page.evaluate(() => ({
+    revealed: document.querySelectorAll('.tarot-card[data-revealed="true"]').length,
+    items: document.querySelectorAll('.tarot-reading__item').length,
+    text: document.querySelector('.tarot-reading')?.textContent ?? '',
+  }))
+  check('新牌阵抽满：二选一 5 张', drawn5 === 5, `实测 ${drawn5} 张`)
+  check(
+    '5 张全翻开，解读栏按 5 个牌位出条目（牌位名都出现）',
+    read5.revealed === 5 && read5.items === 5 && pick5.labels.every((l) => read5.text.includes(l)),
+    `翻开 ${read5.revealed} / 条目 ${read5.items}`,
+  )
+
+  /* ── 旧记录兼容：注入一条老牌阵的旧记录 + 一条"牌阵已被删掉"的旧记录 ──
+     前者要按中文名显示（证明 spreadId 仍然认得），后者不许把页面弄崩
+     （spreadOfId 找不到时回退显示原始 id）。历史结构没动过，所以只验"读得回来"。 */
+  await page.evaluate(() => {
+    const cards = ['Fool', 'Magician', 'High_Priestess', 'Empress', 'Emperor'].map((id, i) => ({
+      id,
+      reversed: i % 2 === 1,
+    }))
+    localStorage.setItem(
+      'desktop.tarot',
+      JSON.stringify({
+        history: [
+          { at: 1759600000000, seed: 12345, spreadId: 'legacy-removed-spread', question: '牌阵已下线的旧记录', cards },
+          { at: 1759500000000, seed: 999, spreadId: 'celtic-cross', question: '老牌阵的旧记录', cards },
+        ],
+      }),
+    )
+  })
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForSelector('.tarot__spread', { timeout: 20000 })
+  /* ⚠️ `.tarot__history` 是**每一行按钮本身**（`<button className="tarot__history">`），
+     不是容器 —— 用 querySelector 只会读到第一行（我第一版就是这么写错的：
+     第二条旧记录明明渲染了却"看不见"）。这里取全部行拼起来。 */
+  const legacy = await page.evaluate(() => ({
+    text: [...document.querySelectorAll('.tarot__history')]
+      .map((el) => el.textContent ?? '')
+      .join(' | ')
+      .replace(/\s+/g, ' '),
+    rows: document.querySelectorAll('.tarot__history').length,
+    spreads: document.querySelectorAll('.tarot__spread').length,
+  }))
+  check('旧记录仍然显示：老牌阵按中文名显示', legacy.text.includes('凯尔特牌阵'), legacy.text.slice(0, 60))
+  check(
+    '牌阵已被删掉的旧记录也不弄崩页面（回退显示原始 id）',
+    legacy.text.includes('legacy-removed-spread') && legacy.spreads >= 6,
+    `${legacy.rows} 条记录 · 选择区仍有 ${legacy.spreads} 个牌阵`,
   )
 
   check('无未捕获的运行时错误', errors.length === 0, errors.join(' | '))
