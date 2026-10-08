@@ -121,3 +121,63 @@ export function termWindow(date: Date): { current: number; since: Date; next: nu
   }
   return { current: idx(at(0)), since: at(since), next: (idx(at(0)) + 1) % 24, daysToNext: toNext }
 }
+
+/* ────────────────── 第二轮（站主 2026-10-06 A5~A9）────────────────── */
+
+/** 常见事项（A8：常用 8~10 项）。`keywords` 去 `OFFICER_LUCK[*].good` 里做**子串匹配**。
+ *  ⚠️ 关键词必须真的出现在上面那些 good 串里，否则筛出来永远是 0 天。**「搬家 / 移徙」在这张表里
+ *  只出现在"忌"**，所以没收进来 —— 宁可少一项，也不给一个点了没结果的入口。 */
+export const ACTIVITIES: Array<{ id: string; name: string; keywords: string[] }> = [
+  { id: 'marry', name: '嫁娶', keywords: ['嫁娶'] },
+  { id: 'open', name: '开业', keywords: ['开市', '立券', '立契', '纳财', '收账'] },
+  { id: 'travel', name: '出行', keywords: ['出行'] },
+  { id: 'worship', name: '祭祀', keywords: ['祭祀', '祈福'] },
+  { id: 'bed', name: '安床', keywords: ['安床'] },
+  { id: 'doctor', name: '求医', keywords: ['求医', '除服'] },
+  { id: 'build', name: '修造动土', keywords: ['造屋', '修饰垣墙', '平治道涂', '筑堤', '捕捉', '结网'] },
+  { id: 'study', name: '入学考试', keywords: ['入学'] },
+  { id: 'office', name: '上任订盟', keywords: ['上任', '订盟', '纳采'] },
+  { id: 'clean', name: '扫舍沐浴', keywords: ['扫舍', '沐浴', '收敛', '取渔'] },
+]
+
+/** 黄道 / 黑道：十二值日里「除危定执成开」为黄道吉日，其余为黑道（民间通行分法） */
+export const AUSPICIOUS_OFFICERS = ['除', '危', '定', '执', '成', '开']
+
+/** 任意一天的值日 —— **纯算术**，1826 天扫一遍也就毫秒级（月建取当天太阳黄经直接算，不做 ±20 天扫描） */
+export function officerOf(date: Date): (typeof TWELVE_OFFICERS)[number] {
+  const monthBranch = MONTH_BRANCH_BY_TERM[termIndexOfLongitude(sunLongitude(date)) % 12]
+  const dayBranch = dayGanzhiIndex(date) % 12
+  return TWELVE_OFFICERS[(((dayBranch - monthBranch) % 12) + 12) % 12]
+}
+
+/** 这一天是不是某个节气的**头一天**（是就返回节气名，网格里显示它代替农历日） */
+export function termStartOf(date: Date): string | null {
+  const d0 = termIndexOfLongitude(sunLongitude(date))
+  const prev = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)
+  const d1 = termIndexOfLongitude(sunLongitude(prev))
+  return d0 !== d1 ? SOLAR_TERMS[d0] : null
+}
+
+/** 节气名的月份映射用不上时留着给测试用 */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate()
+}
+
+/** 某月 1 号是星期几（0 = 周日），月网格靠它补前导空格 */
+export function firstWeekday(year: number, month: number): number {
+  return new Date(year, month, 1).getDay()
+}
+
+/** 固定公历节日（只挑几个大众的） */
+export const SOLAR_FESTIVALS: Record<string, string> = {
+  '1-1': '元旦',
+  '5-1': '劳动节',
+  '10-1': '国庆节',
+}
+
+/** 农历节日：按"月+日"匹配网格里那格已经算出来的农历写法 */
+export const LUNAR_FESTIVALS: Record<string, string> = {
+  正月初一: '春节',
+  五月初五: '端午',
+  八月十五: '中秋',
+}
