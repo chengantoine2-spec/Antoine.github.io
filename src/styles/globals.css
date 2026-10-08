@@ -1190,8 +1190,8 @@
      ⚠️ **绝不能在滚动/裁剪容器上写 `justify-content: center`**（坑 5）：内容超出时超出的那一侧
      会落到滚动原点之外、滚轮与拖动都够不到。`margin: auto` 在装得下时居中、真超出时自动解析成 0。 */
   display: flex;
-  /* ⚠️ **不能退回 `overflow: hidden`**（那会把 2× 的中心图标裁掉）——
-     裁剪只保留**主轴**：靠下面的 `clip-path` 裁掉循环用的第二份副本，
+  /* ⚠️ **不能退回 `overflow: hidden`**（那会把放大的图标裁掉）——
+     裁剪只保留**主轴**：靠下面的 `clip-path` 把"滚出可视窗口的图标"挡在栏外，
      交叉轴给足负值 = 不裁 = 放大的图标从任务栏边**凸出去**（站主要的那种夸张感）。
      也别写成 `overflow: hidden visible`：CSS 会把 visible 算成 auto，长出一条滚动条。 */
   overflow: visible;
@@ -1203,14 +1203,44 @@
   cursor: grabbing;
 }
 /* 主轴裁剪：横向任务栏裁左右（上下不裁、允许凸出）；竖排反过来。
-   负 999px 是"这一边不裁"的写法（inset 的负值 = 边界往外扩）。 */
+   负 999px 是"这一边不裁"的写法（inset 的负值 = 边界往外扩）。
+   ⭐ 2026-10-07《稳定方案》：主轴那两侧再**固定**外扩 `--dock-clip-pad`
+   （= 放大增量的一半 = `(MAGNIFY_PEAK − 1) · 按钮 / 2`，2.0 → 48px 按钮 **24px**；
+   由 `Dock.tsx` 按常量算出来挂在这一层，换按钮尺寸自动跟着变）。
+   为什么需要：放大后的**最左 / 最右**那颗会往栏外伸出半个增量。
+   ⚠️ 它与"任务栏扩张"是**双保险**：正常几何下扩张（`spreadExtraMax`）已经把边缘图标包进
+   任务栏盒里了；这点固定余量是给"扩张撞到视口上限"的极端情况兜底的。
+   ⚠️ 它是**静态**的（只跟按钮尺寸走、与悬停无关）。 */
 .dock__view--h {
-  clip-path: inset(-999px 0 -999px 0);
+  clip-path: inset(-999px calc(-1 * var(--dock-clip-pad, 0px)) -999px calc(-1 * var(--dock-clip-pad, 0px)));
 }
 .dock__view--v {
-  clip-path: inset(0 -999px 0 -999px);
+  clip-path: inset(calc(-1 * var(--dock-clip-pad, 0px)) -999px calc(-1 * var(--dock-clip-pad, 0px)) -999px);
 }
-/* 放大原点：**贴在栏那一侧的边上** → 2× 的图标把整个增量都长到栏外（macOS 那种"从栏里长出来"），
+/* ⭐ 悬停时**任务栏跟着左右扩张**（站主：「整排均匀让开，同时任务栏也相应左右扩展」）：
+   主轴尺寸的缓动全在这条里 —— 与图标的 `transform` 同速（150ms ease-out）⇒
+   扩张与让位**同帧同速**，看着就是一件事，不会"先弹宽再滑图标"。
+   ⚠️ **只在自适应长度时挂这个类**（`Dock.tsx` 的 `dock__view--grow`）：定长任务栏的主轴尺寸是
+      用户拖出来的、必须即时跟手，挂了 transition 会变"黏"。
+   ⚠️ 只过渡**主轴**：交叉轴（厚度）也由拖拽改，同样不许缓动。 */
+.dock__view--h.dock__view--grow {
+  transition: width 150ms ease-out;
+}
+.dock__view--v.dock__view--grow {
+  transition: height 150ms ease-out;
+}
+/* ⭐⭐ 图标放大的**唯一动画来源**（2026-10-07《稳定方案》）。
+   `Dock.tsx` 只按"档位 + 让位"往图标本体写一次
+   `transform: translateX(让位) scale(2.0 / 1.25 / 不写)`，
+   放大、收回、让位滑动**全交给这条 transition** ⇒ **没有任何 JS 动画状态**：
+   中断 / 反向 / 快速换目标都由浏览器自己处理，
+   **结构上不可能出现"冻结在半途 / 大小不一 / 位置漂移"**（旧那套 rAF 逐帧写 + 互锁状态机已移除）。
+   ⚠️ 别把 `transition` 挪到 `.dock__glyph`（图标本体）上：那会与"点击弹跳"的 `animation` 抢同一层。
+   ⚠️ 也**别**给 `.dock__track` 加 transition：拖拽跟手必须是即时的（回弹由 rAF 弹簧自己做）。 */
+.dock__item {
+  transition: transform 150ms ease-out;
+}
+/* 放大原点：**贴在栏那一侧的边上** → 放大的图标把整个增量都长到栏外（macOS 那种"从栏里长出来"），
    而贴栏那条边**原地不动**。
    ⚠️ 别改回默认的 `center`（对称放大）：那样只有半个增量露在栏外（实测凸出只有 13px），
    站主 2026-10-05 明确要更大的凸出量，所以按停靠方向给原点。
@@ -1722,6 +1752,12 @@ button.tarot-card {
   animation: dock-bounce 280ms cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 @media (prefers-reduced-motion: reduce) {
+  /* 放大也不做过渡（直接换档）—— 系统设了"减少动态效果"就照办；
+     判定与采样都不依赖过渡时长（放大后的稳态与关掉过渡完全一样）。 */
+  .dock__item {
+    transition: none;
+  }
+
   .dock__item--bounce img,
   .dock__item--bounce svg { animation: none; }
 }
