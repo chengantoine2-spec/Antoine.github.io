@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="黄历">
+  <!-- 本站自绘、原创；规格与同目录其他 App 图标一致：512 画布 / squircle 44..468 圆角 96 /
+       135° 双色渐变 / 白色符号 / 顶部一层淡内高光 -->
+  <defs>
+    <linearGradient id="almanac-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e0764f" />
+      <stop offset="1" stop-color="#a9332f" />
+    </linearGradient>
+    <linearGradient id="almanac-hl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.26" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect x="44" y="44" width="424" height="424" rx="96" fill="url(#almanac-g)" />
+  <rect x="44" y="44" width="424" height="212" rx="96" fill="url(#almanac-hl)" />
+  <!-- 历书：两页 + 书脊 -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 168h74a26 26 0 0126 26v152a22 22 0 00-22-22h-78z" />
+    <path d="M362 168h-74a26 26 0 00-26 26v152a22 22 0 0122-22h78z" />
+    <path d="M256 194v152" />
+  </g>
+</svg>

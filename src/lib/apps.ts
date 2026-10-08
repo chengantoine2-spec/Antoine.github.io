@@ -72,6 +72,18 @@ export const APPS: AppDef[] = [
     /* 牌阵要地方：凯尔特十字 10 张牌，窗口窄了每张牌就看不清了（和博客一样给到 1000） */
     defaultSize: { w: 1000, h: 680 },
   },
+  /* 黄历（站主 2026-10-06）：从**菜单栏右上角那枚日期**进入；纯本地推算、零依赖 */
+  {
+    id: 'almanac',
+    name: '黄历',
+    path: '/almanac',
+    source:
+      '纯本地推算（src/data/almanac/）：农历取浏览器 Intl 的中国农历、节气用低精度天文近似、宜忌按建除十二神简化演绎',
+    icon: 'almanac',
+    veggie: '白菜',
+    /* 单列历书，不用很宽；高度给到能一屏看完四张卡 */
+    defaultSize: { w: 640, h: 640 },
+  },
   {
     id: 'skills',
     name: '技能',

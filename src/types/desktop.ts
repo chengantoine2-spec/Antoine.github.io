@@ -49,6 +49,8 @@ export type IconName =
   | 'wiki'
   | 'dsh'
   | 'tarot'
+  | 'almanac'
+
 
 export type AppId = IconName
 

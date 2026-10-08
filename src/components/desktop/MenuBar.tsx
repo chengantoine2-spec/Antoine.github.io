@@ -370,7 +370,18 @@ export function MenuBar({ onTile }: MenuBarProps) {
         </div>
 
         {/* 日月时钟并进菜单栏（同一个组件，紧凑形态；元素与类名一个都不少） */}
-        <CelestialClock variant="compact" />
+        {/* 站主 2026-10-06：「从右上角日期进入」黄历 —— 整枚时钟就是按钮。
+            ⚠️ 别给它套 `.menubar__btn`：那条规则会把里面的 svg 压成 14px（当初修菜单栏那个
+            300×150 的 bug 时加的），时钟的日月圆盘会被压扁。所以只用 Tailwind 工具类 + 令牌底色。 */}
+        <button
+          type="button"
+          aria-label="黄历"
+          title="打开黄历"
+          onClick={() => navigate(pathOf('almanac'))}
+          className="flex items-center rounded px-2 py-0.5 hover:bg-[var(--c-control-hover)]"
+        >
+          <CelestialClock variant="compact" />
+        </button>
       </div>
       </div>
     </>
