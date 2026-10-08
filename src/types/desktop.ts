@@ -50,6 +50,7 @@ export type IconName =
   | 'dsh'
   | 'tarot'
   | 'almanac'
+  | 'music'
 
 
 export type AppId = IconName

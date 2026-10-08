@@ -10,6 +10,7 @@ import { SettingsIcon } from './SettingsIcon'
 import { SkillsIcon } from './SkillsIcon'
 import { TarotIcon } from './TarotIcon'
 import { AlmanacIcon } from './AlmanacIcon'
+import { MusicIcon } from './MusicIcon'
 import { TerminalIcon } from './TerminalIcon'
 import { WikiIcon } from './WikiIcon'
 import { WriteIcon } from './WriteIcon'
@@ -36,6 +37,7 @@ export const ICON_SET: Record<IconName, ComponentType<IconProps>> = {
   dsh: DshIcon,
   tarot: TarotIcon,
   almanac: AlmanacIcon,
+  music: MusicIcon,
 }
 
 export { iconBase } from './base'

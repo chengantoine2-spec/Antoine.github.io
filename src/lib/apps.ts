@@ -111,6 +111,19 @@ export const APPS: AppDef[] = [
     defaultSize: { w: 900, h: 620 },
   },
   {
+    id: 'music',
+    name: '音乐',
+    path: '/music',
+    source: '本机音乐库（tools/term-server.mjs 的 /music/list 与 /music/file，只监听 127.0.0.1）：清单 + 音频/封面',
+    icon: 'music',
+    veggie: '茄子',
+    /* 三栏（资料库 / 曲目 / 正在播放），窄了会掉栏 —— 默认给宽一点 */
+    defaultSize: { w: 960, h: 620 },
+    /* ⚠️ **必须是 false**：线上要能打开并如实显示「本机服务未运行」（和终端窗口一致）。
+       设成 true 会让这个窗口在线上**直接消失**（visibleApps() 会把它滤掉）。 */
+    localOnly: false,
+  },
+  {
     id: 'dsh',
     name: 'DSH',
     path: '/dsh',
